@@ -1,0 +1,303 @@
+import json
+
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QCheckBox, QPushButton, QLabel, QComboBox, QTextEdit, QListWidget, QListWidgetItem
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence
+
+from src.config import getConfig
+from src.util import scale_value, logger, dialogBox, messageBox, dictDialog
+
+class FindReplaceDialog(QDialog):
+    """查找替换对话框"""
+
+    find_requested = Signal(str, bool, bool, bool)
+    replace_requested = Signal(str, str, bool, bool)
+    replace_all_requested = Signal(str, str, bool, bool)
+
+    def __init__(self, parent=None, config=None):
+        super().__init__(parent)
+        self.setWindowTitle("查找与替换")
+        self.setMinimumWidth(450)
+        self.config = config if config is not None else getConfig()
+        self.presets = self._load_presets()
+        self.current_preset_rules = []
+        self.init_ui()
+
+    def _load_presets(self):
+        if self.config:
+            presets = self.config.get("Edit.find_presets", [])
+            if isinstance(presets, list):
+                return presets
+        return []
+
+    def _save_presets(self):
+        if self.config:
+            self.config.set("Edit.find_presets", self.presets)
+            self.config.save()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+
+        # 预设规则
+        preset_layout = QHBoxLayout()
+        preset_layout.addWidget(QLabel("预设"))
+
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItem("不使用", "")
+        self._update_preset_combo()
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        preset_layout.addWidget(self.preset_combo)
+
+        self.manage_btn = QPushButton("管理")
+        self.manage_btn.setFixedWidth(scale_value(70))
+        self.manage_btn.clicked.connect(self._manage_presets)
+        preset_layout.addWidget(self.manage_btn)
+
+        layout.addLayout(preset_layout)
+
+        # 查找
+        find_layout = QFormLayout()
+        self.find_edit = QLineEdit()
+        self.find_edit.setPlaceholderText("输入查找内容")
+        find_layout.addRow("查找", self.find_edit)
+
+        self.case_check = QCheckBox("区分大小写")
+        self.regex_check = QCheckBox("正则表达式")
+        option_layout = QHBoxLayout()
+        option_layout.addWidget(self.case_check, 1)
+        option_layout.addWidget(self.regex_check, 1)
+        find_layout.addRow("", option_layout)
+
+        layout.addLayout(find_layout)
+
+        # 替换
+        replace_layout = QFormLayout()
+        self.replace_edit = QLineEdit()
+        self.replace_edit.setPlaceholderText("输入替换内容（留空表示删除）")
+        replace_layout.addRow("替换", self.replace_edit)
+        layout.addLayout(replace_layout)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+
+        self.btn_prev = QPushButton("上一个")
+        self.btn_prev.clicked.connect(self.on_find_prev)
+        button_layout.addWidget(self.btn_prev)
+
+        self.btn_next = QPushButton("下一个")
+        self.btn_next.clicked.connect(self.on_find_next)
+        button_layout.addWidget(self.btn_next)
+
+        self.btn_replace = QPushButton("替换")
+        self.btn_replace.clicked.connect(self.on_replace)
+        button_layout.addWidget(self.btn_replace)
+
+        self.btn_replace_all = QPushButton("全部替换")
+        self.btn_replace_all.clicked.connect(self.on_replace_all)
+        button_layout.addWidget(self.btn_replace_all)
+
+        layout.addLayout(button_layout)
+
+        # 快捷键
+        self.btn_next.setShortcut(QKeySequence("F3"))
+        self.btn_prev.setShortcut(QKeySequence("Shift+F3"))
+        self.find_edit.returnPressed.connect(self.on_find_next)
+        self.replace_edit.returnPressed.connect(self.on_replace_all)
+
+    def _update_preset_combo(self):
+        while self.preset_combo.count() > 1:
+            self.preset_combo.removeItem(1)
+        for preset in self.presets:
+            self.preset_combo.addItem(preset["name"], preset["value"])
+
+    def _on_preset_changed(self, index):
+        if index <= 0:
+            self.current_preset_rules = []
+            return
+        value = self.preset_combo.currentData()
+        try:
+            rules = json.loads(value)
+            if not isinstance(rules, list):
+                raise ValueError("规则必须是列表")
+
+            validated_rules = []
+            for rule in rules:
+                if isinstance(rule, list) and len(rule) == 2:
+                    find_text = str(rule[0])
+                    replace_text = str(rule[1])
+                    if find_text:
+                        validated_rules.append([find_text, replace_text])
+                else:
+                    raise ValueError("每个规则必须是 [查找, 替换] 格式")
+
+            self.current_preset_rules = validated_rules
+            if validated_rules:
+                self.find_edit.setText(validated_rules[0][0])
+                self.replace_edit.setText(validated_rules[0][1])
+            else:
+                self.find_edit.clear()
+                self.replace_edit.clear()
+
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            self.current_preset_rules = []
+            self.find_edit.clear()
+            self.replace_edit.clear()
+            messageBox(self, "格式错误", f'预设规则格式不正确:\n{str(e)}\n\n正确格式示例:\n[["查找1","替换1"],["查找2","替换2"]]', 1)
+
+    def _manage_presets(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("管理预设规则")
+        dialog.setMinimumSize(scale_value(500), scale_value(350))
+
+        layout = QVBoxLayout(dialog)
+
+        pair_list = QListWidget()
+        layout.addWidget(pair_list)
+
+        for preset in self.presets:
+            item = QListWidgetItem(preset["name"])
+            item.setData(Qt.ItemDataRole.UserRole, preset["value"])
+            pair_list.addItem(item)
+
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("添加")
+        edit_btn = QPushButton("编辑")
+        delete_btn = QPushButton("删除")
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(edit_btn)
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        def update_buttons():
+            has_selection = pair_list.currentItem() is not None
+            edit_btn.setEnabled(has_selection)
+            delete_btn.setEnabled(has_selection)
+
+        pair_list.itemSelectionChanged.connect(update_buttons)
+        update_buttons()
+
+        def validate_preset_value(value):
+            try:
+                rules = json.loads(value)
+                if not isinstance(rules, list):
+                    return False, "规则必须是列表"
+                for rule in rules:
+                    if not isinstance(rule, list) or len(rule) != 2:
+                        return False, "每个规则必须是 [查找, 替换] 格式，如 [\"a\",\"b\"]"
+                return True, "格式正确"
+            except json.JSONDecodeError:
+                return False, "JSON格式错误"
+            except Exception as e:
+                return False, f"验证错误: {str(e)}"
+
+        def add_item():
+            result = dictDialog(dialog, "添加", name="名称", value="规则",
+                                name_text="",
+                                value_text='["查找1","替换1"],["查找2","替换2"]',
+                                textedit=True)
+            if result[0]:
+                saved_value = f"[{result[1]}]"
+                is_valid, message = validate_preset_value(saved_value)
+                if not is_valid:
+                    messageBox(dialog, "格式错误", f"预设规则格式不正确:\n{message}", 1)
+                    return
+                item = QListWidgetItem(result[0])
+                item.setData(Qt.ItemDataRole.UserRole, saved_value)
+                pair_list.addItem(item)
+
+        def edit_item():
+            current = pair_list.currentItem()
+            if not current:
+                return
+            raw = current.data(Qt.ItemDataRole.UserRole)
+            display = raw[1:-1] if raw.startswith("[") else raw
+            result = dictDialog(dialog, "编辑", name="名称", value="规则",
+                                name_text=current.text(),
+                                value_text=display,
+                                textedit=True)
+            if result[0]:
+                saved_value = f"[{result[1]}]"
+                is_valid, message = validate_preset_value(saved_value)
+                if not is_valid:
+                    messageBox(dialog, "格式错误", f"预设规则格式不正确:\n{message}", 1)
+                    return
+                current.setText(result[0])
+                current.setData(Qt.ItemDataRole.UserRole, saved_value)
+
+        def delete_item():
+            current = pair_list.currentItem()
+            if current:
+                row = pair_list.row(current)
+                pair_list.takeItem(row)
+
+        add_btn.clicked.connect(add_item)
+        edit_btn.clicked.connect(edit_item)
+        delete_btn.clicked.connect(delete_item)
+
+        if dialogBox(layout, dialog):
+            self.presets = []
+            for i in range(pair_list.count()):
+                item = pair_list.item(i)
+                self.presets.append({"name": item.text(), "value": item.data(Qt.ItemDataRole.UserRole)})
+            self._save_presets()
+            self._update_preset_combo()
+
+    def on_find_next(self):
+        text = self.find_edit.text()
+        if not text:
+            return
+        self.find_requested.emit(text, self.case_check.isChecked(),
+            self.regex_check.isChecked(), True)
+
+    def on_find_prev(self):
+        text = self.find_edit.text()
+        if not text:
+            return
+        self.find_requested.emit(text, self.case_check.isChecked(),
+            self.regex_check.isChecked(), False)
+
+    def on_replace(self):
+        find_text = self.find_edit.text()
+        if not find_text:
+            return
+        self.replace_requested.emit(find_text, self.replace_edit.text(),
+            self.case_check.isChecked(),
+            self.regex_check.isChecked())
+
+    def on_replace_all(self):
+        if self.current_preset_rules and self.preset_combo.currentIndex() > 0:
+            # 应用预设规则中的所有替换规则
+            for rule in self.current_preset_rules:
+                try:
+                    if isinstance(rule, list) and len(rule) == 2:
+                        find_text = str(rule[0])
+                        replace_text = str(rule[1])
+                    else:
+                        continue
+
+                    if find_text:  # 确保查找文本不为空
+                        self.replace_all_requested.emit(
+                            str(find_text), 
+                            str(replace_text) if replace_text is not None else "",
+                            self.case_check.isChecked(),
+                            self.regex_check.isChecked()
+                        )
+                except Exception:
+                    logger.exception("应用预设规则时出错")
+        else:
+            # 使用当前输入的单个规则
+            find_text = self.find_edit.text()
+            if not find_text:
+                return
+            self.replace_all_requested.emit(find_text, self.replace_edit.text(),
+                self.case_check.isChecked(),
+                self.regex_check.isChecked())
+
+    def set_find_text(self, text: str):
+        self.find_edit.setText(text)
+    
+    def showFindRe(self):
+        self.find_edit.setFocus()
+        self.find_edit.selectAll()
+        self.show()

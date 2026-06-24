@@ -1,0 +1,10 @@
+# 忽略 Python 缓存文件和文件夹，忽略构建文件
+__pycache__/
+*.py[cd]
+*.spec
+
+# 忽略 data 目录
+data/
+
+# 忽略 AI Agent 文件
+AGENTS.md
