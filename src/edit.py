@@ -562,9 +562,9 @@ class EditorWindow(WindowMouse, QMainWindow):
                 os.rename(file_path, new_path)
                 editor.set_file_path(new_path)
                 self.tab_widget.setTabText(index, editor.get_title())
-                self.statusBar().showMessage(tr(f"已重命名为: {new_name}"), 2000)
+                self.statusBar().showMessage(tr("已重命名为") + f": {new_name}", 2000)
             except Exception as e:
-                messageBox(self, tr("错误"), tr(f"重命名失败: {e}"), 1)
+                messageBox(self, tr("错误"), tr("重命名失败") + f": {e}", 1)
     
     def new_file(self):
         self.add_new_tab()
@@ -649,7 +649,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.config.add_favorite(normalized_path)
             self.config.save()
             self._update_favorites_menu()
-            self.statusBar().showMessage(tr(f"已添加到收藏夹: {os.path.basename(normalized_path)}"), 2000)
+            self.statusBar().showMessage(tr("已添加到收藏夹") + f": {os.path.basename(normalized_path)}", 2000)
     
     def remove_from_favorites(self, file_path: str):
         """从收藏夹移除"""
@@ -657,7 +657,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.config.remove_favorite(file_path)
             self.config.save()
             self._update_favorites_menu()
-            self.statusBar().showMessage(tr(f"已从收藏夹移除: {os.path.basename(file_path)}"), 2000)
+            self.statusBar().showMessage(tr("已从收藏夹移除") + f": {os.path.basename(file_path)}", 2000)
     
     def open_file(self):
         """打开文件对话框"""
@@ -798,10 +798,10 @@ class EditorWindow(WindowMouse, QMainWindow):
                 mode = 'file'
             else:
                 editor.setViewMode('hex')
-        elif mode == tr("Markdown预览"):
+        elif mode == "Markdown" + tr("预览"):
             editor.setViewMode('markdown')
         
-        self.statusBar().showMessage(tr(f"查看模式: {mode}"), 2000)
+        self.statusBar().showMessage(tr("查看模式") + f": {mode}", 2000)
     
     def show_settings(self):
         """显示设置对话框"""
@@ -868,7 +868,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             self._plugin_controller.init_plugins()
         except Exception as e:
             logger.error(f"插件初始化失败: {e}")
-            self.statusBar().showMessage(tr(f"插件加载失败: {e}"), 5000)
+            self.statusBar().showMessage(tr("插件加载失败") + f": {e}", 5000)
     
     TEXT_PROCESS_METHODS = {
         "remove_empty_lines": ("去除空行", "已去除 {count} 行空行"),
@@ -896,7 +896,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         _, msg_template = self.TEXT_PROCESS_METHODS[method_name]
         if has_count:
             count = getattr(editor, method_name)()
-            self.statusBar().showMessage(tr(msg_template).format(count=count), 2000)
+            self.statusBar().showMessage(str(count) + " " + tr("行空行已去除"), 2000)
         else:
             getattr(editor, method_name)()
             self.statusBar().showMessage(tr(msg_template), 2000)
@@ -1019,7 +1019,7 @@ class TocPanel:
                 vsb = editor.text_edit.verticalScrollBar()
                 vsb.setValue(int(block_rect.top()))
         except Exception:
-            logger.exception("")
+            logger.exception("恢复光标位置失败")
     
     def hide_panel(self):
         """隐藏标题面板"""

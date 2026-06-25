@@ -37,7 +37,7 @@ REPLACE_RULE_PyQt_to_PySide = [
     (re.compile(r'PyQt6'), 'PySide6'),
 ]
 
-def convert_file(path: Path, flag):
+def convertFile(path: Path, flag):
     if flag == 1:
         rule = REPLACE_RULE_PySide_to_PyQt
     elif flag == 2:
@@ -56,7 +56,7 @@ def convert_file(path: Path, flag):
     with open(path, 'w', encoding='utf-8', newline='') as file_out:
         file_out.write(content)
 
-def convert_dir(path: Path, flag):
+def convertDir(path: Path, flag):
     for current_root, dir_names, file_names in os.walk(path):
         dir_names[:] = [d for d in dir_names if d not in EXCLUDE_FOLDER]
 
@@ -66,7 +66,7 @@ def convert_dir(path: Path, flag):
                 continue
             if file_path.suffix.lower() not in INCLUDE_EXTENSION:
                 continue
-            convert_file(file_path, flag)
+            convertFile(file_path, flag)
 
 
 # 转换单文件，文件名加 _convert，形式是 name_convert.py，转换目录，目录名加 _convert。 先复制再转换。
@@ -82,12 +82,12 @@ def main():
         dirpath = workpath.resolve().parent
         output = dirpath / f"{workpath.stem}_convert{workpath.suffix.lower()}"
         shutil.copy2(workpath, output)
-        convert_file(output, flag)
+        convertFile(output, flag)
 
     elif workpath.is_dir():
         output = workpath.parent / f"{workpath.name}_convert"
         shutil.copytree(workpath, output, dirs_exist_ok=True)
-        convert_dir(output, flag)
+        convertDir(output, flag)
 
     else:
         print("请输入有效路径")

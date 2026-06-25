@@ -130,7 +130,7 @@ class MenuControl:
         self.main.action_new = self._add_action(menu, tr("新建") + "(&N)", self.main.new_file, QKeySequence.StandardKey.New)
         self.main.action_open = self._add_action(menu, tr("打开") + "(&O)", self.main.open_file, QKeySequence.StandardKey.Open)
         self.main.action_open_folder = self._add_action(menu, tr("打开文件夹") + "(&D)", self.main.open_folder_dialog)
-        self.main.action_folder_view = self._add_action(menu, "文件夹视图", self.main.toggle_folder_panel)
+        self.main.action_folder_view = self._add_action(menu, tr("文件夹视图"), self.main.toggle_folder_panel)
 
         menu.addSeparator()
 
@@ -173,7 +173,7 @@ class MenuControl:
 
         menu.addSeparator()
 
-        for mode in ["十六进制"]:
+        for mode in [tr("十六进制")]:
             action = QAction(mode, self.main)
             action.triggered.connect(partial(self.main.change_view_mode, mode))
             menu.addAction(action)
@@ -188,9 +188,9 @@ class MenuControl:
                 action.triggered.connect(callback)
                 encoding_menu.addAction(action)
 
-        add_encoding_actions("以 {} 编码打开", self.main._on_encoding_open_triggered)
+        add_encoding_actions(tr("以 {} 编码打开"), self.main._on_encoding_open_triggered)
         encoding_menu.addSeparator()
-        add_encoding_actions("保存为 {} 编码", self.main._on_encoding_save_triggered)
+        add_encoding_actions(tr("保存为 {} 编码"), self.main._on_encoding_save_triggered)
 
         text_process_menu = QMenu(tr("文本处理"), self.main)
         menu.addMenu(text_process_menu)
@@ -363,7 +363,7 @@ class PluginControl:
 
         plugin_name = plugins[current_row]
 
-        if not messageBox(self.main, "确认删除", f"确定要删除插件 '{plugin_name}' 吗？\n这将同时删除插件文件和相关数据"):
+        if not messageBox(self.main, tr("确认删除"), tr("确定要删除插件") + f" '{plugin_name}' " + tr("吗？") + "\n" + tr("这将同时删除插件文件和相关数据")):
             return
 
         errors = self.plugin_manager.deletePlugin(plugin_name)
@@ -383,10 +383,10 @@ class PluginControl:
         is_enabled = self.plugin_manager.isPluginEnabled(plugin_name)
         plugin = self.plugin_manager.plugins.get(plugin_name)
         if plugin:
-            return f"{plugin.description} ({'启用' if is_enabled else '禁用'})"
+            return f"{plugin.description} ({tr('启用') if is_enabled else tr('禁用')})"
         cls = self.plugin_manager.getPluginClass(plugin_name)
         name = getattr(cls, 'description', plugin_name) if cls else plugin_name
-        return f"{name} (未加载)"
+        return f"{name} ({tr('未加载')})"
 
     def toggle_plugin(self, plugins: list, plugin_list: QListWidget, enable: bool):
         """启用或禁用插件"""
@@ -398,10 +398,10 @@ class PluginControl:
 
         if enable:
             self.plugin_manager.enablePlugin(plugin_name)
-            self.main.statusBar().showMessage(tr(f"插件 {plugin_name} 已启用"), 2000)
+            self.main.statusBar().showMessage(plugin_name + " " + tr("插件已启用"), 2000)
         else:
             self.plugin_manager.disablePlugin(plugin_name)
-            self.main.statusBar().showMessage(tr(f"插件 {plugin_name} 已禁用"), 2000)
+            self.main.statusBar().showMessage(plugin_name + " " + tr("插件已禁用"), 2000)
 
         self.save_plugin_config()
         self.refresh_plugin_menu()

@@ -332,10 +332,7 @@ class PluginManager(Singleton):
                         errors.append(f"清理文件 {p}: {e}")
 
         if plugin_name in self.plugins:
-            try:
-                self.disablePlugin(plugin_name)
-            except Exception as e:
-                errors.append(f"禁用插件: {e}")
+            self.disablePlugin(plugin_name)
 
         if plugin_name in self.enabled_plugins:
             del self.enabled_plugins[plugin_name]

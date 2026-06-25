@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMenu, QFileSystemMo
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt, QDir
 
-from src.util import logger, openTerminal, EXTENSION, showFile, messageBox
+from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr
 from src.file import ArchiveItemModel
 
 class FolderPanelManager:
@@ -44,7 +44,7 @@ class FolderPanelManager:
         
         self.header = QLabel("..")
         self.header.setObjectName("folder_header")
-        self.header.setToolTip("点击返回上级文件夹")
+        self.header.setToolTip(tr("点击返回上级文件夹"))
         self.header.setCursor(Qt.CursorShape.PointingHandCursor)
         self.header.mousePressEvent = self._on_header_clicked
         self.header.hide()
@@ -99,7 +99,7 @@ class FolderPanelManager:
             try:
                 self.parent.open_file_path(file_path)
             except Exception as e:
-                messageBox(self.parent, "打开失败", f"无法打开文件: {e}", 1)
+                messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
     
     def _tree_drag_enter(self, event):
         if self.current_archive_path:
@@ -137,7 +137,7 @@ class FolderPanelManager:
             
             content = self.file_op.read_archive_file(self.current_archive_path, item.full_path)
             if content is None:
-                messageBox(self.parent, "错误", "无法读取压缩包内文件", 1)
+                messageBox(self.parent, tr("错误"), tr("无法读取压缩包内文件"), 1)
                 return
             
             archive_name = os.path.basename(self.current_archive_path)
@@ -168,13 +168,13 @@ class FolderPanelManager:
                     editor.set_file_path(display_path)
             
             self.main_window.config.add_recent_file(self.current_archive_path)
-            self.main_window.statusBar().showMessage(f"已打开: {display_path}", 3000)
+            self.main_window.statusBar().showMessage(tr("已打开") + f": {display_path}", 3000)
     
     def _show_tree_context_menu(self, pos):
         """显示文件夹树右键菜单"""
         menu = QMenu(self.parent)
         
-        close_action = QAction("关闭文件夹视图", self.parent)
+        close_action = QAction(tr("关闭文件夹视图"), self.parent)
         close_action.triggered.connect(self.close)
         menu.addAction(close_action)
         
@@ -182,11 +182,11 @@ class FolderPanelManager:
         if index.isValid():
             item_path = self.model.filePath(index)
             if isinstance(item_path, str) and item_path:
-                open_terminal_action = QAction("在终端中打开", self.parent)
+                open_terminal_action = QAction(tr("在终端中打开"), self.parent)
                 open_terminal_action.triggered.connect(partial(self.open_terminal, item_path))
                 menu.addAction(open_terminal_action)
 
-                show_in_explorer_action = QAction("在文件资源管理器中显示", self.parent)
+                show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
                 show_in_explorer_action.triggered.connect(lambda checked=False, fp=item_path: showFile(fp, self.parent))
                 menu.addAction(show_in_explorer_action)
                 
@@ -194,24 +194,24 @@ class FolderPanelManager:
                 
                 item_path_norm = os.path.normpath(item_path)
                 if self.main_window.config.is_favorite(item_path_norm):
-                    remove_fav_action = QAction("从收藏夹移除", self.parent)
+                    remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
                     remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.remove_from_favorites(fp))
                     menu.addAction(remove_fav_action)
                 else:
-                    add_fav_action = QAction("添加到收藏夹", self.parent)
+                    add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
                     add_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.add_to_favorites(fp))
                     menu.addAction(add_fav_action)
                 
                 if os.path.isfile(item_path):
-                    move_to_trash_action = QAction("移动到回收站", self.parent)
+                    move_to_trash_action = QAction(tr("移动到回收站"), self.parent)
                     move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.move_to_trash(fp))
                     menu.addAction(move_to_trash_action)
         elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
-            open_terminal_action = QAction("在终端中打开", self.parent)
+            open_terminal_action = QAction(tr("在终端中打开"), self.parent)
             open_terminal_action.triggered.connect(partial(self.open_terminal, self.folder_path))
             menu.addAction(open_terminal_action)
 
-            show_in_explorer_action = QAction("在文件资源管理器中显示", self.parent)
+            show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
             show_in_explorer_action.triggered.connect(lambda: showFile(self.folder_path, self.parent))
             menu.addAction(show_in_explorer_action)
             
@@ -219,11 +219,11 @@ class FolderPanelManager:
             
             folder_path_norm = os.path.normpath(self.folder_path)
             if self.main_window.config.is_favorite(folder_path_norm):
-                remove_fav_action = QAction("从收藏夹移除", self.parent)
+                remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
                 remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.remove_from_favorites(fp))
                 menu.addAction(remove_fav_action)
             else:
-                add_fav_action = QAction("添加到收藏夹", self.parent)
+                add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
                 add_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.add_to_favorites(fp))
                 menu.addAction(add_fav_action)
 
@@ -241,11 +241,11 @@ class FolderPanelManager:
                 )
                 if result.returncode == 0:
                     logger.info(f"成功移动到回收站: {item_path}")
-                    self.parent.statusBar().showMessage(f"已移动到回收站: {item_path}", 2000)
+                    self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
                     self._on_file_deleted(item_path)
                 else:
                     logger.error(f"移动到回收站失败: {item_path}, 错误: {result.stderr}")
-                    messageBox(self.parent, "错误", f"移动到回收站失败: {result.stderr}", 1)
+                    messageBox(self.parent, tr("错误"), tr("移动到回收站失败") + f": {result.stderr}", 1)
             else:
                 trash_path = os.path.expanduser("~/.local/share/Trash/files/")
                 os.makedirs(trash_path, exist_ok=True)
@@ -254,11 +254,11 @@ class FolderPanelManager:
                 else:
                     shutil.move(item_path, trash_path)
                 logger.info(f"成功移动到回收站: {item_path}")
-                self.parent.statusBar().showMessage(f"已移动到回收站: {item_path}", 2000)
+                self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
                 self._on_file_deleted(item_path)
         except Exception as e:
             logger.error(f"移动到回收站异常: {item_path}, 错误: {e}")
-            messageBox(self.parent, "错误", f"移动到回收站失败: {e}", 1)
+            messageBox(self.parent, tr("错误"), tr("移动到回收站失败") + f": {e}", 1)
     
     def _on_file_deleted(self, deleted_path: str):
         """文件删除后刷新视图"""
@@ -271,10 +271,10 @@ class FolderPanelManager:
                 logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
                 return
             if openTerminal(path, config=self.config):
-                self.parent.statusBar().showMessage(f"已打开命令行: {os.path.normpath(path)}", 2000)
+                self.parent.statusBar().showMessage(tr("已打开命令行") + f": {os.path.normpath(path)}", 2000)
         except Exception:
             logger.exception("打开命令行失败")
-            self.parent.statusBar().showMessage("打开命令行失败", 2000)
+            self.parent.statusBar().showMessage(tr("打开命令行失败"), 2000)
     
     def _on_header_clicked(self, event):
         """点击父文件夹标签时切换到上级目录"""
@@ -339,7 +339,7 @@ class FolderPanelManager:
             self.config.set("Edit.folder", folder_path)
             self.config.save()
             
-            self.parent.statusBar().showMessage(f"已加载文件夹: {os.path.abspath(folder_path)}", 3000)
+            self.parent.statusBar().showMessage(tr("已加载文件夹") + f": {os.path.abspath(folder_path)}", 3000)
         
         if self.main_window:
             self.set_sizes(self.main_window.width())
@@ -362,7 +362,7 @@ class FolderPanelManager:
         else:
             self.header.hide()
         
-        self.parent.statusBar().showMessage(f"已加载压缩包: {os.path.abspath(archive_path)}", 3000)
+        self.parent.statusBar().showMessage(tr("已加载压缩包") + f": {os.path.abspath(archive_path)}", 3000)
     
     def set_sizes(self, available_width: int):
         """设置面板尺寸"""

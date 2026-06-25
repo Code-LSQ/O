@@ -1268,7 +1268,6 @@ class TaskEditDialog(QDialog):
 
         # 任务名称
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("输入任务名称")
         form.addRow("任务名称", self.name_edit)
 
         # 源目录
@@ -1570,11 +1569,9 @@ class OpenListWidget(QWidget):
 
         server_layout.addWidget(QLabel("用户名"), 1, 0)
         self.username_edit = QLineEdit()
-        self.username_edit.setPlaceholderText("用户名")
         server_layout.addWidget(self.username_edit, 1, 1)
         server_layout.addWidget(QLabel("密码"), 2, 0)
         self.password_edit = QLineEdit()
-        self.password_edit.setPlaceholderText("密码")
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         server_layout.addWidget(self.password_edit, 2, 1)
         server_layout.addWidget(QLabel("连接状态"), 3, 0)
@@ -1931,7 +1928,7 @@ class OpenListWidget(QWidget):
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception:
-            pass
+            logger.exception("获取进程状态失败")
         return "未运行"
 
     def _start_status_timer(self):

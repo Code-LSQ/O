@@ -1026,6 +1026,10 @@ _client_instance = None
 
 def getAIClient(config=None, profile_name=None) -> AIClient:
     """获取AI客户端
+
+    设计说明：默认返回缓存的单例；传入 config 或 profile_name 时创建独立临时实例，
+    用于测试连通性、负载均衡轮询等需要不同配置的场景。
+
     Args:
         config: 配置对象，传入时创建新实例（不缓存）
         profile_name: 指定AI配置名，传入时创建新实例（不缓存）

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, Q
 from PySide6.QtCore import Qt, Signal, QRect, QThread, QByteArray, QTimer
 from PySide6.QtGui import QPainter, QColor, QTextCursor, QTextCharFormat, QAction, QKeySequence, QPixmap, QTextDocument, QImage, QPalette, qGray
 
-from src.util import logger, EXTENSION, inputDialog
+from src.util import logger, EXTENSION, inputDialog, tr
 from src.config import getConfig, DEFAULT_CONFIG
 from src.core.AI import getAIClient
 
@@ -378,7 +378,7 @@ class EditorTextEdit(QTextEdit):
                 self._shortcut_seqs[name] = QKeySequence(s)
 
     def go_to_line(self):
-        text = inputDialog(self, "跳转到行", "行号", default="1")
+        text = inputDialog(self, tr("跳转到行"), tr("行号"), default="1")
         if text:
             cursor = self.textCursor()
             block = self.document().findBlockByNumber(int(text) - 1)
@@ -575,13 +575,13 @@ class EditorTextEdit(QTextEdit):
         menu = QMenu(self)
         
         # 撤销
-        action_undo = QAction("撤销", self)
+        action_undo = QAction(tr("撤销"), self)
         action_undo.setShortcut(QKeySequence.StandardKey.Undo)
         action_undo.triggered.connect(self.undo)
         menu.addAction(action_undo)
         
         # 重做
-        action_redo = QAction("重做", self)
+        action_redo = QAction(tr("重做"), self)
         action_redo.setShortcut(QKeySequence.StandardKey.Redo)
         action_redo.triggered.connect(self.redo)
         menu.addAction(action_redo)
@@ -589,27 +589,27 @@ class EditorTextEdit(QTextEdit):
         menu.addSeparator()
         
         # 剪切
-        action_cut = QAction("剪切", self)
+        action_cut = QAction(tr("剪切"), self)
         action_cut.setShortcut(QKeySequence.StandardKey.Cut)
         action_cut.triggered.connect(self.cut)
         action_cut.setEnabled(self.textCursor().hasSelection())
         menu.addAction(action_cut)
         
         # 复制
-        action_copy = QAction("复制", self)
+        action_copy = QAction(tr("复制"), self)
         action_copy.setShortcut(QKeySequence.StandardKey.Copy)
         action_copy.triggered.connect(self.copy)
         action_copy.setEnabled(self.textCursor().hasSelection())
         menu.addAction(action_copy)
         
         # 粘贴
-        action_paste = QAction("粘贴", self)
+        action_paste = QAction(tr("粘贴"), self)
         action_paste.setShortcut(QKeySequence.StandardKey.Paste)
         action_paste.triggered.connect(self.paste)
         menu.addAction(action_paste)
         
         # 删除
-        action_delete = QAction("删除", self)
+        action_delete = QAction(tr("删除"), self)
         action_delete.setShortcut(QKeySequence("Del"))
         action_delete.triggered.connect(self.delete_selected)
         action_delete.setEnabled(self.textCursor().hasSelection())
@@ -622,7 +622,7 @@ class EditorTextEdit(QTextEdit):
         if selected_text:
             urls = self._extract_urls(selected_text)
             if urls:
-                action_open_url = QAction(f"打开网址 ({len(urls)}个)", self)
+                action_open_url = QAction(len(urls) + tr("个网址"), self)
                 action_open_url.triggered.connect(lambda checked, urls=urls: self._open_urls(urls))
                 menu.addAction(action_open_url)
                 menu.addSeparator()
@@ -644,7 +644,7 @@ class EditorTextEdit(QTextEdit):
                     ai_menu.addSeparator()
 
                 if config.get("AI.autocomplete", False):
-                    action_autocomplete = QAction("AI 自动补全", self)
+                    action_autocomplete = QAction("AI " + tr("自动补全"), self)
                     action_autocomplete.triggered.connect(self._handle_ai_autocomplete)
                     ai_menu.addAction(action_autocomplete)
                     ai_menu.addSeparator()
@@ -652,17 +652,17 @@ class EditorTextEdit(QTextEdit):
 
                 # 加入上下文
                 if selected_text:
-                    action_add_context = QAction("加入上下文", self)
+                    action_add_context = QAction(tr("加入上下文"), self)
                     action_add_context.triggered.connect(self._add_ai_context)
                     ai_menu.addAction(action_add_context)
 
                     if self._ai_context_buffer:
-                        action_clear_context = QAction(f"清空上下文 ({len(self._ai_context_buffer)}条)", self)
+                        action_clear_context = QAction(tr("清空上下文") + f" ({len(self._ai_context_buffer)}" + tr("条") + ")", self)
                         action_clear_context.triggered.connect(self._clear_ai_context)
                         ai_menu.addAction(action_clear_context)
                     ai_menu.addSeparator()
 
-                action_ask = QAction("询问AI", self)
+                action_ask = QAction(tr("询问") + " AI", self)
                 action_ask.triggered.connect(lambda checked=False: self._handle_ai_request(None))
                 ai_menu.addAction(action_ask)
 
@@ -678,7 +678,7 @@ class EditorTextEdit(QTextEdit):
                 search_engines = config.get("Edit.engine", {})
                 if search_engines:
                     for name, url in search_engines.items():
-                        action = QAction(f"使用 {name} 搜索", self)
+                        action = QAction(tr("使用") + " " + name + " " + tr("搜索"), self)
                         action.triggered.connect(lambda checked, u=url, t=selected_text: self._search_with_engine(u, t))
                         menu.addAction(action)
                     menu.addSeparator()
@@ -686,7 +686,7 @@ class EditorTextEdit(QTextEdit):
                 logger.exception("搜索错误")
 
         # 全选
-        action_select_all = QAction("全选", self)
+        action_select_all = QAction(tr("全选"), self)
         action_select_all.setShortcut(QKeySequence.StandardKey.SelectAll)
         action_select_all.triggered.connect(self.selectAll)
         menu.addAction(action_select_all)
@@ -694,7 +694,7 @@ class EditorTextEdit(QTextEdit):
         # 重新加载
         if hasattr(self, '_parent_tab') and self._parent_tab and self._parent_tab.file_path:
             menu.addSeparator()
-            action_reload = QAction("重新加载", self)
+            action_reload = QAction(tr("重新加载"), self)
             action_reload.triggered.connect(self._reload_file)
             menu.addAction(action_reload)
         
@@ -703,7 +703,7 @@ class EditorTextEdit(QTextEdit):
             parent_tab = self._parent_tab
             if parent_tab.file_path and any(parent_tab.file_path.lower().endswith(ext) for ext in EXTENSION["Markdown"]):
                 menu.addSeparator()
-                action_render_md = QAction("Markdown 渲染", self)
+                action_render_md = QAction(("Markdown" + tr("渲染")), self)
                 action_render_md.triggered.connect(parent_tab._toggle_markdown_view)
                 menu.addAction(action_render_md)
         
@@ -822,7 +822,7 @@ class EditorTextEdit(QTextEdit):
                 selection.cursor.clearSelection()
                 extra_selections.append(selection)
             except Exception:
-                pass
+                logger.exception("设置额外选区失败")
         self.setExtraSelections(extra_selections)
 
     def _add_ai_context(self):
@@ -831,12 +831,12 @@ class EditorTextEdit(QTextEdit):
         if cursor.hasSelection():
             text = cursor.selectedText()
             self._ai_context_buffer.append(text)
-            self.window().statusBar().showMessage(f"已加入上下文 (共{len(self._ai_context_buffer)}条)", 2000)
+            self.window().statusBar().showMessage(tr("已加入上下文") + f" (共{len(self._ai_context_buffer)}" + tr("条") + ")", 2000)
 
     def _clear_ai_context(self):
         """清空AI上下文缓冲区"""
         self._ai_context_buffer.clear()
-        self.window().statusBar().showMessage("上下文已清空", 2000)
+        self.window().statusBar().showMessage(tr("上下文已清空"), 2000)
 
     def _handle_ai_request(self, prompt_name: str = None):
         """处理AI请求（流式+上下文）"""
@@ -844,7 +844,7 @@ class EditorTextEdit(QTextEdit):
         if cursor.hasSelection():
             selected_text = cursor.selectedText()
         else:
-            selected_text = "请帮我处理文本"
+            selected_text = tr("请帮我处理文本")
 
         messages = [{"role": "user", "content": selected_text}]
 
@@ -892,7 +892,7 @@ class EditorTextEdit(QTextEdit):
             if tpl:
                 prompt_template = tpl
         except Exception:
-            logger.exception("")
+            logger.exception("加载AI提示模板失败")
         if not prompt_template:
             prompt_template = DEFAULT_CONFIG["AI"]["prompts"].get("自动补全", "")
         if not prompt_template:
@@ -1026,7 +1026,7 @@ class AIAutocompleteWorker(QThread):
             if not self.isInterruptionRequested():
                 self.finished.emit(result)
         except Exception:
-            pass
+            logger.exception("AI工作线程执行失败")
 
 
 class AIWorker(QThread):
@@ -1081,7 +1081,7 @@ class AIDialog(QDialog):
     def __init__(self, messages, prompt_name, main_window=None):
         super().__init__()
         self._main_window = main_window
-        self.setWindowTitle("AI回复")
+        self.setWindowTitle("AI " + tr("回复"))
         self.setMinimumSize(300, 200)
         self.resize(420, 280)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
@@ -1098,29 +1098,29 @@ class AIDialog(QDialog):
 
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(False)
-        self.text_edit.setPlaceholderText("连接中...")
+        self.text_edit.setPlaceholderText(tr("连接中..."))
         layout.addWidget(self.text_edit)
 
         btn_layout = QHBoxLayout()
         btn_layout.setContentsMargins(0, 0, 0, 0)
 
-        copy_btn = QPushButton("复制")
+        copy_btn = QPushButton(tr("复制"))
         copy_btn.clicked.connect(self._copy)
         btn_layout.addWidget(copy_btn)
 
-        self.paste_btn = QPushButton("粘贴")
+        self.paste_btn = QPushButton(tr("粘贴"))
         self.paste_btn.setEnabled(False)
         self.paste_btn.clicked.connect(self._paste)
         btn_layout.addWidget(self.paste_btn)
 
-        self.apply_btn = QPushButton("编辑器")
+        self.apply_btn = QPushButton(tr("编辑器"))
         self.apply_btn.setEnabled(False)
         self.apply_btn.clicked.connect(self._apply)
         btn_layout.addWidget(self.apply_btn)
 
         btn_layout.addStretch()
 
-        close_btn = QPushButton("关闭")
+        close_btn = QPushButton(tr("关闭"))
         close_btn.clicked.connect(self.close)
         btn_layout.addWidget(close_btn)
 
@@ -1158,7 +1158,7 @@ class AIDialog(QDialog):
 
     def _on_error(self, error):
         self.text_edit.setPlaceholderText("")
-        self.text_edit.setPlainText(f"请求失败: {error}")
+        self.text_edit.setPlainText(tr("请求失败") + f": {error}")
         self.apply_btn.setEnabled(False)
         self.paste_btn.setEnabled(False)
 
@@ -1254,7 +1254,7 @@ class ImageLabel(QLabel):
         """自定义右键菜单"""
         menu = QMenu(self)
         
-        action_comic_view = QAction("漫画视图", self)
+        action_comic_view = QAction(tr("漫画视图"), self)
         action_comic_view.triggered.connect(self._toggle_comic_view)
         menu.addAction(action_comic_view)
         
@@ -1396,7 +1396,7 @@ class ImageLabel(QLabel):
                 label = QLabel()
                 label.setPixmap(pixmap)
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.mousePressEvent = lambda e, p=img_path: self._on_comic_image_clicked(p)
+                label.mousePressEvent = lambda e, p=img_path: self.comicClick(p)
 
                 self._comic_layout.addWidget(label)
             except Exception:
@@ -1417,7 +1417,7 @@ class ImageLabel(QLabel):
         """漫画视图右键菜单"""
         menu = QMenu(self._comic_container)
         
-        action_comic_view = QAction("漫画视图", self)
+        action_comic_view = QAction(tr("漫画视图"), self)
         action_comic_view.triggered.connect(self._toggle_comic_view)
         menu.addAction(action_comic_view)
         
@@ -1543,7 +1543,7 @@ class ImageLabel(QLabel):
                 label = QLabel()
                 label.setPixmap(scaled)
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.mousePressEvent = lambda e, p=img_path: self._on_comic_image_clicked(p)
+                label.mousePressEvent = lambda e, p=img_path: self.comicClick(p)
 
                 self._comic_layout.addWidget(label)
             except Exception:
@@ -1579,8 +1579,8 @@ class ImageLabel(QLabel):
         
         self.setCursor(Qt.CursorShape.ArrowCursor)
     
-    def _on_comic_image_clicked(self, img_path: str):
-        """漫画视图中点击图片，无行为"""
+    def comicClick(self, img_path: str):
+        """漫画视图中点击图片，无行为，防止崩溃"""
         pass
     
     def _get_folder_images(self, folder: str) -> list:
@@ -1650,7 +1650,7 @@ class ImageLabel(QLabel):
                 if self._zoom_callback:
                     self._zoom_callback(self._zoom_factor)
     
-    def reset_zoom(self):
+    def resetZoom(self):
         """重置缩放"""
         self._zoom_factor = 1.0
         if self._pixmap:

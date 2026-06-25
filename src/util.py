@@ -212,7 +212,7 @@ def getScale() -> float:
                 dpi = screen.logicalDotsPerInchX()
                 return dpi / 96.0
     except Exception:
-        pass
+        logger.exception("获取屏幕DPI失败")
     return 1.0
 
 def scale_value(value: int) -> int:
@@ -292,7 +292,18 @@ class Translator(Singleton):
         return key if key else (default or "")
     
 def tr(key: str, default: str = None) -> str:
-    """翻译函数，使用字符串替换，有 : 可以用 tr("文本")+":" ，句子中有变量可以用 tr("文本") + path 翻译"""
+    """
+    翻译函数，使用字符串替换
+
+    使用规范：
+    程序原生使用中文，注意文本中的英文与中文之间要有空格。应尽可能追求简洁的中文表达并将变量单独放在首部或尾部。
+    语言文件中不包含 ":" "%" 等字符，此类特殊字符不用 tr() 包裹，如 tr("文件") + "(&F)"
+    ": " 用 tr("文本")+": " 进行拼接，": " 后有变量则 tr("文本") + f": {var}"
+    其余含变量情况用 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接，将变量放在首部或尾部，中间需要空格
+    换行使用  + "\n" +  进行拼接
+    专有名词不翻译，如 Markdown、JSON、AI、API Key 不用 tr() 包裹，注意与其他文本加空格隔开，如 "AI " 和 " API Key"
+
+    """
     return Translator().tr(key, default)
 
 
@@ -304,16 +315,16 @@ def getAppPath():
         return sys.executable
     return sys.argv[0] if sys.argv else ""
 
-def setAutostart(enabled: bool) -> bool:
+def setAutoStart(enabled: bool) -> bool:
     if sys.platform == "win32":
-        return windowsAutostart(enabled)
+        return windowsAutoStart(enabled)
     elif sys.platform == "linux":
-        return linuxAutostart(enabled)
+        return linuxAutoStart(enabled)
     elif sys.platform == "darwin":
-        return macosAutostart(enabled)
+        return macosAutoStart(enabled)
     return False
 
-def windowsAutostart(enabled: bool) -> bool:
+def windowsAutoStart(enabled: bool) -> bool:
     try:
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
@@ -418,7 +429,7 @@ def setWindowsMenu(enabled: bool) -> bool:
     return True
 
 
-def macosAutostart(enabled: bool) -> bool:
+def macosAutoStart(enabled: bool) -> bool:
     plist_path = Path.home() / "Library" / "LaunchAgents" / f"com.{APP_NAME.lower()}.plist"
     app_path = getAppPath()
     if not app_path:
@@ -445,6 +456,7 @@ def macosAutostart(enabled: bool) -> bool:
             subprocess.run(["launchctl", "load", str(plist_path)], check=False)
             return True
         except Exception:
+            logger.exception("设置 macOS 开机启动失败")
             return False
     else:
         if plist_path.exists():
@@ -453,11 +465,12 @@ def macosAutostart(enabled: bool) -> bool:
                 plist_path.unlink()
                 return True
             except Exception:
+                logger.exception("关闭 macOS 开机启动失败")
                 return False
         return True
 
 
-def autostartDirLinux() -> Path:
+def autoStartDirLinux() -> Path:
     xdg_config = os.environ.get("XDG_CONFIG_HOME", "")
     if xdg_config:
         config_dir = Path(xdg_config)
@@ -466,7 +479,7 @@ def autostartDirLinux() -> Path:
     return config_dir / "autostart"
 
 def linuxAutostart(enabled: bool) -> bool:
-    autostart_dir = autostartDirLinux()
+    autostart_dir = autoStartDirLinux()
     desktop_file = autostart_dir / f"{APP_NAME}.desktop"
     app_path = getAppPath()
     if not app_path:
@@ -486,6 +499,7 @@ X-GNOME-Autostart-enabled=true
             desktop_file.write_text(desktop_content, encoding='utf-8')
             return True
         except Exception:
+            logger.exception("设置 Linux 开机启动失败")
             return False
     else:
         if desktop_file.exists():
@@ -493,6 +507,7 @@ X-GNOME-Autostart-enabled=true
                 desktop_file.unlink()
                 return True
             except Exception:
+                logger.exception("关闭 Linux 开机启动失败")
                 return False
         return True
 
@@ -832,14 +847,7 @@ def getFilePath(parent: QWidget, edit=None, title="", filter="", mode="file"):
 
 class ClipboardMonitor(Singleton):
     """剪贴板监控器 - 使用 QClipboard 信号监听剪贴板变化"""
-    def __init__(self, parent=None):
-        if self._initialized:
-            if parent:
-                self.parent = parent
-            return
-        self._initialized = True
-
-        self.parent = parent
+    def _init_impl(self):
         self._clipboard = QApplication.clipboard()
         self._last_content = ""
         self._callbacks = set()

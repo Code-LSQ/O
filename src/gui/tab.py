@@ -689,7 +689,7 @@ class EditorTab(QWidget):
             try:
                 self.text_edit.document().clearResources()
             except Exception:
-                pass
+                logger.exception("清除文档资源失败")
             if not self._is_truncated:
                 self.text_edit.setReadOnly(False)
             self.is_markdown = False
@@ -760,8 +760,8 @@ class EditorTab(QWidget):
         try:
             content = _LINE_ENDING_RE.sub('\n', content)
         except Exception:
-            pass
-        
+            logger.exception("替换换行符失败")
+
         if content == self._original_content and not self.is_modified:
             return
         
@@ -780,8 +780,8 @@ class EditorTab(QWidget):
                         cursor.setPosition(0)
                         self.text_edit.setTextCursor(cursor)
             except Exception:
-                pass
-            
+                logger.exception("恢复光标位置失败")
+
             self.text_edit.setPlainText(content)
             self.text_edit.document().setModified(False)
         except Exception:
@@ -882,13 +882,13 @@ class EditorTab(QWidget):
                 cursor.setPosition(old_cursor_pos)
                 self.text_edit.setTextCursor(cursor)
         except Exception:
-            pass
+            logger.exception("重载时恢复光标位置失败")
 
         try:
             if scrollbar:
                 scrollbar.setValue(min(old_scroll_pos, scrollbar.maximum()))
         except Exception:
-            pass
+            logger.exception("重载时恢复滚动条位置失败")
 
         return True
 

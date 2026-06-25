@@ -1056,7 +1056,7 @@ class _AutoCopyManager:
         self._monitor = None
 
     def init_monitor(self, parent):
-        self._monitor = ClipboardMonitor(parent)
+        self._monitor = ClipboardMonitor()
         self._monitor._callbacks.add(self._on_clipboard_change)
     
     def set_enabled(self, enabled: bool):
@@ -1105,7 +1105,7 @@ class _AutoSearchManager:
         self.close_delay = 3
 
     def init_monitor(self, parent):
-        self._monitor = ClipboardMonitor(parent)
+        self._monitor = ClipboardMonitor()
         self._monitor._callbacks.add(self._on_clipboard_change)
     
     def set_enabled(self, enabled: bool):
@@ -1162,7 +1162,7 @@ class _AutoSearchManager:
             item.setData(Qt.UserRole, r)
             result_list.addItem(item)
         if len(results) > 20:
-            more = QLabel(tr(f"还有 {len(results) - 20} 个结果"))
+            more = QLabel(str(len(results) - 20) + " " + tr("个搜索结果"))
             layout.addWidget(more)
         layout.addWidget(result_list)
         self._popup.setLayout(layout)
@@ -1247,7 +1247,7 @@ class _AutoEnterManager:
                 self._keyboard_controller.press(keyboard.Key.enter)
                 self._keyboard_controller.release(keyboard.Key.enter)
             except Exception:
-                pass
+                logger.exception("模拟回车键失败")
 
     def _start_listener(self):
         self._stop_listener()
@@ -1262,7 +1262,7 @@ class _AutoEnterManager:
                         if 1 <= d <= 9:
                             self.interval = d
             except Exception:
-                pass
+                logger.exception("按键监听回调失败")
 
         self._keyboard_listener = keyboard.Listener(on_press=on_press)
         self._keyboard_listener.daemon = True
@@ -1272,7 +1272,6 @@ class _AutoEnterManager:
         if self._keyboard_listener:
             self._keyboard_listener.stop()
             self._keyboard_listener = None
-
 
 class _AutoClickManager:
     def __init__(self, parent=None):
@@ -1309,7 +1308,7 @@ class _AutoClickManager:
             try:
                 self._mouse_controller.click(mouse.Button.left)
             except Exception:
-                pass
+                logger.exception("模拟鼠标点击失败")
 
     def _start_listener(self):
         self._stop_listener()
@@ -1324,7 +1323,7 @@ class _AutoClickManager:
                         if 1 <= d <= 9:
                             self.interval = d
             except Exception:
-                pass
+                logger.exception("按键监听回调失败")
 
         self._keyboard_listener = keyboard.Listener(on_press=on_press)
         self._keyboard_listener.daemon = True

@@ -24,6 +24,7 @@ def getIP():
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
         except Exception:
+            logger.exception("检测网络连接失败")
             return "127.0.0.1"
 
 class HttpsPlugin(PluginBase):
@@ -90,7 +91,7 @@ class HTTPTool:
             try:
                 self.server.server_close()
             except Exception:
-                logger.exception("")
+                logger.exception("关闭HTTP服务器失败")
             self.server = None
 
     def start_server(self):
@@ -129,24 +130,25 @@ class HTTPTool:
                     super().__init__(*args, directory=shared_folder, **kwargs)
                 except Exception:
                     logger.exception("处理器初始化失败")
+                    raise
 
             def setup(self):
                 try:
                     super().setup()
-                except Exception as e:
-                    logger.debug(f"处理器安装: {e}")
+                except Exception:
+                    logger.exception("处理器安装失败")
 
             def handle(self):
                 try:
                     super().handle()
-                except Exception as e:
-                    logger.debug(f"处理器handle: {e}")
+                except Exception:
+                    logger.exception("处理器handle失败")
 
             def finish(self):
                 try:
                     super().finish()
-                except Exception as e:
-                    logger.debug(f"处理器完成: {e}")
+                except Exception:
+                    logger.exception("处理器完成失败")
 
             def do_GET(self):
                 path = parse.unquote(self.path)
@@ -221,10 +223,7 @@ class HTTPTool:
                 fn_end = part.find(b'"', fn_start)
                 if fn_end <= fn_start:
                     return None
-                try:
-                    filename = part[fn_start:fn_end].decode('utf-8', errors='replace')
-                except Exception:
-                    return None
+                filename = part[fn_start:fn_end].decode('utf-8', errors='replace')
                 fs = part.find(b'\r\n\r\n')
                 if fs <= 0:
                     return None

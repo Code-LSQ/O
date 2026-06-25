@@ -48,7 +48,7 @@ class TimerManager(Singleton):
             try:
                 timer.deleteLater()
             except Exception:
-                pass
+                logger.exception("清除定时器失败")
         self._timers.clear()
         self._one_shot_timers.clear()
 
@@ -359,10 +359,10 @@ class CronTask:
                 try:
                     self._callback(*self._args)
                 except Exception:
-                    logger.exception("")
+                    logger.exception("工作线程回调执行失败")
 
             except Exception:
-                logger.exception("")
+                logger.exception("工作线程循环异常")
                 if self._stop_event.wait(timeout=60):
                     break
 

@@ -271,7 +271,7 @@ def cmdApp(path: str, cwd=None, *args, **kwargs):
 def runPython(path: str, cwd, args, operation):
     run_path = getConfig().get("Launch.Runtime.Python", "")
     if not run_path:
-        raise RuntimeError("未配置 Python 解释器路径")
+        raise RuntimeError("未配置 Python 路径")
     if Path(path).suffix.lower() == '.py':
         cmd = [run_path, path]
         if args:
@@ -537,8 +537,8 @@ class EditTool(QDialog):
         choices = {
             "文件": ("选择文件", ""),
             "命令行": ("选择可执行文件", "可执行文件 (*.exe);;所有文件 (*)"),
-            "Python": ("选择 Python 脚本", "Python文件 (*.py);;所有文件 (*)"),
-            "Java": ("选择 JAR 文件", "JAR文件 (*.jar);;所有文件 (*)"),
+            "Python": ("Python 脚本", "Python 文件 (*.py);;所有文件 (*)"),
+            "Java": ("JAR 文件", "JAR 文件 (*.jar);;所有文件 (*)"),
             "脚本": ("选择脚本文件", "脚本文件 (*.bat *.cmd *.vbs *.ps1);;所有文件 (*)"),
         }
         title, filter = choices.get(tool_type, ("选择文件", ""))
@@ -1816,7 +1816,7 @@ class MainWindow(WindowMouse, QMainWindow):
                 event.acceptProposedAction()
                 return
         except Exception:
-            pass
+            logger.exception("拖入事件处理失败")
         event.ignore()
     
     def dropEvent(self, event: QDropEvent):

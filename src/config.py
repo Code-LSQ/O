@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, scale_value, Singleton, ManagePair, dictDialog, setAutostart, setWindowsMenu, Translator, tr, systemLanguage, convertPath, getFilePath, theme_dir, dialogBox, messageBox, inputDialog
+from src.util import root, config_file, logger, scale_value, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, Translator, tr, systemLanguage, convertPath, getFilePath, theme_dir, dialogBox, messageBox, inputDialog
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 
 DEFAULT_CONFIG = {
@@ -494,11 +494,10 @@ class SettingsDialog(QDialog):
         python_layout = QHBoxLayout()
         self.python_path_edit = QLineEdit()
         self.python_path_edit.setText(self.config.get("Launch.Runtime.Python", ""))
-        self.python_path_edit.setPlaceholderText("选择 Python 解释器路径")
         python_layout.addWidget(self.python_path_edit)
 
         self.python_browse_btn = QPushButton("浏览")
-        self.python_browse_btn.clicked.connect(lambda: getFilePath(self, self.python_path_edit, "选择 Python 解释器", "Python (*.exe);;所有文件 (*)"))
+        self.python_browse_btn.clicked.connect(lambda: getFilePath(self, self.python_path_edit, "Python", "Python (*.exe);;所有文件 (*)"))
         python_layout.addWidget(self.python_browse_btn)
         layout.addRow("Python", python_layout)
 
@@ -506,11 +505,10 @@ class SettingsDialog(QDialog):
         java_layout = QHBoxLayout()
         self.java_path_edit = QLineEdit()
         self.java_path_edit.setText(self.config.get("Launch.Runtime.Java", ""))
-        self.java_path_edit.setPlaceholderText("选择 Java 路径")
         java_layout.addWidget(self.java_path_edit)
 
         self.java_browse_btn = QPushButton("浏览")
-        self.java_browse_btn.clicked.connect(lambda: getFilePath(self, self.java_path_edit, "选择 Java", "Java (*.exe);;所有文件 (*)"))
+        self.java_browse_btn.clicked.connect(lambda: getFilePath(self, self.java_path_edit, "Java", "Java (*.exe);;所有文件 (*)"))
         java_layout.addWidget(self.java_browse_btn)
         layout.addRow("Java", java_layout)
 
@@ -1003,12 +1001,12 @@ class SettingsDialog(QDialog):
                 profile = profiles.get(name, {})
                 api_url = profile.get("api_url", "")
                 if not api_url:
-                    status.setText("API URL未设置")
+                    status.setText("API URL 未设置")
                     status.setStyleSheet("color: red")
                     continue
                 is_ollama = "127.0.0.1:11434" in api_url or "localhost:11434" in api_url
                 if not is_ollama and not profile.get("api_key"):
-                    status.setText("API Key未设置")
+                    status.setText("API Key 未设置")
                     status.setStyleSheet("color: red")
                     continue
                 ep_name = "自定义"
@@ -1320,11 +1318,11 @@ class SettingsDialog(QDialog):
         is_ollama = endpoint_name == "Ollama" or "127.0.0.1:11434" in api_url or "localhost:11434" in api_url
 
         if not is_ollama and not api_key:
-            messageBox(self, "警告", "请先设置API Key", 1)
+            messageBox(self, "警告", "请先设置 API Key", 1)
             return
         
         if not endpoint_name:
-            messageBox(self, "警告", "请先选择API端点", 1)
+            messageBox(self, "警告", "请先选择 API 端点", 1)
             return
         
         # 保存按钮原始状态
@@ -1389,10 +1387,9 @@ class SettingsDialog(QDialog):
         saved_shortcuts = self.config.get("Edit.shortcuts", {})
         
         self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
-        tr = Translator()
         for i, key in enumerate(self.SHORTCUT_MAP):
             display_key = self.SHORTCUT_MAP[key]
-            display_name = tr.tr(display_key, display_key)
+            display_name = tr(display_key, display_key)
             action_item = QTableWidgetItem(display_name)
             action_item.setFlags(action_item.flags() & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable))
             self.shortcuts_table.setItem(i, 0, action_item)
@@ -1484,10 +1481,9 @@ class SettingsDialog(QDialog):
         """重置快捷键为默认值"""
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
         self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
-        tr = Translator()
         for i, key in enumerate(self.SHORTCUT_MAP):
             display_key = self.SHORTCUT_MAP[key]
-            display_name = tr.tr(display_key, display_key)
+            display_name = tr(display_key, display_key)
             self.shortcuts_table.setItem(i, 0, QTableWidgetItem(display_name))
             self.shortcuts_table.item(i, 0).setFlags(self.shortcuts_table.item(i, 0).flags() & ~Qt.ItemFlag.ItemIsEditable)
             keyseq = default_shortcuts.get(key, "")
@@ -1603,7 +1599,7 @@ class SettingsDialog(QDialog):
         new_auto_start = settings.get("auto_start", False)
         old_auto_start = self.config.get("auto_start", False)
         if old_auto_start != new_auto_start:
-            setAutostart(new_auto_start)
+            setAutoStart(new_auto_start)
         old_context_menu = self.config.get("context_menu", False)
         new_context_menu = settings.get("context_menu", False)
         if old_context_menu != new_context_menu:
@@ -1667,7 +1663,7 @@ class SettingsDialog(QDialog):
                         widget.startGlobalListener()
                         break
         except Exception:
-            pass
+            logger.exception("启动全局监听失败")
 
         super().accept()
 

@@ -19,7 +19,7 @@ mainpy = str(root / "o.py")
 # Linux，两种，x64、ARM64的  .AppImage ，可能会加上 .deb。
 # macOS，两种，x64、ARM64的 .dmg，可能会加上 .app。
 
-def delete_pycache(path: Path):
+def pycache(path: Path):
     for pycache_dir in path.rglob("__pycache__"):
         if pycache_dir.is_dir():
             try:
@@ -28,7 +28,7 @@ def delete_pycache(path: Path):
             except Exception as e:
                 print(f"删除 {pycache_dir} 失败: {e}")
 
-def plugin_lib():
+def pluginLib():
     """扫描 /plugin 内所有 .py ，解析 PluginLib 得到额外依赖"""
     # 原本准备研究 PyInstaller 怎么打包库，并对文件复制或打包进行模仿，把库的文件放到 /plugin 文件夹并在插件类的 file 中定义，插件自身也从 /plugin 下导入库，从而做到删除插件就删除库，但是过于复杂了，我不行了……暂时放弃……
     import ast
@@ -117,10 +117,10 @@ def main():
             '--windowed'
         ]
 
-    for dep in plugin_lib():
+    for dep in pluginLib():
         args.append(f'--hidden-import={dep}')
 
-    delete_pycache(root)
+    pycache(root)
 
     PyInstaller.__main__.run(args)
 
