@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, icon_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, scale_value, openTerminal, convertPath, getFilePath, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog
+from src.util import logger, theme_dir, icon_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog
 from src.config import SettingsDialog, getConfig
 from src.gui.mouse import WindowMouse
 from src.gui.control import WindowControl, PluginControl
@@ -364,7 +364,7 @@ class EditTool(QDialog):
     def __init__(self, tool_data: dict=None, parent=None):
         super().__init__(parent)
         self.tool_data = tool_data or {}
-        self.setMinimumWidth(scale_value(450))
+        self.setMinimumWidth(450)
         self.setWindowFlags(Qt.WindowType.Window)
         self._setup_ui()
         self._load_data()
@@ -414,7 +414,7 @@ class EditTool(QDialog):
         cwd_layout.addWidget(self.cwd_edit)
         
         self.cwd_browse_btn = QPushButton("浏览")
-        self.cwd_browse_btn.clicked.connect(lambda: getFilePath(self, self.cwd_edit, "", "", mode="dir"))
+        self.cwd_browse_btn.clicked.connect(lambda: getFilePath(self, "", "", "dir", self.cwd_edit))
         self.cwd_browse_btn.setFixedWidth(80)
         cwd_layout.addWidget(self.cwd_browse_btn)
         form_layout.addRow("工作目录", cwd_layout)
@@ -458,7 +458,7 @@ class EditTool(QDialog):
         icon_layout.addWidget(self.icon_edit)
         
         self.icon_browse_btn = QPushButton("浏览")
-        self.icon_browse_btn.clicked.connect(lambda: getFilePath(self, self.icon_edit, "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)"))
+        self.icon_browse_btn.clicked.connect(lambda: getFilePath(self, "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)", edit=self.icon_edit))
         self.icon_browse_btn.setFixedWidth(80)
         icon_layout.addWidget(self.icon_browse_btn)
         form_layout.addRow("图标", icon_layout)
@@ -542,7 +542,7 @@ class EditTool(QDialog):
             "脚本": ("选择脚本文件", "脚本文件 (*.bat *.cmd *.vbs *.ps1);;所有文件 (*)"),
         }
         title, filter = choices.get(tool_type, ("选择文件", ""))
-        path = getFilePath(self, self.path_edit, title, filter)
+        path = getFilePath(self, title, filter, edit=self.path_edit)
         if path and not self.name_edit.text():
             self.name_edit.setText(Path(path).stem)
     

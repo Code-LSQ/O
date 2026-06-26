@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, scale_value, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, Translator, tr, systemLanguage, convertPath, getFilePath, theme_dir, dialogBox, messageBox, inputDialog
+from src.util import root, config_file, logger, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, Translator, tr, systemLanguage, convertPath, getFilePath, theme_dir, dialogBox, messageBox, inputDialog
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 
 DEFAULT_CONFIG = {
@@ -272,7 +272,7 @@ class SettingsDialog(QDialog):
         self._working_profiles = copy.deepcopy(self.config.get("AI.profiles", {"默认配置": {}}))
         self._working_load_balance = copy.deepcopy(self.config.get("AI.load_balance", {"enabled": False, "profiles": {}}))
         self.setWindowTitle(tr("设置"))
-        self.setMinimumSize(scale_value(500), scale_value(500))
+        self.setMinimumSize(500, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.init_ui()
 
@@ -497,7 +497,7 @@ class SettingsDialog(QDialog):
         python_layout.addWidget(self.python_path_edit)
 
         self.python_browse_btn = QPushButton("浏览")
-        self.python_browse_btn.clicked.connect(lambda: getFilePath(self, self.python_path_edit, "Python", "Python (*.exe);;所有文件 (*)"))
+        self.python_browse_btn.clicked.connect(lambda: getFilePath(self, "Python", "Python (*.exe);;所有文件 (*)", edit=self.python_path_edit))
         python_layout.addWidget(self.python_browse_btn)
         layout.addRow("Python", python_layout)
 
@@ -508,7 +508,7 @@ class SettingsDialog(QDialog):
         java_layout.addWidget(self.java_path_edit)
 
         self.java_browse_btn = QPushButton("浏览")
-        self.java_browse_btn.clicked.connect(lambda: getFilePath(self, self.java_path_edit, "Java", "Java (*.exe);;所有文件 (*)"))
+        self.java_browse_btn.clicked.connect(lambda: getFilePath(self, "Java", "Java (*.exe);;所有文件 (*)", edit=self.java_path_edit))
         java_layout.addWidget(self.java_browse_btn)
         layout.addRow("Java", java_layout)
 
@@ -586,7 +586,7 @@ class SettingsDialog(QDialog):
     def _init_search_engines_section(self, layout):
         """搜索引擎管理"""
         self.search_engines_list = QListWidget()
-        self.search_engines_list.setMaximumHeight(scale_value(80))
+        self.search_engines_list.setMaximumHeight(80)
         search_engines = self.config.get("Edit.engine", {})
         for name, url in search_engines.items():
             item = QListWidgetItem(name)
@@ -615,7 +615,7 @@ class SettingsDialog(QDialog):
         while True:
             dialog = QDialog(self)
             dialog.setWindowTitle(title)
-            dialog.setMinimumWidth(scale_value(400))
+            dialog.setMinimumWidth(400)
 
             d_layout = QVBoxLayout(dialog)
             form_layout = QFormLayout()
@@ -809,7 +809,7 @@ class SettingsDialog(QDialog):
 
         self.ai_model = QComboBox()
         self.ai_model.setEditable(True)
-        self.ai_model.setFixedWidth(scale_value(300))
+        self.ai_model.setFixedWidth(300)
         layout.addWidget(self.ai_model)
         parent_layout.addLayout(layout)
 
@@ -1068,7 +1068,7 @@ class SettingsDialog(QDialog):
             if builtin:
                 dialog = QDialog(self)
                 dialog.setWindowTitle(title)
-                dialog.setMinimumSize(scale_value(500), scale_value(450))
+                dialog.setMinimumSize(500, 450)
 
                 d_layout = QVBoxLayout(dialog)
                 form_layout = QFormLayout()

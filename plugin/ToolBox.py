@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction, QTextCursor
 from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QStyle, QAbstractSpinBox
 
 from src.plugin import PluginBase
-from src.util import logger, root, data_dir, tr, scale_value, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, file_hash, showFile, ClipboardMonitor, formatFileSize
+from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, file_hash, showFile, ClipboardMonitor, formatFileSize
 
 from src.core.timer import TimerManager
 from src.core.input import GlobalHotkeyListener
@@ -405,7 +405,7 @@ class BatchRenameDialog(QDialog):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.timeout.connect(self._do_preview)
         self.init_ui()
-        self.setMinimumSize(scale_value(700), scale_value(500))
+        self.setMinimumSize(700, 500)
 
     def init_ui(self):
         self.setWindowTitle("批量重命名")
@@ -556,7 +556,7 @@ class BatchRenameDialog(QDialog):
         self.execute_btn.setEnabled(len(self.rename_items) > 0)
 
     def select_folder(self):
-        folder = getFilePath(self, title="选择文件夹", mode="dir")
+        folder = getFilePath(self, "选择文件夹", mode="dir")
         if folder:
             self.folder_path = folder
             self.folder_label.set_folder_path(folder)
@@ -1024,7 +1024,7 @@ class ToolBoxSettings(QDialog):
         layout.addRow(btn_row)
 
     def _add_search_path(self):
-        path = getFilePath(self, title="选择搜索路径", mode="dir")
+        path = getFilePath(self, "选择搜索路径", mode="dir")
         if path:
             self.search_paths_list.addItem(path)
 
@@ -1145,7 +1145,7 @@ class _AutoSearchManager:
         mw = self.parent
         self._popup = QDialog(mw)
         self._popup.setWindowTitle(tr("自动搜索结果"))
-        self._popup.setFixedSize(scale_value(500), scale_value(300))
+        self._popup.setFixedSize(500, 300)
         layout = QVBoxLayout()
         info = QLabel(f"在 {len(results)} 个位置找到: \"{search_text}\"")
         info.setStyleSheet("font-weight: bold;")

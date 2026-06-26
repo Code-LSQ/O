@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QL
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 
-from src.util import scale_value, logger, getFilePath, messageBox
+from src.util import logger, getFilePath, messageBox
 from src.plugin import PluginBase
 
 MAX_RECV_DATA = 1000
@@ -632,7 +632,7 @@ class HTTPDialog(QDialog):
         super().__init__(parent)
         self.tool = tool
         self.setWindowTitle("局域网通信")
-        self.setMinimumSize(scale_value(600), scale_value(500))
+        self.setMinimumSize(600, 500)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
         self._init_ui()
         self._update_status()
@@ -681,7 +681,7 @@ class HTTPDialog(QDialog):
         self.folder_edit.setReadOnly(True)
         folder_layout.addWidget(self.folder_edit)
         folder_btn = QPushButton("选择")
-        folder_btn.clicked.connect(lambda: getFilePath(self, self.folder_edit, "选择共享文件夹", "", mode="dir"))
+        folder_btn.clicked.connect(lambda: getFilePath(self, "选择共享文件夹", "", "dir", self.folder_edit))
         folder_layout.addWidget(folder_btn)
         info_layout.addLayout(folder_layout)
 
@@ -692,7 +692,7 @@ class HTTPDialog(QDialog):
         self.upload_folder_edit.setReadOnly(True)
         upload_folder_layout.addWidget(self.upload_folder_edit)
         upload_folder_btn = QPushButton("选择")
-        upload_folder_btn.clicked.connect(lambda: getFilePath(self, self.upload_folder_edit, "选择上传文件夹", "", mode="dir"))
+        upload_folder_btn.clicked.connect(lambda: getFilePath(self, "选择上传文件夹", "", "dir", self.upload_folder_edit))
         upload_folder_layout.addWidget(upload_folder_btn)
         info_layout.addLayout(upload_folder_layout)
 

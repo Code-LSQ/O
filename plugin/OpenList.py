@@ -21,7 +21,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
 from src.file import fileTree, filter_files
-from src.util import scale_value, logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox
+from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox
 
 """
 有时候迅雷或什么存储失效会导致空指针然后程序会直接启动失败，需要在 cmd 中手动列出存储和禁用
@@ -242,7 +242,7 @@ class OpenListPlugin(PluginBase):
         layout = QVBoxLayout(dialog)
         widget = OpenListWidget(self.main_window, self)
         layout.addWidget(widget)
-        dialog.setMinimumSize(scale_value(600), scale_value(500))
+        dialog.setMinimumSize(600, 500)
         dialog.finished.connect(lambda: (widget._save_settings(), widget._cleanup_timer()))
         dialog.show()
 
@@ -488,7 +488,7 @@ class FileConfirmDialog(QDialog):
         self.to_delete = to_delete
         self.mode = mode
         self.setWindowTitle("确认同步操作")
-        self.setMinimumSize(scale_value(600), scale_value(500))
+        self.setMinimumSize(600, 500)
         self._init_ui()
 
     def _init_ui(self):
@@ -568,7 +568,7 @@ class SyncResultDialog(QDialog):
         super().__init__(parent)
         self.result = result
         self.setWindowTitle("同步结果")
-        self.setMinimumSize(scale_value(600), scale_value(500))
+        self.setMinimumSize(600, 500)
         self._init_ui()
 
     def _init_ui(self):
@@ -1257,7 +1257,7 @@ class TaskEditDialog(QDialog):
         self.client = client
         self.task = task or TaskConfig()
         self.setWindowTitle("编辑任务" if task else "新建任务")
-        self.setMinimumSize(scale_value(500), scale_value(400))
+        self.setMinimumSize(500, 400)
         self._init_ui()
         self._load_task()
 
@@ -1276,7 +1276,7 @@ class TaskEditDialog(QDialog):
         self.src_edit.setPlaceholderText("选择本地源目录")
         src_layout.addWidget(self.src_edit)
         src_btn = QPushButton("浏览")
-        src_btn.clicked.connect(lambda: getFilePath(self, self.src_edit, "选择源目录", "", mode="dir"))
+        src_btn.clicked.connect(lambda: getFilePath(self, "选择源目录", "", "dir", self.src_edit))
         src_layout.addWidget(src_btn)
         form.addRow("源目录", src_layout)
 
@@ -1450,7 +1450,7 @@ class RemoteDirDialog(QDialog):
         self.client = client
         self.selected_path = "/"
         self.setWindowTitle("选择远程目录")
-        self.setMinimumSize(scale_value(400), scale_value(500))
+        self.setMinimumSize(400, 500)
         self._init_ui()
         self._load_dir("/")
 
@@ -1528,7 +1528,7 @@ class OpenListWidget(QWidget):
         path_layout.addWidget(self.path_edit)
         self.select_btn = QPushButton("选择")
         self.select_btn.setFixedWidth(70)
-        self.select_btn.clicked.connect(lambda: getFilePath(self, self.path_edit, "OpenList", "可执行文件 (*.exe)"))
+        self.select_btn.clicked.connect(lambda: getFilePath(self, "OpenList", "可执行文件 (*.exe)", edit=self.path_edit))
         path_layout.addWidget(self.select_btn)
         layout.addLayout(path_layout)
 

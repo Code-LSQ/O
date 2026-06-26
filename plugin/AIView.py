@@ -1041,7 +1041,7 @@ class AIViewPlugin(PluginBase):
             self.input_edit.setPlainText(value)
 
     def _on_upload_file_clicked(self):
-        file_path = getFilePath(self.main_window, title="选择文件")
+        file_path = getFilePath(self.main_window, "选择文件")
         if not file_path:
             return
         client = getAIClient(self.main_window.config if self.main_window else None)

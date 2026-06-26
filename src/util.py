@@ -16,7 +16,7 @@ from email.utils import parsedate_to_datetime
 from logging.handlers import RotatingFileHandler
 
 import requests
-from psutil import Process, cpu_count
+from psutil import Process, cpu_count, disk_usage
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QPushButton, QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFileDialog, QLayout
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
 from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer
@@ -202,23 +202,38 @@ def showFile(path: str, parent=None):
     except Exception:
         logger.exception("打开资源管理器失败")
 
-def getScale() -> float:
-    """获取屏幕缩放因子，基于96DPI（100%缩放）"""
+def getDisk():
+    disk = disk_usage("/")
+    logger.info(f"磁盘信息\n总空间: {disk.total / (1024**3):.2f} GB\n已使用: {disk.used / (1024**3):.2f} GB\n使用率: {disk.percent}%")
+
+def getNet():
+    pass
+
+def getScreen(app: QApplication, logic=False):
+    """获取屏幕逻辑分辨率、缩放和像素密度(DPI)，logic 为 True 输出逻辑分辨率，为 False 输出物理分辨率"""
     try:
-        app = QApplication.instance()
-        if app:
-            screen = app.primaryScreen()
-            if screen:
-                dpi = screen.logicalDotsPerInchX()
-                return dpi / 96.0
+        screen = app.primaryScreen()
+        size = screen.size()
+        width = size.width()
+        height = size.height()
+        hz = screen.refreshRate()
+        scale = screen.devicePixelRatio()
+        dpi = screen.logicalDotsPerInchX()
+        if not logic:
+            width = int(width * scale)
+            height = int(height * scale)
+        logger.info(f"屏幕分辨率 {width}×{height}，刷新率 {hz}，缩放 {scale}，像素密度 {dpi}")
+        return width, height, hz, scale, dpi
     except Exception:
-        logger.exception("获取屏幕DPI失败")
-    return 1.0
+        logger.exception("获取屏幕信息失败")
+    return 1920, 1200, 60, 1.0, 96.0
 
-def scale_value(value: int) -> int:
-    """根据屏幕缩放因子缩放数值"""
-    return int(value * getScale())
-
+def getDevice(app: QApplication):
+    try:
+        getDisk()
+        getScreen(app)
+    except Exception:
+        logger.exception("获取设备信息失败")
 
 def systemLanguage() -> str:
     """检测系统语言，返回语言显示名称"""
@@ -532,7 +547,7 @@ def monitor():
 
 
 def urlToPath(url: QUrl) -> str:
-    """将 QUrl 转换为本地路径（处理 Windows /C:/... 格式）"""
+    """将 QUrl 转换为本地路径（处理 Windows file:///C:/... 格式）"""
     path = url.toLocalFile() or url.path()
     if sys.platform == 'win32' and len(path) > 2 and path[0] == '/' and path[2] == ':':
         path = path[1:]
@@ -550,7 +565,7 @@ class FileDrop(QLabel):
         self._file_filter = file_filter or []
         self.setAcceptDrops(True)
         self.setWordWrap(True)
-        self.setFixedHeight(scale_value(100))
+        self.setFixedHeight(100)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("color: gray; border: 2px dashed gray;")
         self.setText("拖拽文件或文件夹到此处")
@@ -832,7 +847,7 @@ def convertPath(path: str, mode: str) -> str:
         pass
     return path
 
-def getFilePath(parent: QWidget, edit=None, title="", filter="", mode="file"):
+def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
     """封装 QFileDialog 返回文件路径，可以与 QLineEdit 配合设置文本，用 lambda 连接到 选择、浏览 按钮"""
     if mode == "file":
         path, _ = QFileDialog.getOpenFileName(parent, title, "", filter)
@@ -994,7 +1009,7 @@ class ManagePair(QDialog):
 
     def __init__(self, parent=None, pairs=None, connect_signals: bool = True):
         super().__init__(parent)
-        self.setMinimumSize(scale_value(500), scale_value(300))
+        self.setMinimumSize(500, 300)
 
         # 创建控件
         self.pair_list = QListWidget()

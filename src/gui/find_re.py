@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence
 
 from src.config import getConfig
-from src.util import scale_value, logger, dialogBox, messageBox, dictDialog, tr
+from src.util import logger, dialogBox, messageBox, dictDialog, tr
 
 class FindReplaceDialog(QDialog):
     """查找替换对话框"""
@@ -49,7 +49,7 @@ class FindReplaceDialog(QDialog):
         preset_layout.addWidget(self.preset_combo)
 
         self.manage_btn = QPushButton(tr("管理"))
-        self.manage_btn.setFixedWidth(scale_value(70))
+        self.manage_btn.setFixedWidth(70)
         self.manage_btn.clicked.connect(self._manage_presets)
         preset_layout.addWidget(self.manage_btn)
 
@@ -147,7 +147,7 @@ class FindReplaceDialog(QDialog):
     def _manage_presets(self):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("管理预设规则"))
-        dialog.setMinimumSize(scale_value(500), scale_value(350))
+        dialog.setMinimumSize(500, 350)
 
         layout = QVBoxLayout(dialog)
 

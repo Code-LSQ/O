@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 
 from src.plugin import PluginBase
-from src.util import isAdmin, runAdmin, scale_value, ManagePair, logger, checksum, messageBox, dialogBox
+from src.util import isAdmin, runAdmin, ManagePair, logger, checksum, messageBox, dialogBox
 
 SOURCE_NOT_EXISTS = "源路径不存在"
 SOURCE_SYMLINK = "源路径是符号链接"
@@ -81,7 +81,7 @@ class LinkManage(QDialog):
         if not isAdmin():
             title += " - 需要管理员权限"
         self.setWindowTitle(title)
-        self.setMinimumSize(scale_value(450), scale_value(300))
+        self.setMinimumSize(450, 300)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
 
         self.pair_manage = ManagePair(self, pairs=pairs, connect_signals=False)

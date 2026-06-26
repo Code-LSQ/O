@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer, Slot
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, monitor, logger, getScale, scale_value, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog
+from src.util import root, monitor, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog
 from src.file import FileControl, FileOperation, FileSelect, ArchiveItemModel
 from src.core.md import extract_toc
 from src.gui.find_re import FindReplaceDialog
@@ -203,7 +203,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.setStatusBar(QStatusBar(self))
         
         self.cursor_pos_label = QLabel("行 1, 列 1")
-        self.cursor_pos_label.setMinimumWidth(scale_value(120))
+        self.cursor_pos_label.setMinimumWidth(120)
         self.cursor_pos_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.cursor_pos_label.setStyleSheet("background: transparent;")
         self.statusBar().addPermanentWidget(self.cursor_pos_label)
@@ -232,7 +232,7 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def open_folder_dialog(self):
         """打开文件夹对话框"""
-        folder = getFilePath(self, title=tr("选择文件夹"), mode="dir")
+        folder = getFilePath(self, tr("选择文件夹"), mode="dir")
         if folder:
             self.load_folder(folder)
     
@@ -252,7 +252,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         else:
             folder = str(root)
             if not os.path.isdir(folder):
-                folder = getFilePath(self, title=tr("选择文件夹"), mode="dir")
+                folder = getFilePath(self, tr("选择文件夹"), mode="dir")
                 if not folder:
                     return
             self.load_folder(folder)
@@ -271,11 +271,8 @@ class EditorWindow(WindowMouse, QMainWindow):
         
     def apply_config(self):
         # 应用配置到界面
-        base_width = self.config.get("Edit.width")
-        base_height = self.config.get("Edit.height")
-        scale = getScale()
-        width = int(base_width * scale)
-        height = int(base_height * scale)
+        width = self.config.get("Edit.width")
+        height = self.config.get("Edit.height")
         x = self.config.get("Edit.x")
         y = self.config.get("Edit.y")
         

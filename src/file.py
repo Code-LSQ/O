@@ -371,7 +371,7 @@ class FileControl:
 
     def open_file(self):
         """打开文件对话框"""
-        file_path = getFilePath(self.main, title="打开文件", filter="所有文件 (*.*);;文本文件 (*.txt *.md)")
+        file_path = getFilePath(self.main, "打开文件", "所有文件 (*.*);;文本文件 (*.txt *.md)")
         if not file_path:
             return
 

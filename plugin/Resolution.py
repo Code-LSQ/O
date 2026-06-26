@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QVBoxLayout, QLabel, QDialog, QTextEdit, QMenu
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import scale_value, logger, messageBox, dialogBox
+from src.util import logger, messageBox, dialogBox
 
 CDS_UPDATEREGISTRY = 0x01
 CDS_TEST = 0x00000002
@@ -200,7 +200,7 @@ class ResolutionSettingsDialog(QDialog):
     def __init__(self, parent, resolutions: List[str]):
         super().__init__(parent)
         self.setWindowTitle("分辨率设置")
-        self.setMinimumSize(scale_value(350), scale_value(300))
+        self.setMinimumSize(350, 300)
         self.resolutions = resolutions[:]
         self._init_ui()
 

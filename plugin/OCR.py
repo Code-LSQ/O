@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import scale_value, FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox
+from src.util import FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox
 from src.config import getConfig
 from src.core.AI import _read_image_base64, getAIClient
 
@@ -90,7 +90,7 @@ class OCRDialog(QDialog):
         super().__init__(parent)
         self.plugin = plugin
         self.setWindowTitle("AI OCR 识别")
-        self.setMinimumSize(scale_value(600), scale_value(450))
+        self.setMinimumSize(600, 450)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
         self._init_ui()
         self.ocr_thread = None
@@ -204,7 +204,7 @@ class OCRDialog(QDialog):
     
     def _add_folder(self):
         """添加文件夹"""
-        folder = getFilePath(self, title="选择文件夹", mode="dir")
+        folder = getFilePath(self, "选择文件夹", mode="dir")
         if folder:
             self._add_folder_files(folder)
     

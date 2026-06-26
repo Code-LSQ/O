@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy
 from PySide6.QtGui import QKeySequence, QAction, QIcon
 from PySide6.QtCore import Qt
 
-from src.util import tr, scale_value, ENCODING_MAP, icon_dir, messageBox
+from src.util import tr, ENCODING_MAP, icon_dir, messageBox
 from src.plugin import getPluginManager, pluginActionMenu
 from src.config import DEFAULT_CONFIG
 
@@ -28,20 +28,20 @@ class WindowControl:
         
         self.main.min_btn = QPushButton("—")
         self.main.min_btn.setObjectName("min_btn")
-        self.main.min_btn.setFixedSize(scale_value(40), scale_value(32))
+        self.main.min_btn.setFixedSize(40, 32)
         self.main.min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main.min_btn.clicked.connect(self.main.showMinimized)
 
         self.main.max_btn = QPushButton()
         self.main.max_btn.setObjectName("max_btn")
         self.main.max_btn.setIcon(max_icon)
-        self.main.max_btn.setFixedSize(scale_value(40), scale_value(32))
+        self.main.max_btn.setFixedSize(40, 32)
         self.main.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main.max_btn.clicked.connect(self.main._toggle_maximize)
 
         self.main.close_btn = QPushButton("×")
         self.main.close_btn.setObjectName("close_btn")
-        self.main.close_btn.setFixedSize(scale_value(40), scale_value(32))
+        self.main.close_btn.setFixedSize(40, 32)
         self.main.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main.close_btn.clicked.connect(self.main.close)
 
@@ -98,7 +98,7 @@ class MenuControl:
         toolbar = QToolBar()
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
-        toolbar.setFixedHeight(scale_value(32))
+        toolbar.setFixedHeight(32)
         toolbar.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         toolbar.mouseDoubleClickEvent = self.main._on_toolbar_double_click
         return toolbar
@@ -109,7 +109,7 @@ class MenuControl:
     def createMenuButton(self, title: str) -> tuple[QToolButton, QMenu]:
         btn = QToolButton()
         btn.setText(title)
-        btn.setMinimumWidth(scale_value(90))
+        btn.setMinimumWidth(90)
         btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(btn)

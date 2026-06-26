@@ -85,8 +85,7 @@ _SHARED_UTIL_ATTRS = {
     'TAR_EXTENSIONS': {'.tar', '.tar.gz', '.tgz'},
     'ENCODING_MAP': {'UTF-8': 'utf-8', 'GBK': 'gb18030', 'Shift-JIS': 'shift_jis'},
     'data_dir': MagicMock(),
-    'scale_value': MagicMock(return_value=100),
-    'plugin_dir': MagicMock(),
+    'plugin_dir': MagicMock()
 }
 
 
