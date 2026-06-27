@@ -53,7 +53,14 @@ class LinkPlugin(PluginBase):
     
     def __init__(self, main_window):
         super().__init__(main_window)
-        self.settings["links"] = []
+
+    def loadConfig(self):
+        super().loadConfig()
+        self.settings.setdefault("links", [])
+
+    def initialize(self):
+        if not super().initialize():
+            return
 
     def getAction(self):
         action = QAction(self.description, self.main_window)
@@ -61,6 +68,7 @@ class LinkPlugin(PluginBase):
         return action
     
     def show_manage_dialog(self, action=None):
+        self.initialize()
         dialog = LinkManage(self.main_window, pairs=self.settings.get("links", []), on_save=self._on_dialog_save)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.show()

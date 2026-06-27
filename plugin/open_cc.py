@@ -13,6 +13,10 @@ class OpenCCPlugin(PluginBase):
 
     def __init__(self, main_window):
         super().__init__(main_window)
+
+    def initialize(self):
+        if not super().initialize():
+            return
         self._t2s = opencc.OpenCC('t2s')
         self._s2t = opencc.OpenCC('s2t')
 
@@ -23,6 +27,7 @@ class OpenCCPlugin(PluginBase):
         return menu
 
     def cht_to_chs(self):
+        self.initialize()
         editor = getattr(self.main_window, 'get_current_editor', lambda: None)()
         if not editor:
             return
@@ -30,6 +35,7 @@ class OpenCCPlugin(PluginBase):
         self.main_window.statusBar().showMessage("已转换为简体", 2000)
 
     def chs_to_cht(self):
+        self.initialize()
         editor = getattr(self.main_window, 'get_current_editor', lambda: None)()
         if not editor:
             return

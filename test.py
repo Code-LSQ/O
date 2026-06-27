@@ -10,6 +10,8 @@
     --exception               异常测试
     --list                    列出测试组
     --gen-tokens
+    --launch                  启动程序本体
+    --mem-debug               启动本体并启用 tracemalloc 内存追踪 + Qt 对象计数（自动启用 --launch）
     --help                    帮助
 
 
@@ -24,11 +26,11 @@
 """
 
 import os
+import gc
 import sys
 import argparse
 import json
 import shutil
-import hashlib
 import tempfile
 import time
 import types
@@ -46,9 +48,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.util import logger
 
-# ============================================================
+
 # Mock 基础设施 — 统一工厂
-# ============================================================
 
 def _make_module(name, **attrs):
     """Create a module with given attributes"""
@@ -327,14 +328,6 @@ class TestPluginBase(_PluginTestBase):
         plugin = self.PluginBase()
         plugin.onFileSave("/some/path")
 
-    def test_activate_does_not_raise(self):
-        plugin = self.PluginBase()
-        plugin.activate()
-
-    def test_deactivate_does_not_raise(self):
-        plugin = self.PluginBase()
-        plugin.deactivate()
-
     def test_cleanup_does_not_raise(self):
         plugin = self.PluginBase()
         plugin.cleanup()
@@ -376,18 +369,12 @@ class TestCreateCustomPlugin(_PluginTestBase):
                 self.initialized = False
             def initialize(self):
                 calls.append("initialize")
-            def activate(self):
-                calls.append("activate")
-            def deactivate(self):
-                calls.append("deactivate")
             def cleanup(self):
                 calls.append("cleanup")
         plugin = LifecyclePlugin()
         plugin.initialize()
-        plugin.activate()
-        plugin.deactivate()
         plugin.cleanup()
-        self.assertEqual(calls, ["initialize", "activate", "deactivate", "cleanup"])
+        self.assertEqual(calls, ["initialize", "cleanup"])
 
 
 class TestPluginManagerBasic(_PluginTestBase):
@@ -1936,6 +1923,99 @@ _register('exception', [
 ], "异常测试 (API Key, 网络, 插件, 文件, 模型, 配置)")
 
 
+# 内存调试工具 (用于 --launch / --mem-debug)
+
+class _MemState:
+    started = False
+    prev_snapshot = None
+    count = 0
+
+_MEM = _MemState()
+
+def _mem_init():
+    """初始化 tracemalloc 追踪"""
+    import tracemalloc
+    tracemalloc.start()
+    _MEM.started = True
+    _MEM.prev_snapshot = None
+    _MEM.count = 0
+    logger.info("tracemalloc 追踪已启动")
+
+
+def _mem_take_snapshot():
+    """拍快照并与上次比较，返回简短增量字符串"""
+    if not _MEM.started:
+        return ""
+    import tracemalloc
+    current = tracemalloc.take_snapshot()
+    _MEM.count += 1
+
+    if _MEM.prev_snapshot is None:
+        _MEM.prev_snapshot = current
+        return "追踪中..."
+
+    stats = current.compare_to(_MEM.prev_snapshot, 'lineno')
+    _MEM.prev_snapshot = current
+
+    total_size = sum(stat.size_diff for stat in stats)
+    total_count = sum(stat.count_diff for stat in stats)
+
+    logger.info(f"=== 内存快照 #{_MEM.count} 增量 TOP10 ===")
+    for i, stat in enumerate(stats[:10]):
+        logger.info(f"  #{i+1} {stat}")
+    logger.info(f"  总计: {total_size / 1024:.1f} KB, {total_count} 个对象")
+
+    if abs(total_size) < 1024:
+        return f"MEM {total_size:.0f}B"
+    if abs(total_size) < 1024 * 1024:
+        return f"MEM {total_size/1024:.0f}KB"
+    return f"MEM {total_size/1024/1024:.1f}MB"
+
+
+def _count_qt_objects(widget, max_depth=20):
+    """递归统计 QObject 数量和类型"""
+    from collections import Counter
+    counter = Counter()
+    def walk(obj, depth=0):
+        if depth > max_depth:
+            return
+        counter[type(obj).__name__] += 1
+        for child in obj.children():
+            walk(child, depth + 1)
+    walk(widget)
+    return counter
+
+
+def _log_qt_objects(widget):
+    """记录 Qt 对象统计到日志"""
+    counter = _count_qt_objects(widget)
+    total = sum(counter.values())
+    top = counter.most_common(15)
+    logger.info(f"=== Qt 对象统计 (共 {total} 个) TOP15 ===")
+    for name, count in top:
+        logger.info(f"  {name}: {count}")
+
+
+def _patch_mainwindow_for_debug():
+    """给 MainWindow.__init__ 打补丁，注入内存追踪和 Qt 对象计数定时器"""
+    from src.main import MainWindow
+    from PySide6.QtCore import QTimer
+    original_init = MainWindow.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+
+        mem_timer = QTimer(self)
+        mem_timer.timeout.connect(_mem_take_snapshot)
+        mem_timer.start(5000)
+
+        qt_timer = QTimer(self)
+        qt_timer.timeout.connect(lambda: _log_qt_objects(self))
+        qt_timer.start(10000)
+
+    MainWindow.__init__ = patched_init
+    logger.info("MainWindow.__init__ 已打补丁，内存追踪每 5 秒、Qt 对象计数每 10 秒记录")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1946,8 +2026,25 @@ def main():
         parser.add_argument(f'--{name}', action='store_true',
                             help=f'{info["description"]} ({info["count"]} 个测试)')
     parser.add_argument('--list', action='store_true', help='列出所有测试组')
+    parser.add_argument('--launch', action='store_true', help='启动程序本体')
+    parser.add_argument('--mem-debug', action='store_true', help='启动本体并启用内存追踪（自动启用 --launch）')
 
     args = parser.parse_args()
+
+    if args.launch or args.mem_debug:
+        test_flags = {'--launch', '--mem-debug'}
+        sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a not in test_flags]
+
+        if args.mem_debug:
+            _mem_init()
+
+        from o import main as launch_app
+
+        if args.mem_debug:
+            _patch_mainwindow_for_debug()
+
+        launch_app()
+        return
 
     if args.list:
         print(f"{'组名':<12} {'测试数':<8} 说明")

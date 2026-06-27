@@ -229,12 +229,17 @@ class OpenListPlugin(PluginBase):
         })
         return super().saveConfig()
 
+    def initialize(self):
+        if not super().initialize():
+            return
+
     def getAction(self):
         action = QAction(self.description, self.main_window)
         action.triggered.connect(self.show_settings)
         return action
 
     def show_settings(self):
+        self.initialize()
         dialog = QDialog(self.main_window)
         dialog.setWindowTitle("OpenList")
         dialog.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
@@ -260,8 +265,10 @@ class OpenListPlugin(PluginBase):
             return client.login(self.username, self.password)
         return False
 
-    def deactivate(self):
+    def cleanup(self):
         """插件停用时保存配置"""
+        if not self._initialized:
+            return
         if self.client:
             self.client.close()
         self.saveConfig()

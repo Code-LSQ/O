@@ -116,6 +116,8 @@ class AIViewPlugin(PluginBase):
         self._standalone_window = None
 
     def initialize(self):
+        if not super().initialize():
+            return
         self._load_history()
         self._create_ui()
         self.dock.setStyleSheet(self.main_window.styleSheet())
@@ -126,7 +128,9 @@ class AIViewPlugin(PluginBase):
             self._toggle_action.triggered.connect(self._toggle_panel)
         return self._toggle_action
 
-    def deactivate(self):
+    def cleanup(self):
+        if not self._initialized:
+            return
         self._destroy_dock()
 
     def _create_ui(self):
@@ -744,6 +748,7 @@ class AIViewPlugin(PluginBase):
     # ── UI 交互 ───────────────────────────────────────
 
     def _toggle_panel(self):
+        self.initialize()
         main_visible = self.main_window.isVisible() and not (self.main_window.windowState() & Qt.WindowState.WindowMinimized)
         if not main_visible:
             self._toggle_standalone()
@@ -757,6 +762,7 @@ class AIViewPlugin(PluginBase):
             self.dock.setVisible(not self.dock.isVisible())
 
     def _toggle_standalone(self):
+        self.initialize()
         if self._standalone_window and self._standalone_window.isVisible():
             self._move_panel_to_dock()
             return

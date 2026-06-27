@@ -19,7 +19,6 @@ from src.gui.control import WindowControl, PluginControl
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
 from src.plugin import getPluginManager, pluginActionMenu
-from src.edit import EditorWindow
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -687,8 +686,10 @@ class MainWindow(WindowMouse, QMainWindow):
 
         QTimer.singleShot(0, self._lazy_init)
 
-    def _open_editor(self, file_path=None) -> EditorWindow:
+    def _open_editor(self, file_path=None):
         """打开/激活编辑器窗口"""
+        from src.edit import EditorWindow
+        # 按需导入降低内存占用
         if self._editor_window is None:
             self._editor_window = EditorWindow(self.app, file_path, main_window=self)
             self.applyTheme(self._editor_window)
@@ -1415,7 +1416,7 @@ class MainWindow(WindowMouse, QMainWindow):
             logger.exception("获取插件实例失败")
         return None
 
-    def _build_plugin_submenu(self, plugin_name: str, source_menu: QMenu = None) -> QMenu | None:
+    def _build_plugin_submenu(self, plugin_name: str, source_menu: QMenu = None) -> QMenu:
         """构建插件的子菜单"""
         if source_menu is None:
             inst = self._get_plugin_instance(plugin_name)

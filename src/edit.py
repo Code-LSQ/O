@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QTimer, Slot
 
 from src.config import SettingsDialog, getConfig
 from src.util import root, monitor, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog
-from src.file import FileControl, FileOperation, FileSelect, ArchiveItemModel
+from src.file import FileControl, FileOperation, ArchiveItemModel
 from src.core.md import extract_toc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
@@ -50,6 +50,9 @@ class EditorWindow(WindowMouse, QMainWindow):
         self._fallback_size = (1000, 650)
         self._initialization_complete = False
         self.window_control = WindowControl(self)
+        self.action_minimize = QAction(self)
+        self.action_minimize.triggered.connect(self.showMinimized)
+        self.addAction(self.action_minimize)
 
     def _init_state_from_config(self, file_path) -> str:
         """从配置恢复状态"""
@@ -379,7 +382,7 @@ class EditorWindow(WindowMouse, QMainWindow):
                         self.open_file_path(file_path)
                     event.acceptProposedAction()
     
-    def get_current_editor(self) -> EditorTab | None:
+    def get_current_editor(self) -> EditorTab:
         """获取当前编辑器"""
         if self._use_tabs and self.tab_widget:
             widget = self.tab_widget.currentWidget()
@@ -420,7 +423,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.encoding_label.setVisible(True)
             self.encoding_label.setText("UTF-8")
     
-    def add_new_tab(self, file_path: str | None = None, content: str = "") -> EditorTab:
+    def add_new_tab(self, file_path: str = None, content: str = "") -> EditorTab:
         """添加新的编辑器标签页"""
         editor = EditorTab()
         if file_path:

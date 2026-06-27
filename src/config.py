@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, Translator, tr, systemLanguage, convertPath, getFilePath, theme_dir, dialogBox, messageBox, inputDialog
+from src.util import root, config_file, logger, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, theme_dir, lang_dir, dialogBox, messageBox, inputDialog
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 
 DEFAULT_CONFIG = {
@@ -36,7 +36,7 @@ DEFAULT_CONFIG = {
         "layout": "horizontal",
         "path_mode": "absolute",
         "active_group": "默认",
-        "g_w": 80, "g_h": 30,
+        "g_w": 90, "g_h": 30,
         "i_w": 100, "i_h": 75,
         "icon": 32, "padding": 8,
         "width": 600,
@@ -72,7 +72,8 @@ DEFAULT_CONFIG = {
             "undo": "Ctrl+Z",
             "redo": "Ctrl+Y",
             "go_to_line": "Ctrl+G",
-            "jump_next": "Ctrl+D"
+            "jump_next": "Ctrl+D",
+            "minimize": "Escape"
         },
         "find_presets": [],
         "engine": {
@@ -263,7 +264,8 @@ class SettingsDialog(QDialog):
     SHORTCUT_MAP = {
         "new_file": "新建", "open_file": "打开", "save_file": "保存", "save_as": "另存为",
         "find": "查找", "replace": "替换", "undo": "撤销", "redo": "重做",
-        "go_to_line": "跳转到行", "jump_next": "选择下一个匹配"
+        "go_to_line": "跳转到行", "jump_next": "选择下一个匹配",
+        "minimize": "最小化"
     }
 
     def __init__(self, config, parent=None):
@@ -334,9 +336,17 @@ class SettingsDialog(QDialog):
         layout = QFormLayout(tab)
 
         self.language_combo = QComboBox()
-        self.language_combo.addItems(Translator().getLanguages())
+        self.language_combo.addItem("简体中文", "简体中文")
+        for file in sorted(lang_dir.glob("*.json")):
+            try:
+                data = json.loads(file.read_text(encoding='utf-8'))
+                name = data.get("翻译")
+                if name:
+                    self.language_combo.addItem(name, file.stem)
+            except Exception:
+                logger.exception(f"读取语言文件失败 {file}")
         current_lang = self.config.get("language", "简体中文")
-        idx = self.language_combo.findText(current_lang)
+        idx = self.language_combo.findData(current_lang)
         self.language_combo.setCurrentIndex(idx if idx >= 0 else 0)
         layout.addRow(tr("语言"), self.language_combo)
 
@@ -442,7 +452,7 @@ class SettingsDialog(QDialog):
         # 启动器外观
         self.g_w_spin = QSpinBox()
         self.g_w_spin.setRange(40, 200)
-        self.g_w_spin.setValue(launcher_config.get("g_w", 80))
+        self.g_w_spin.setValue(launcher_config.get("g_w", 90))
         self.g_w_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.g_h_spin = QSpinBox()
         self.g_h_spin.setRange(20, 100)
@@ -690,7 +700,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(tab)
 
         top_row = QHBoxLayout()
-        self.ai_enabled_check = QCheckBox("启用AI功能")
+        self.ai_enabled_check = QCheckBox("AI 功能")
         self.ai_enabled_check.setChecked(self.config.get("AI.enabled", False))
         top_row.addWidget(self.ai_enabled_check)
         top_row.addStretch()
@@ -785,7 +795,7 @@ class SettingsDialog(QDialog):
         self.ai_custom_url_edit.setText(current_url)
 
         self.ai_combo.currentTextChanged.connect(self._on_endpoint_changed)
-        layout.addRow("API 接口", self.ai_combo)
+        layout.addRow("API " + tr("接口"), self.ai_combo)
         layout.addRow("接口地址", self.ai_custom_url_edit)
         parent_layout.addLayout(layout)
 
@@ -1389,7 +1399,7 @@ class SettingsDialog(QDialog):
         self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
         for i, key in enumerate(self.SHORTCUT_MAP):
             display_key = self.SHORTCUT_MAP[key]
-            display_name = tr(display_key, display_key)
+            display_name = tr(display_key)
             action_item = QTableWidgetItem(display_name)
             action_item.setFlags(action_item.flags() & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable))
             self.shortcuts_table.setItem(i, 0, action_item)
@@ -1428,6 +1438,7 @@ class SettingsDialog(QDialog):
                 self._shortcut_key_filter.key_captured.connect(lambda seq: self._on_shortcut_key_captured(seq, row))
                 self._shortcut_key_filter.capture_cancelled.connect(lambda: self._on_shortcut_cancelled(row))
                 editor.installEventFilter(self._shortcut_key_filter)
+                editor.installEventFilter(self)
                 editor.setFocus()
 
     def _on_shortcut_key_captured(self, seq, row):
@@ -1457,6 +1468,10 @@ class SettingsDialog(QDialog):
         self._capturing_row = -1
     
     def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.FocusOut and self._shortcuts_capturing \
+                and obj is getattr(self, '_shortcut_editor', None):
+            self._cleanup_shortcut_editor(self._capturing_row)
+            return True
         if event.type() == QEvent.Type.KeyPress and self._shortcuts_capturing and obj == self.shortcuts_table.viewport():
                 key = event.key()
                 if key == Qt.Key.Key_Escape:
@@ -1483,7 +1498,7 @@ class SettingsDialog(QDialog):
         self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
         for i, key in enumerate(self.SHORTCUT_MAP):
             display_key = self.SHORTCUT_MAP[key]
-            display_name = tr(display_key, display_key)
+            display_name = tr(display_key)
             self.shortcuts_table.setItem(i, 0, QTableWidgetItem(display_name))
             self.shortcuts_table.item(i, 0).setFlags(self.shortcuts_table.item(i, 0).flags() & ~Qt.ItemFlag.ItemIsEditable)
             keyseq = default_shortcuts.get(key, "")
@@ -1525,7 +1540,7 @@ class SettingsDialog(QDialog):
                         shortcuts[key] = keyseq
         
         return {
-            "language": self.language_combo.currentText(),
+            "language": self.language_combo.currentData(),
             "theme": self.theme_combo.currentText(),
             "font_family": self.font_family_edit.currentText(),
             "font_size": self.font_size_spin.value(),

@@ -292,7 +292,7 @@ class FileOperation(Singleton):
         path = file_path.lower()
         return any(path.endswith(ext) for ext in EXTENSION["ZIP"])
 
-    def list_archive_contents(self, file_path: str) -> Optional[list]:
+    def list_archive_contents(self, file_path: str) -> list:
         """列出压缩包内部的文件和文件夹"""
         file_path_obj = Path(file_path)
         if not file_path_obj.exists():
@@ -742,7 +742,7 @@ class FileSelect(QDialog):
         return [line.strip() for line in lines if line.strip()]
 
     @staticmethod
-    def select(parent=None, default_paths: list[str] = None, default_exclude_rules: list[str] = None) -> tuple | None:
+    def select(parent=None, default_paths: list[str] = None, default_exclude_rules: list[str] = None) -> tuple:
         """显示文件选择对话框并返回选中的文件列表"""
         dialog = FileSelect(parent)
         if default_paths:
@@ -758,7 +758,7 @@ class FileSelect(QDialog):
         return None
 
 
-def _compile_single_rule(rule: str) -> tuple[re.Pattern, bool, bool] | None:
+def _compile_single_rule(rule: str) -> tuple[re.Pattern, bool, bool]:
     """将单条规则转换为预编译的正则表达式"""
     rule = rule.strip()
     if not rule:

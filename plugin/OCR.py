@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox
+from src.util import FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox, tr
 from src.config import getConfig
 from src.core.AI import _read_image_base64, getAIClient
 
@@ -20,10 +20,15 @@ class OCRPlugin(PluginBase):
     
     def __init__(self, main_window):
         super().__init__(main_window)
-        self.settings = {
-            "ai_profile": "默认配置",
-            "prompt": "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。"
-        }
+
+    def loadConfig(self):
+        super().loadConfig()
+        self.settings.setdefault("ai_profile", "默认配置")
+        self.settings.setdefault("prompt", "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。")
+
+    def initialize(self):
+        if not super().initialize():
+            return
 
     def getAction(self):
         action = QAction(self.description, self.main_window)
@@ -36,6 +41,7 @@ class OCRPlugin(PluginBase):
 
     def show_ocr_dialog(self):
         """显示OCR对话框"""
+        self.initialize()
         dialog = OCRDialog(self.main_window, self)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.show()
@@ -141,11 +147,11 @@ class OCRDialog(QDialog):
         
         bottom_layout.addSpacing(10)
         
-        add_files_btn = QPushButton("添加文件")
+        add_files_btn = QPushButton(tr("添加文件"))
         add_files_btn.clicked.connect(self._add_files)
         bottom_layout.addWidget(add_files_btn)
         
-        add_folder_btn = QPushButton("添加文件夹")
+        add_folder_btn = QPushButton(tr("选择文件夹"))
         add_folder_btn.clicked.connect(self._add_folder)
         bottom_layout.addWidget(add_folder_btn)
         
@@ -203,7 +209,6 @@ class OCRDialog(QDialog):
             self._add_file(f)
     
     def _add_folder(self):
-        """添加文件夹"""
         folder = getFilePath(self, "选择文件夹", mode="dir")
         if folder:
             self._add_folder_files(folder)

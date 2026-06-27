@@ -103,7 +103,8 @@ class ExceptSignal(QObject):
     catchException = Signal(str)
     showMainWindow = Signal()
 
-ExceptSignal = ExceptSignal()
+ExceptSign = ExceptSignal()
+
 
 def dropFile(event: QDropEvent, file=None, folder=None):
     """文件拖放处理"""
@@ -236,7 +237,7 @@ def getDevice(app: QApplication):
         logger.exception("获取设备信息失败")
 
 def systemLanguage() -> str:
-    """检测系统语言，返回语言显示名称"""
+    """检测系统语言（简体中文返回"简体中文"，其他返回语言代码，同时也是文件名称）"""
     lang_code = QLocale.system().name()
     if lang_code == 'zh_CN':
         return "简体中文"
@@ -244,29 +245,22 @@ def systemLanguage() -> str:
         lang_code = 'en_US'
     lang_file = lang_dir / f"{lang_code}.json"
     if lang_file.exists():
-        try:
-            data = json.loads(lang_file.read_text(encoding='utf-8'))
-            return data.get("翻译", "简体中文")
-        except Exception:
-            logger.exception("语言文件错误")
+        return lang_code
     return "简体中文"
-
 
 class Translator(Singleton):
     """翻译，简体中文不做处理，其他语言加载 JSON 文件，通过字符串替换进行翻译"""
     
     def _init_impl(self):
         self._translations = {}
-        self._current_lang = "简体中文"
-        self.loadTranslation()
+        self.lang = "简体中文"
     
-    def loadTranslation(self):
-        """加载所有语言文件"""
-        if not lang_dir.exists():
+    def loadTranslation(self, lang_code: str):
+        """按需加载单个语言文件，简体中文不做处理"""
+        if lang_code == "简体中文" or lang_code in self._translations:
             return
-        
-        for file in lang_dir.glob("*.json"):
-            lang_code = file.stem
+        file = lang_dir / f"{lang_code}.json"
+        if file.exists():
             try:
                 with open(file, 'r', encoding='utf-8') as f:
                     self._translations[lang_code] = json.load(f)
@@ -274,52 +268,54 @@ class Translator(Singleton):
                 logger.exception(f"加载语言文件失败 {file}")
     
     def getLanguages(self) -> list:
-        """从 .json 文件的"翻译"字段获取可用语言的列表"""
+        """扫描目录，从 .json 文件的"翻译"字段获取可用语言的列表"""
         languages = ["简体中文"]
-        for lang_dict in self._translations.values():
-            lang_name = lang_dict.get("翻译")
-            if lang_name and lang_name not in languages:
-                languages.append(lang_name)
+        for file in sorted(lang_dir.glob("*.json")):
+            try:
+                data = json.loads(file.read_text(encoding='utf-8'))
+                name = data.get("翻译")
+                if name and name not in languages:
+                    languages.append(name)
+            except Exception:
+                logger.exception(f"读取语言文件失败 {file}")
         return languages
     
-    def setLanguage(self, lang_name: str):
-        """设置当前语言"""
-        if lang_name == "简体中文":
-            self._current_lang = "简体中文"
+    def setLanguage(self, lang_code: str):
+        """通过语言代码设置当前语言"""
+        if not lang_code or lang_code == "简体中文":
+            self.lang = "简体中文"
             return
-        
-        for lang_code, lang_dict in self._translations.items():
-            if lang_dict.get("翻译") == lang_name:
-                self._current_lang = lang_code
-                return
-        
-        logger.warning(f"语言不存在: {lang_name}, 使用默认语言")
+        self.lang = lang_code
+        self.loadTranslation(lang_code)
     
-    def tr(self, key: str, default: str = None) -> str:
+    def tr(self, key: str) -> str:
         """翻译键值"""
-        if self._current_lang == "简体中文":
-            return key if key else (default or "")
-        lang_dict = self._translations.get(self._current_lang)
-        if lang_dict:
-            translated = lang_dict.get(key)
-            if translated:
-                return translated
-        return key if key else (default or "")
+        if self.lang == "简体中文":
+            return key
+        lang_dict = self._translations.get(self.lang)
+        if lang_dict and lang_dict.get(key):
+            return lang_dict.get(key)
+        return key if key else ""
     
-def tr(key: str, default: str = None) -> str:
+def tr(key: str) -> str:
     """
     翻译函数，使用字符串替换
 
     使用规范：
-    程序原生使用中文，注意文本中的英文与中文之间要有空格。应尽可能追求简洁的中文表达并将变量单独放在首部或尾部。
+    程序原生使用中文，应尽可能追求简洁的中文表达并将变量单独放在首部或尾部。
+    专有名词不用 tr() 包裹，也不在语言文件中，注意与其他需翻译文本加空格隔开。如  "API " + tr("接口")，tr("最大") + " Token"
+    专有名词列表： Markdown、JSON、OpenList、AI、API Key、Token、Ctrl、OCR、1920x1080、
+    注意文本中的英文与中文之间要有空格，
+
     语言文件中不包含 ":" "%" 等字符，此类特殊字符不用 tr() 包裹，如 tr("文件") + "(&F)"
     ": " 用 tr("文本")+": " 进行拼接，": " 后有变量则 tr("文本") + f": {var}"
     其余含变量情况用 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接，将变量放在首部或尾部，中间需要空格
-    换行使用  + "\n" +  进行拼接
-    专有名词不翻译，如 Markdown、JSON、AI、API Key 不用 tr() 包裹，注意与其他文本加空格隔开，如 "AI " 和 " API Key"
+    "\n" 不用 tr() 包裹，换行使用  + "\n" +  进行拼接
+
+    尽可能减少相似度较高的翻译，对其进行复用。统一中文表述。
 
     """
-    return Translator().tr(key, default)
+    return Translator().tr(key)
 
 
 def getTimestamp() -> str:
@@ -328,7 +324,7 @@ def getTimestamp() -> str:
 def getAppPath():
     if getattr(sys, 'frozen', False):
         return sys.executable
-    return sys.argv[0] if sys.argv else ""
+    return os.path.abspath(sys.argv[0]) if sys.argv else ""
 
 def setAutoStart(enabled: bool) -> bool:
     if sys.platform == "win32":
@@ -349,9 +345,11 @@ def windowsAutoStart(enabled: bool) -> bool:
         )
         if enabled:
             app_path = getAppPath()
-            if app_path:
-                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{app_path}"')
-                logger.info("开机自启已启用")
+            if not app_path:
+                logger.error("开机自启失败：无法获取程序路径")
+                return False
+            winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{app_path}"')
+            logger.info("开机自启已启用")
         else:
             try:
                 winreg.DeleteValue(key, APP_NAME)

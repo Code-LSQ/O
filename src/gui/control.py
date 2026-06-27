@@ -89,6 +89,7 @@ class MenuControl:
             "replace": getattr(self.main, 'action_replace', None),
             "undo": self.main.action_undo,
             "redo": self.main.action_redo,
+            "minimize": getattr(self.main, 'action_minimize', None),
         }
         for action_name, action in action_map.items():
             if action and action_name in shortcuts:
@@ -241,6 +242,7 @@ class MenuControl:
 
         toolbar.addWidget(self.main.cpu_label)
         self.createWindowButton(toolbar)
+        self._apply_shortcuts(self.config.get("Edit.shortcuts", {}))
 
 
 class PluginControl:

@@ -1,6 +1,6 @@
 import json
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QCheckBox, QPushButton, QLabel, QComboBox, QTextEdit, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QCheckBox, QPushButton, QLabel, QComboBox, QListWidget, QListWidgetItem
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence
 

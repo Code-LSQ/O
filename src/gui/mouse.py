@@ -140,5 +140,5 @@ class WindowMouse:
             self._is_maximized = True
             screen = self.screen()
             if screen:
-                self.setGeometry(screen.geometry())
+                self.setGeometry(screen.availableGeometry())
             self.window_control.update_max_button(True)

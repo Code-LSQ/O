@@ -37,6 +37,8 @@ class HttpsPlugin(PluginBase):
         self.http_tool = None
 
     def initialize(self):
+        if not super().initialize():
+            return
         self.http_tool = HTTPTool(main_window=self.main_window, settings=self.settings, plugin=self)
 
     def getAction(self):
@@ -45,13 +47,14 @@ class HttpsPlugin(PluginBase):
         return action
 
     def show_dialog(self):
-        if self.http_tool:
-            self.http_tool.show_dialog()
+        self.initialize()
+        self.http_tool.show_dialog()
 
     def cleanup(self):
+        if not self._initialized:
+            return
         self.saveConfig()
-        if self.http_tool:
-            self.http_tool.stop_server()
+        self.http_tool.stop_server()
 
 class HTTPTool:
     def __init__(self, main_window=None, settings=None, plugin=None):
@@ -215,7 +218,7 @@ class HTTPTool:
                 return boundary
 
             @staticmethod
-            def _parse_multipart_file(part: bytes, boundary: str) -> dict | None:
+            def _parse_multipart_file(part: bytes, boundary: str) -> dict:
                 """解析单个 multipart part，提取 filename + file_data"""
                 if b'Content-Disposition: form-data' not in part or b'filename="' not in part:
                     return None
@@ -240,7 +243,7 @@ class HTTPTool:
                 return {"filename": filename, "data": file_data}
 
             @staticmethod
-            def _save_uploaded_file(filename: str, file_data: bytes, target_folder: str) -> str | None:
+            def _save_uploaded_file(filename: str, file_data: bytes, target_folder: str) -> str:
                 """保存上传文件，返回文件名或 None"""
                 safe_name = os.path.normpath(os.path.basename(filename)).replace('\\', '/')
                 if safe_name in ('.', '..', ''):

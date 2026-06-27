@@ -1,10 +1,8 @@
 import os
-import sys
 import re
 import tarfile
 import zipfile
 import hashlib
-from enum import Enum
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QTextEdit, QMenu
 from PySide6.QtCore import Qt, Signal, QEvent, QObject
@@ -539,7 +537,7 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("设置语法高亮器失败")
 
-    def get_file_path(self) -> str | None:
+    def get_file_path(self) -> str:
         """获取文件路径（压缩包单图模式下返回 None）"""
         if self._is_viewing_archive_image:
             return None

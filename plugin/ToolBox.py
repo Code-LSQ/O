@@ -49,6 +49,8 @@ class ToolBox(PluginBase):
         self._dup_finder_gen = 0
 
     def initialize(self):
+        if not super().initialize():
+            return
         self._scroll_timer = _AutoScrollTimer(self.main_window)
         self._copy_mgr = _AutoCopyManager()
         self._copy_mgr.init_monitor(self.main_window)
@@ -57,7 +59,7 @@ class ToolBox(PluginBase):
         self._enter_mgr = _AutoEnterManager(self.main_window)
         self._click_mgr = _AutoClickManager(self.main_window)
 
-    def deactivate(self):
+    def cleanup(self):
         if self._scroll_timer:
             self._scroll_timer.stop()
         if self._copy_mgr:
@@ -98,6 +100,7 @@ class ToolBox(PluginBase):
         return menu
 
     def _toggle_scroll(self):
+        self.initialize()
         if self._scroll_timer.enabled:
             self._scroll_timer.stop()
             self._status_msg("自动滑动已停止")
@@ -107,6 +110,7 @@ class ToolBox(PluginBase):
             self._status_msg(f"自动滑动已启动 (速度: {speed})")
 
     def _toggle_copy(self):
+        self.initialize()
         if self._copy_mgr.enabled:
             self._copy_mgr.set_enabled(False)
             self._status_msg("自动复制已停止")
@@ -116,6 +120,7 @@ class ToolBox(PluginBase):
             self._status_msg("自动复制已启动")
 
     def _toggle_search(self):
+        self.initialize()
         if self._search_mgr.enabled:
             self._search_mgr.set_enabled(False)
             self._status_msg("自动搜索已停止")
@@ -131,6 +136,7 @@ class ToolBox(PluginBase):
                 self._status_msg("自动搜索已启动")
 
     def _toggle_enter(self):
+        self.initialize()
         if self._enter_mgr.enabled:
             self._enter_mgr.set_enabled(False)
             self._status_msg("自动回车已停止")
@@ -141,6 +147,7 @@ class ToolBox(PluginBase):
             self._status_msg(f"自动回车已启动（间隔: {self.settings.get('enter.interval', 3)}秒）")
 
     def _toggle_click(self):
+        self.initialize()
         if self._click_mgr.enabled:
             self._click_mgr.set_enabled(False)
             self._status_msg("自动点击已停止")
@@ -220,6 +227,7 @@ class ToolBox(PluginBase):
         cursor.insertText(text)
 
     def _show_settings(self):
+        self.initialize()
         dialog = ToolBoxSettings(self.settings, self.main_window)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             old_speed = self.settings.get("scroll.speed", 50)
@@ -508,7 +516,7 @@ class BatchRenameDialog(QDialog):
         layout.addLayout(mode_layout)
 
         btn_layout = QHBoxLayout()
-        self.select_folder_btn = QPushButton("选择文件夹...")
+        self.select_folder_btn = QPushButton("选择文件夹")
         self.select_folder_btn.clicked.connect(self.select_folder)
         btn_layout.addWidget(self.select_folder_btn)
         self.execute_btn = QPushButton("执行重命名")

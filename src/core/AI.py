@@ -263,7 +263,7 @@ class AIBaseAdapter(ABC):
         return in_t, out_t
     
     @staticmethod
-    def _extract_stream_chunk(obj: dict) -> str | None:
+    def _extract_stream_chunk(obj: dict) -> str:
         """从 SSE 响应对象中提取 content chunk"""
         choices = obj.get('choices')
         if not choices or not choices[0]:

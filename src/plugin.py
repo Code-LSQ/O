@@ -26,34 +26,71 @@ PLUGIN_EXTENSION = {'.py', '.pyd', '.so'}
 class PluginBase(ABC):
     """
     插件基类，所有插件必须继承此类
-    
+
     属性:
         version: 插件版本
         description: 插件描述
         author: 作者
         file: 插件写入的文件列表
+
+    规范（所有插件必须遵循）:
+        __init__():    只声明属性（=None/=[]/=""），不调用任何函数，不创建重资源，不读写配置
+
+        initialize():  负责初始化创建资源，达到懒加载效果，首次交互时由 action handler 调 self.initialize() 触发。
+        子类必须调用并 if not super().initialize(): return。
+        每个 QAction 在执行前都要 self.initialize()
+
+        getAction():   返回 QMenu/QAction，不要调 initialize()。只取 __init__ 和 loadConfig() 中已就绪的属性。
+
+        cleanup():     清理资源，开头守卫: if not self._initialized: return
+
+        loadConfig():  加载配置，启动时由 PluginManager 调用
+
+    执行顺序:
+        启动: __init__() → loadConfig() → getAction()（菜单构建）
+        交互: action handler → self.initialize() → 业务逻辑
+        禁用: if _initialized → cleanup()
     """
     
     version: str = "1.0.0"
     description: str = ""
     author: str = ""
     file: list = []
-    
+
     def __init__(self, main_window=None):
         self.name = self.__module__.rsplit(".", 1)[-1]
         self.main_window = main_window
         self.enabled = False
         self.settings = {}
-    
-    def initialize(self):
-        """初始化插件"""
-        pass
-    
+        self._initialized = False
+
     def getAction(self):
         """获取插件动作菜单，返回 QMenu、QAction 或 None"""
         return None
-    
+
+    def initialize(self) -> bool:
+        """初始化插件。返回 True 表示首次初始化。子类必须重写此方法，开头:
+            if not super().initialize():
+                return
+        """
+        if self._initialized:
+            return False
+        self._initialized = True
+        return True
+
+    def cleanup(self):
+        """清理插件资源。子类重写时开头守卫:
+            if not self._initialized:
+                return
+        """
+        pass
+
     def loadConfig(self):
+        """加载插件配置。子类覆盖时开头必须调 super().loadConfig()，
+        用 setdefault 补充默认值:
+            super().loadConfig()
+            self.settings.setdefault("key", "default")
+        """
         if self.main_window and hasattr(self.main_window, 'config'):
             saved = self.main_window.config.get("Plugin", {}).get(self.name, {})
             if saved:
@@ -76,19 +113,6 @@ class PluginBase(ABC):
     def onFileSave(self, file_path: str):
         """文件保存时的回调"""
         pass
-    
-    def activate(self):
-        """插件激活时的回调"""
-        pass
-    
-    def deactivate(self):
-        """插件停用时的回调"""
-        pass
-    
-    def cleanup(self):
-        """清理插件资源"""
-        pass
-
 
 class PluginManager(Singleton):
     """插件管理器 - 负责插件的扫描、加载、启用/禁用等
@@ -224,11 +248,7 @@ class PluginManager(Singleton):
             plugin = obj(self.main_window)
             
             plugin.loadConfig()
-            plugin.initialize()
             plugin.enabled = True
-            
-            if hasattr(plugin, 'activate'):
-                plugin.activate()
             
             self.plugins[plugin_name] = plugin
             self.enabled_plugins[plugin_name] = True
@@ -244,16 +264,11 @@ class PluginManager(Singleton):
         
         plugin = self.plugins[plugin_name]
         
-        if hasattr(plugin, 'deactivate'):
+        if plugin._initialized:
             try:
-                plugin.deactivate()
+                plugin.cleanup()
             except Exception:
-                logger.exception(f"插件 {plugin_name} 停用回调失败")
-        
-        try:
-            plugin.cleanup()
-        except Exception:
-                logger.exception(f"插件 {plugin_name} 清理失败")
+                    logger.exception(f"插件 {plugin_name} 清理失败")
         
         plugin.enabled = False
         self.enabled_plugins[plugin_name] = False

@@ -25,10 +25,15 @@ class ResolutionPlugin(PluginBase):
         self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]  # Windows 会自动切换缩放，不用管
         self._original_devmode = None
 
-    def initialize(self):
+    def loadConfig(self):
+        super().loadConfig()
         data = self.settings.get("Resolution", [])
         if data:
             self.resolutions = data
+
+    def initialize(self):
+        if not super().initialize():
+            return
 
     def _save_settings(self):
         self.settings["Resolution"] = self.resolutions
@@ -54,6 +59,7 @@ class ResolutionPlugin(PluginBase):
         return menu
 
     def _show_settings(self):
+        self.initialize()
         dialog = ResolutionSettingsDialog(self.main_window, self.resolutions)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.resolutions = dialog.resolutions
@@ -61,6 +67,7 @@ class ResolutionPlugin(PluginBase):
             logger.info(f"分辨率列表已更新: {self.resolutions}")
 
     def _switch_resolution(self, w, h):
+        self.initialize()
         ok, err = test_resolution(w, h)
         if not ok:
             messageBox(self.main_window, "不支持", f"分辨率 {w}×{h} 不可用：{err}", 1)
@@ -100,8 +107,6 @@ class ResolutionPlugin(PluginBase):
         self._original_devmode = None
         logger.info("分辨率已恢复")
 
-    def deactivate(self):
-        pass
 
 
 class DEVMODE(Structure):
