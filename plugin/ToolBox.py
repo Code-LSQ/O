@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction, QTextCursor
 from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QStyle, QAbstractSpinBox
 
 from src.plugin import PluginBase
-from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, file_hash, showFile, ClipboardMonitor, formatFileSize
+from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize
 
 from src.core.timer import TimerManager
 from src.core.input import GlobalHotkeyListener
@@ -728,7 +728,7 @@ class DuplicateFinder(QThread):
                 if file_path in file_hash_map and file_hash_map[file_path].get("md5"):
                     md5 = file_hash_map[file_path]["md5"]
                 else:
-                    md5 = file_hash(file_path)
+                    md5 = fileHash(file_path)
                 if md5:
                     info = {"path": file_path, "size": size, "md5": md5}
                     if folder_path and file_path in current_files:

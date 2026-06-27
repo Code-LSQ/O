@@ -11,7 +11,6 @@ from PySide6.QtGui import QPainter, QColor, QTextCursor, QTextCharFormat, QActio
 
 from src.util import logger, EXTENSION, inputDialog, tr
 from src.config import getConfig, DEFAULT_CONFIG
-from src.core.AI import getAIClient
 
 class EditorTextEdit(QTextEdit):
     """带行号显示的文本编辑器"""
@@ -30,7 +29,6 @@ class EditorTextEdit(QTextEdit):
         doc.blockCountChanged.connect(self._on_block_count_changed)
         doc.contentsChanged.connect(self._on_contents_changed)
         self.textChanged.connect(self._on_text_changed_for_line_numbers)
-        self.textChanged.connect(self._on_text_changed_autocomplete)
         self.cursorPositionChanged.connect(self._on_cursor_changed)
 
         self.update_line_number_area_width(0)
@@ -51,37 +49,6 @@ class EditorTextEdit(QTextEdit):
         self._reload_shortcuts()
 
         self._ai_context_buffer: list[str] = []
-
-        self._ghost_text = ""
-        self._ghost_tab_label = QLabel(self)
-        self._ghost_tab_label.setVisible(False)
-        self._ghost_tab_label.setTextFormat(Qt.RichText)
-        self._ghost_tab_label.setStyleSheet("""
-            QLabel {
-                background: transparent;
-                border: none;
-                padding: 0;
-                font-size: 13px;
-            }
-        """)
-        self._ghost_text_label = QLabel(self)
-        self._ghost_text_label.setVisible(False)
-        self._ghost_text_label.setTextFormat(Qt.RichText)
-        self._ghost_text_label.setStyleSheet("""
-            QLabel {
-                background: transparent;
-                border: none;
-                padding: 0;
-                font-size: 13px;
-            }
-        """)
-        self._autocomplete_timer = QTimer(self)
-        self._autocomplete_timer.setSingleShot(True)
-        self._autocomplete_timer.timeout.connect(self._trigger_autocomplete)
-        self._autocomplete_worker = None
-
-        self.verticalScrollBar().valueChanged.connect(self._reposition_ghost)
-        self.horizontalScrollBar().valueChanged.connect(self._reposition_ghost)
 
     def set_zoom_callback(self, callback):
         self._zoom_callback = callback
@@ -252,11 +219,6 @@ class EditorTextEdit(QTextEdit):
             return QImage()
     
     def keyPressEvent(self, event):
-        if self._ghost_tab_label.isVisible() and event.key() == Qt.Key.Key_Tab:
-            self._accept_ghost()
-            event.accept()
-            return
-
         if event.key() == Qt.Key.Key_Tab:
             cursor = self.textCursor()
             if cursor.hasSelection():
@@ -355,7 +317,6 @@ class EditorTextEdit(QTextEdit):
             self.highlight_current_line()
         self._check_bracket_match()
         self._emit_cursor_position()
-        self._hide_ghost()
 
     def _emit_cursor_position(self):
         cursor = self.textCursor()
@@ -637,18 +598,11 @@ class EditorTextEdit(QTextEdit):
                 prompts = config.get("AI.prompts", {})
                 if prompts:
                     for name in prompts:
-                        if name not in ("系统提示词", "自动补全"):
+                        if name != "系统提示词":
                             action = QAction(name, self)
                             action.triggered.connect(lambda checked, n=name: self._handle_ai_request(n))
                             ai_menu.addAction(action)
                     ai_menu.addSeparator()
-
-                if config.get("AI.autocomplete", False):
-                    action_autocomplete = QAction("AI " + tr("自动补全"), self)
-                    action_autocomplete.triggered.connect(self._handle_ai_autocomplete)
-                    ai_menu.addAction(action_autocomplete)
-                    ai_menu.addSeparator()
-
 
                 # 加入上下文
                 if selected_text:
@@ -857,99 +811,6 @@ class EditorTextEdit(QTextEdit):
         self._ai_dialog.setStyleSheet(self.window().styleSheet())
         self._ai_dialog.show()
 
-    def _handle_ai_autocomplete(self):
-        self._trigger_autocomplete()
-
-    def _on_text_changed_autocomplete(self):
-        self._hide_ghost()
-        cfg = getConfig()
-        if not cfg.get("AI.enabled", False) or not cfg.get("AI.autocomplete", False):
-            return
-        self._autocomplete_timer.start(500)
-
-    def _trigger_autocomplete(self):
-        cursor = self.textCursor()
-        if cursor.hasSelection():
-            return
-        text = self.toPlainText()[:cursor.position()]
-        if not text.strip():
-            return
-
-        cfg = getConfig()
-        if not cfg.get("AI.enabled", False) or not cfg.get("AI.autocomplete", False):
-            return
-
-        if self._autocomplete_worker and self._autocomplete_worker.isRunning():
-            self._autocomplete_worker.requestInterruption()
-            self._autocomplete_worker.wait(500)
-
-        text = text[-2000:]
-
-        prompt_template = None
-        try:
-            client = getAIClient()
-            tpl = client.get_prompt_by_name("自动补全")
-            if tpl:
-                prompt_template = tpl
-        except Exception:
-            logger.exception("加载AI提示模板失败")
-        if not prompt_template:
-            prompt_template = DEFAULT_CONFIG["AI"]["prompts"].get("自动补全", "")
-        if not prompt_template:
-            prompt_template = "请根据以下内容补全后续内容，输出不要超过100个字符，只输出补全的部分：\n\n{request}"
-        user_content = prompt_template.replace("{request}", text)
-        messages = [{"role": "user", "content": user_content}]
-        self._autocomplete_worker = AIAutocompleteWorker(messages)
-        self._autocomplete_worker.finished.connect(self._on_autocomplete_result)
-        self._autocomplete_worker.start()
-
-    def _on_autocomplete_result(self, result: str):
-        result = result.strip()
-        if not result:
-            return
-        self._ghost_text = result
-        self._show_ghost()
-
-    def _show_ghost(self):
-        if not self._ghost_text:
-            return
-        gray = "#999"
-        blue = "#2196F3"
-        self._ghost_text_label.setText(
-            f'<span style="color: {gray};">{self._ghost_text}</span>'
-        )
-        self._ghost_text_label.adjustSize()
-        self._ghost_text_label.raise_()
-        self._ghost_text_label.setVisible(True)
-        self._ghost_tab_label.setText(
-            f'<span style="color: {blue}; font-weight: bold;">[Tab]</span>'
-        )
-        self._ghost_tab_label.adjustSize()
-        self._ghost_tab_label.raise_()
-        self._ghost_tab_label.setVisible(True)
-        self._reposition_ghost()
-
-    def _reposition_ghost(self):
-        cr = self.cursorRect()
-        pos = self.viewport().mapTo(self, cr.topLeft())
-        if self._ghost_tab_label.isVisible():
-            self._ghost_tab_label.move(pos.x(), pos.y() - self._ghost_tab_label.height() - 2)
-        if self._ghost_text_label.isVisible():
-            self._ghost_text_label.move(pos.x(), pos.y() + cr.height() + 2)
-
-    def _hide_ghost(self):
-        self._ghost_tab_label.setVisible(False)
-        self._ghost_text_label.setVisible(False)
-        self._ghost_text = ""
-
-    def _accept_ghost(self):
-        if not self._ghost_text:
-            return
-        self._autocomplete_timer.stop()
-        cursor = self.textCursor()
-        cursor.insertText(self._ghost_text)
-        self._hide_ghost()
-
     class LineNumberArea(QWidget):
         def __init__(self, editor):
             super().__init__(editor)
@@ -990,45 +851,6 @@ class EditorTextEdit(QTextEdit):
                 painter.end()
 
 
-class AIAutocompleteWorker(QThread):
-    """AI自动补全工作线程"""
-    finished = Signal(str)
-
-    _alive: set = set()
-    _TIMEOUT_MS = 15000
-
-    def __init__(self, messages):
-        super().__init__()
-        self.messages = messages
-        AIAutocompleteWorker._alive.add(self)
-        self.finished.connect(self._cleanup)
-        self._timeout_timer = QTimer(self)
-        self._timeout_timer.setSingleShot(True)
-        self._timeout_timer.timeout.connect(self._on_timeout)
-
-    def start(self, priority=QThread.Priority.InheritPriority):
-        self._timeout_timer.start(self._TIMEOUT_MS)
-        super().start(priority)
-
-    def _on_timeout(self):
-        self.requestInterruption()
-        self.wait(1000)
-        self.finished.emit("")
-
-    def _cleanup(self):
-        self._timeout_timer.stop()
-        AIAutocompleteWorker._alive.discard(self)
-
-    def run(self):
-        try:
-            client = getAIClient()
-            result, _, _ = client.chat(messages=self.messages)
-            if not self.isInterruptionRequested():
-                self.finished.emit(result)
-        except Exception:
-            logger.exception("AI工作线程执行失败")
-
-
 class AIWorker(QThread):
     """AI工作线程（支持流式和非流式）"""
     chunk_received = Signal(str)
@@ -1051,6 +873,7 @@ class AIWorker(QThread):
 
     def run(self):
         try:
+            from src.core.AI import getAIClient
             client = getAIClient()
             if self.stream:
                 full_response = []

@@ -5,9 +5,9 @@ from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox, tr
+from src.util import FileDrop, data_dir, logger, getTimestamp, getFilePath, messageBox, tr, imageBase64
 from src.config import getConfig
-from src.core.AI import _read_image_base64, getAIClient
+from src.core.AI import getAIClient
 
 save_dir = data_dir / "OCR"
 
@@ -65,7 +65,7 @@ class OCRThread(QThread):
             try:
                 self.progress.emit(int((i / total) * 100), os.path.basename(file_path))
                 
-                img_data, mime = _read_image_base64(file_path)
+                img_data, mime = imageBase64(file_path)
 
                 messages = [
                     {

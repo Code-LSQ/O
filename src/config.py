@@ -86,7 +86,6 @@ DEFAULT_CONFIG = {
     "AI": {
         "enabled": False,
         "stream": False,
-        "autocomplete": False,
         "dialog": "",
         "active": "默认配置",
         "profiles": {
@@ -106,7 +105,6 @@ DEFAULT_CONFIG = {
         },
         "prompts": {
             "系统提示词": "",
-            "自动补全": "请根据以下内容补全后续内容，输出不要超过100个字符，不要与已有内容重复，只输出补全的部分：\n\n{request}",
             "提取内容": "请提取以下内容中的关键信息，按条理清晰的结构输出，不需要额外解释。",
             "代码": "你是一位经验丰富的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有广泛的知识。请帮助我编写和优化以下代码。\n\n{request}",
             "翻译": "你是一名翻译，请将以下文本 {request} 翻译成中文，你只需要返回翻译结果，无需额外解释。",
@@ -116,7 +114,7 @@ DEFAULT_CONFIG = {
 }
 
 
-_BUILTIN_PROMPTS = ["系统提示词", "自动补全"]
+_BUILTIN_PROMPTS = ["系统提示词"]
 
 class ConfigManager(Singleton):
     _initialized = False
@@ -703,10 +701,6 @@ class SettingsDialog(QDialog):
         self.ai_enabled_check = QCheckBox("AI 功能")
         self.ai_enabled_check.setChecked(self.config.get("AI.enabled", False))
         top_row.addWidget(self.ai_enabled_check)
-        top_row.addStretch()
-        self.ai_autocomplete_check = QCheckBox("自动补全")
-        self.ai_autocomplete_check.setChecked(self.config.get("AI.autocomplete", False))
-        top_row.addWidget(self.ai_autocomplete_check)
         top_row.addStretch()
         self.ai_stream_check = QCheckBox("流式输出")
         self.ai_stream_check.setChecked(self.config.get("AI.stream", True))
@@ -1563,7 +1557,6 @@ class SettingsDialog(QDialog):
                 "active": self.ai_profile_combo.currentText(),
                 "profiles": self._build_ai_profiles(),
                 "prompts": prompts,
-                "autocomplete": self.ai_autocomplete_check.isChecked() if hasattr(self, 'ai_autocomplete_check') else False,
                 "stream": self.ai_stream_check.isChecked() if hasattr(self, 'ai_stream_check') else True,
                 "load_balance": self._working_load_balance
             },

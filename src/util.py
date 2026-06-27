@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import base64
 import hashlib
 import logging
 import subprocess
@@ -640,29 +641,29 @@ class RuntimeManager:
         """获取临时环境变量，将当前路径和配置中的临时路径加入PATH"""
         env = os.environ.copy()
         
-        paths_to_add = [current_path]
+        path_list = [current_path]
         
         if self.Python:
             python_dir = os.path.dirname(self.Python)
             if python_dir and os.path.isdir(python_dir):
-                paths_to_add.append(python_dir)
+                path_list.append(python_dir)
+            script_dir = os.path.join(python_dir, "Scripts")
+            if os.path.isdir(script_dir):
+                path_list.append(script_dir)
         
         if self.Java:
-            if self.Java.endswith("bin") and os.path.isdir(self.Java):
-                paths_to_add.append(self.Java)
-            else:
-                java_bin = os.path.join(self.Java, "bin")
-                if os.path.isdir(java_bin):
-                    paths_to_add.append(java_bin)
+            java_dir = os.path.dirname(self.Java)
+            if java_dir and os.path.isdir(java_dir):
+                path_list.append(java_dir)
         
         for p in self.Temp_Path:
             if p and os.path.isdir(p):
-                paths_to_add.append(p)
+                path_list.append(p)
         
         current_path_env = env.get("PATH", "")
         path_separator = ";" if sys.platform == "win32" else ":"
         
-        new_path = path_separator.join(paths_to_add)
+        new_path = path_separator.join(path_list)
         if current_path_env:
             new_path += path_separator + current_path_env
         
@@ -690,24 +691,11 @@ def openTerminal(path, config=None):
     
     try:
         if sys.platform == "win32":
-            subprocess.Popen(
-                ['cmd', '/k', 'cd', '/d', path],
-                env=env,
-                cwd=path
-            )
+            subprocess.Popen(["cmd", '/k', 'cd', '/d', path], env=env, cwd=path)
         elif sys.platform == "linux":
-            subprocess.Popen(
-                ["xdg-terminal"],
-                env=env,
-                cwd=path,
-                start_new_session=True
-            )
+            subprocess.Popen(["xdg-terminal"], env=env, cwd=path, start_new_session=True)
         elif sys.platform == "darwin":
-            subprocess.Popen(
-                ["open", "-a", "Terminal", path],
-                env=env,
-                cwd=path
-            )
+            subprocess.Popen(["open", "-a", "Terminal", path], env=env, cwd=path)
         logger.info(f"已打开命令行: {path}")
         return True
     except Exception:
@@ -715,7 +703,7 @@ def openTerminal(path, config=None):
         return False
 
 
-def file_hash(path: str, algorithm = "md5") -> str:
+def fileHash(path: str, algorithm = "md5") -> str:
     """计算文件哈希值，建议使用 md5 或 sha256 算法"""
     ha = hashlib.new(algorithm)
     try:
@@ -731,7 +719,7 @@ def checksum(path: str, algorithm="md5", _visited=None) -> str:
     """计算文件夹哈希值（哈希树）， _visited 用于检查是否形成环路（绑定挂载、循环硬链接目录等非符号链接导致的循环）"""
 
     if os.path.isfile(path):
-        return file_hash(path, algorithm=algorithm)
+        return fileHash(path, algorithm=algorithm)
 
     if os.path.isdir(path):
         if _visited is None:
@@ -762,7 +750,7 @@ def checksum(path: str, algorithm="md5", _visited=None) -> str:
                 child_hash = checksum(child, algorithm=algorithm, _visited=_visited)
                 t = "D"
             elif os.path.isfile(child):
-                child_hash = file_hash(child, algorithm=algorithm)
+                child_hash = fileHash(child, algorithm=algorithm)
                 t = "F"
             else:
                 child_hash = ""
@@ -779,6 +767,16 @@ def checksum(path: str, algorithm="md5", _visited=None) -> str:
     logger.warning(f"不支持的路径类型: {path}")
     return ""
 
+def imageBase64(path: str) -> tuple[str, str]:
+    """读取图片文件，返回 (base64_data, mime_type)"""
+    ext = os.path.splitext(path)[1].lower().lstrip('.') or 'png'
+    if ext == 'jpg':
+        ext = 'jpeg'
+    mime = f"image/{ext}"
+    with open(path, 'rb') as f:
+        data = base64.b64encode(f.read()).decode()
+    return data, mime
+
 def formatFileSize(size: int) -> str:
     """格式化文件大小"""
     if size < 1024:
@@ -794,7 +792,7 @@ def formatFileSize(size: int) -> str:
 
 def lastModify(url):
     response = requests.get(url)
-    last_modified = response.headers.get('Last-Modified')
+    last_modified = response.headers.get("Last-Modified")
     if last_modified:
         dt = parsedate_to_datetime(last_modified)
         return dt.timestamp()

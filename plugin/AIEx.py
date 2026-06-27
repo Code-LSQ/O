@@ -38,7 +38,6 @@ class AutoHeightTextBrowser(QTextBrowser):
     def wheelEvent(self, event):
         event.ignore()
 
-
 class AINonStreamThread(QThread):
     """AI非流式响应线程"""
     finished = Signal(str)
@@ -86,10 +85,11 @@ class AIStreamThread(QThread):
         self._is_running = False
 
 
-class AIViewPlugin(PluginBase):
+class AIExtendPlugin(PluginBase):
+    """AI Extension"""
 
     version = "1.0.0"
-    description = "AI 聊天面板"
+    description = "AI 扩展"
     file = [history_file]
 
     def __init__(self, main_window):
@@ -279,8 +279,7 @@ class AIViewPlugin(PluginBase):
     def _build_prompt_bar(self, layout):
         config = self.main_window.config if self.main_window else None
         prompts = config.get("AI.prompts", {}) if config else {}
-        builtin_names = ("系统提示词", "自动补全")
-        visible_prompts = [n for n in prompts if n not in builtin_names]
+        visible_prompts = [n for n in prompts if n != "系统提示词"]
 
         if visible_prompts:
             prompt_frame = QFrame()

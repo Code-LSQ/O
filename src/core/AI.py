@@ -1,6 +1,5 @@
 import os
 import json
-import base64
 import random
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -9,23 +8,13 @@ from typing import Dict, List, Optional, Any, ClassVar
 import requests
 
 from src.config import getConfig
-from src.util import logger, EXTENSION
+from src.util import logger, EXTENSION, imageBase64
 from src.file import fileTree
 
 _session = requests.Session()
 
 
-def _read_image_base64(path: str) -> tuple[str, str]:
-    """读取图片文件，返回 (base64_data, mime_type)"""
-    ext = os.path.splitext(path)[1].lower().lstrip('.') or 'png'
-    if ext == 'jpg':
-        ext = 'jpeg'
-    mime = f"image/{ext}"
-    with open(path, 'rb') as f:
-        data = base64.b64encode(f.read()).decode()
-    return data, mime
-
-def _resolve_content_images(content_parts: List[Dict]):
+def _resolveContentImage(content_parts: List[Dict]):
     """将 content 数组中的 file:// 图片路径转 base64 data URI，原地修改"""
     for part in content_parts:
         if not isinstance(part, dict):
@@ -37,7 +26,7 @@ def _resolve_content_images(content_parts: List[Dict]):
             continue
         path = url[7:]
         try:
-            data, mime = _read_image_base64(path)
+            data, mime = imageBase64(path)
             part["image_url"] = {"url": f"data:{mime};base64,{data}"}
             part.pop("url", None)
         except Exception:
@@ -52,7 +41,7 @@ def resolve_image_urls(messages: List[Dict]) -> List[Dict]:
     for msg in messages:
         content = msg.get("content", "")
         if isinstance(content, list):
-            _resolve_content_images(content)
+            _resolveContentImage(content)
     return messages
 
 def _getConfig(config, key: str, default=None):
@@ -942,7 +931,7 @@ class AIClient:
             return None
 
         if ext in EXTENSION["IMAGE"]:
-            img, mime = _read_image_base64(file_path)
+            img, mime = imageBase64(file_path)
             content = [
                 {"type": "text", "text": f"请分析这张图片 ({name}):"},
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img}"}}
@@ -1012,7 +1001,7 @@ class AIClient:
             rel = os.path.relpath(fp, folder_path)
             name = rel.replace('\\', '/')
             try:
-                data, mime = _read_image_base64(fp)
+                data, mime = imageBase64(fp)
                 content_parts.append({"type": "text", "text": f"\n--- {name} ---"})
                 content_parts.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
             except Exception as e:

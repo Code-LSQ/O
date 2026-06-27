@@ -1357,7 +1357,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
         # AI 提示词预设
         prompts = getConfig().get("AI.prompts", {})
-        ai_names = [n for n in prompts if n not in ("系统提示词", "自动补全")]
+        ai_names = [n for n in prompts if n != "系统提示词"]
         if ai_names:
             menu.addSeparator()
             ai_menu = QMenu("AI", self)
