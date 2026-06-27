@@ -668,7 +668,6 @@ class MainWindow(WindowMouse, QMainWindow):
         self._current_group = getConfig().get("Launch.active_group", "默认")
         self._fallback_size = (600, 400)
         self._first_show = True
-        self._ai_capturing = False
         self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
         self.setAcceptDrops(True)
@@ -1355,18 +1354,6 @@ class MainWindow(WindowMouse, QMainWindow):
             action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._add_preset_item(n, p, nt))
             menu.addAction(action)
 
-        # AI 提示词预设
-        prompts = getConfig().get("AI.prompts", {})
-        ai_names = [n for n in prompts if n != "系统提示词"]
-        if ai_names:
-            menu.addSeparator()
-            ai_menu = QMenu("AI", self)
-            for n in ai_names:
-                action = QAction(n, self)
-                action.triggered.connect(lambda checked, n=n: self._add_ai_preset_item(n))
-                ai_menu.addAction(action)
-            menu.addMenu(ai_menu)
-        
         # 获取插件列表
         plugin_items = self._get_plugin_items()
         if plugin_items:
@@ -1461,18 +1448,6 @@ class MainWindow(WindowMouse, QMainWindow):
         getConfig().save()
         self.refreshTool()
     
-    def _add_ai_preset_item(self, name: str):
-        tool_data = {
-            "name": name, "type": "AI", "path": name,
-            "cwd": "", "args": "", "note": "",
-            "hotkey": "", "icon": ""
-        }
-        tools = getConfig().get("Launch.tools", {})
-        tools.setdefault(self._current_group, []).append(tool_data)
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
-        self.refreshTool()
-    
     def _add_tool(self):
         """添加启动项"""
         dialog = EditTool(parent=self)
@@ -1551,10 +1526,6 @@ class MainWindow(WindowMouse, QMainWindow):
             path = convertPath(path, "absolute")
             cwd = convertPath(cwd, "absolute")
 
-        if tool_type == "AI":
-            self._run_ai_prompt(tool.get("name", ""))
-            return
-
         try:
             # 为避免信号阻塞，先隐藏再运行
             if getConfig().get("Launch.run_hide", False):
@@ -1581,54 +1552,6 @@ class MainWindow(WindowMouse, QMainWindow):
         except Exception as e:
             messageBox(self, "错误", f"启动失败: {str(e)}", 1)
             logger.error(f"启动工具失败: {e}")
-
-    def _run_ai_prompt(self, name: str):
-        """运行 AI 提示词"""
-        if not name or getattr(self, '_ai_capturing', False):
-            return
-        self._ai_capturing = True
-        GlobalHotkeyListener()._is_pasting = True
-        self._pending_ai_prompt = name
-        QTimer.singleShot(300, self._do_ai_capture)
-
-    def _do_ai_capture(self):
-        copy_selection()
-        QTimer.singleShot(100, self._finish_ai_capture)
-
-    def _finish_ai_capture(self):
-        self._ai_capturing = False
-        GlobalHotkeyListener()._is_pasting = False
-        name = getattr(self, '_pending_ai_prompt', None)
-
-        mime = QApplication.clipboard().mimeData()
-        if mime.hasUrls():
-            for url in mime.urls():
-                path = url.toLocalFile()
-                if not path:
-                    continue
-                if os.path.isfile(path):
-                    from src.core.AI import getAIClient
-                    messages = getAIClient().build_file_message(path)
-                    if messages:
-                        self._open_ai_dialog(messages, name)
-                    return
-                if os.path.isdir(path):
-                    from src.core.AI import getAIClient
-                    messages = getAIClient().build_folder_message(path)
-                    if messages:
-                        self._open_ai_dialog(messages, name)
-                    return
-
-        text = QApplication.clipboard().text().strip()
-        if not text:
-            return
-        self._open_ai_dialog([{"role": "user", "content": text}], name)
-
-    def _open_ai_dialog(self, messages, prompt_name):
-        from src.gui.widget import AIDialog
-        dialog = AIDialog(messages, prompt_name, main_window=self)
-        dialog.setStyleSheet(self.styleSheet())
-        dialog.show()
 
     def runPreset(self, tool: dict):
         """运行预设工具"""

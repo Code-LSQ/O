@@ -48,7 +48,7 @@ class EditorTextEdit(QTextEdit):
         self._shortcut_actions = {}
         self._reload_shortcuts()
 
-        self._ai_context_buffer: list[str] = []
+
 
     def set_zoom_callback(self, callback):
         self._zoom_callback = callback
@@ -588,43 +588,6 @@ class EditorTextEdit(QTextEdit):
                 menu.addAction(action_open_url)
                 menu.addSeparator()
         
-        # AI功能
-        try:
-            config = getConfig()
-            if config.get("AI.enabled", False):
-                ai_menu = QMenu("AI", self)
-                
-                # 获取提示词列表
-                prompts = config.get("AI.prompts", {})
-                if prompts:
-                    for name in prompts:
-                        if name != "系统提示词":
-                            action = QAction(name, self)
-                            action.triggered.connect(lambda checked, n=name: self._handle_ai_request(n))
-                            ai_menu.addAction(action)
-                    ai_menu.addSeparator()
-
-                # 加入上下文
-                if selected_text:
-                    action_add_context = QAction(tr("加入上下文"), self)
-                    action_add_context.triggered.connect(self._add_ai_context)
-                    ai_menu.addAction(action_add_context)
-
-                    if self._ai_context_buffer:
-                        action_clear_context = QAction(tr("清空上下文") + f" ({len(self._ai_context_buffer)}" + tr("条") + ")", self)
-                        action_clear_context.triggered.connect(self._clear_ai_context)
-                        ai_menu.addAction(action_clear_context)
-                    ai_menu.addSeparator()
-
-                action_ask = QAction(tr("询问") + " AI", self)
-                action_ask.triggered.connect(lambda checked=False: self._handle_ai_request(None))
-                ai_menu.addAction(action_ask)
-
-                menu.addMenu(ai_menu)
-                menu.addSeparator()
-        except Exception:
-            logger.exception("AI 右键错误")
-
         # 搜索引擎功能
         if selected_text:
             try:
@@ -779,38 +742,6 @@ class EditorTextEdit(QTextEdit):
                 logger.exception("设置额外选区失败")
         self.setExtraSelections(extra_selections)
 
-    def _add_ai_context(self):
-        """将选中文本加入AI上下文缓冲区"""
-        cursor = self.textCursor()
-        if cursor.hasSelection():
-            text = cursor.selectedText()
-            self._ai_context_buffer.append(text)
-            self.window().statusBar().showMessage(tr("已加入上下文") + f" (共{len(self._ai_context_buffer)}" + tr("条") + ")", 2000)
-
-    def _clear_ai_context(self):
-        """清空AI上下文缓冲区"""
-        self._ai_context_buffer.clear()
-        self.window().statusBar().showMessage(tr("上下文已清空"), 2000)
-
-    def _handle_ai_request(self, prompt_name: str = None):
-        """处理AI请求（流式+上下文）"""
-        cursor = self.textCursor()
-        if cursor.hasSelection():
-            selected_text = cursor.selectedText()
-        else:
-            selected_text = tr("请帮我处理文本")
-
-        messages = [{"role": "user", "content": selected_text}]
-
-        if self._ai_context_buffer:
-            context = "\n---\n".join(self._ai_context_buffer)
-            messages.insert(0, {"role": "system", "content": f"以下是用户提供的上下文信息：\n{context}"})
-            self._ai_context_buffer.clear()
-
-        self._ai_dialog = AIDialog(messages, prompt_name, main_window=self.window())
-        self._ai_dialog.setStyleSheet(self.window().styleSheet())
-        self._ai_dialog.show()
-
     class LineNumberArea(QWidget):
         def __init__(self, editor):
             super().__init__(editor)
@@ -849,170 +780,6 @@ class EditorTextEdit(QTextEdit):
                     block_number += 1
             finally:
                 painter.end()
-
-
-class AIWorker(QThread):
-    """AI工作线程（支持流式和非流式）"""
-    chunk_received = Signal(str)
-    finished = Signal(str)
-    error = Signal(str)
-
-    _alive: set = set()
-
-    def __init__(self, messages, prompt_name=None, stream=True):
-        super().__init__()
-        self.messages = messages
-        self.prompt_name = prompt_name
-        self.stream = stream
-        AIWorker._alive.add(self)
-        self.finished.connect(self._cleanup)
-        self.error.connect(self._cleanup)
-
-    def _cleanup(self):
-        AIWorker._alive.discard(self)
-
-    def run(self):
-        try:
-            from src.core.AI import getAIClient
-            client = getAIClient()
-            if self.stream:
-                full_response = []
-                def on_chunk(chunk):
-                    if self.isInterruptionRequested():
-                        return
-                    full_response.append(chunk)
-                    self.chunk_received.emit(chunk)
-                client.stream_chat(
-                    messages=self.messages,
-                    callback=on_chunk,
-                    prompt_name=self.prompt_name
-                )
-                if not self.isInterruptionRequested():
-                    self.finished.emit(''.join(full_response))
-            else:
-                text, _, _ = client.chat(messages=self.messages, prompt_name=self.prompt_name)
-                if not self.isInterruptionRequested():
-                    self.finished.emit(text)
-        except Exception as e:
-            if not self.isInterruptionRequested():
-                self.error.emit(str(e))
-
-
-class AIDialog(QDialog):
-    """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
-
-    def __init__(self, messages, prompt_name, main_window=None):
-        super().__init__()
-        self._main_window = main_window
-        self.setWindowTitle("AI " + tr("回复"))
-        self.setMinimumSize(300, 200)
-        self.resize(420, 280)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-
-        config = getConfig()
-        geometry = config.get("AI.dialog")
-        if geometry:
-            self.restoreGeometry(QByteArray.fromBase64(geometry.encode()))
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-
-        self.text_edit = QTextEdit()
-        self.text_edit.setReadOnly(False)
-        self.text_edit.setPlaceholderText(tr("连接中..."))
-        layout.addWidget(self.text_edit)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.setContentsMargins(0, 0, 0, 0)
-
-        copy_btn = QPushButton(tr("复制"))
-        copy_btn.clicked.connect(self._copy)
-        btn_layout.addWidget(copy_btn)
-
-        self.paste_btn = QPushButton(tr("粘贴"))
-        self.paste_btn.setEnabled(False)
-        self.paste_btn.clicked.connect(self._paste)
-        btn_layout.addWidget(self.paste_btn)
-
-        self.apply_btn = QPushButton(tr("编辑器"))
-        self.apply_btn.setEnabled(False)
-        self.apply_btn.clicked.connect(self._apply)
-        btn_layout.addWidget(self.apply_btn)
-
-        btn_layout.addStretch()
-
-        close_btn = QPushButton(tr("关闭"))
-        close_btn.clicked.connect(self.close)
-        btn_layout.addWidget(close_btn)
-
-        layout.addLayout(btn_layout)
-
-        use_stream = config.get("AI.stream", True)
-        self.worker = AIWorker(messages, prompt_name, stream=use_stream)
-        if use_stream:
-            self.worker.chunk_received.connect(self._on_chunk)
-        self.worker.finished.connect(self._on_finished)
-        self.worker.error.connect(self._on_error)
-        self.worker.start()
-
-    def closeEvent(self, event):
-        if self.worker.isRunning():
-            self.worker.requestInterruption()
-            self.worker.wait(3000)
-        config = getConfig()
-        config.set("AI.dialog", self.saveGeometry().toBase64().data().decode())
-        config.save()
-        super().closeEvent(event)
-
-    def _on_chunk(self, chunk):
-        self.text_edit.setPlaceholderText("")
-        cursor = self.text_edit.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(chunk)
-        self.text_edit.setTextCursor(cursor)
-
-    def _on_finished(self, response):
-        self.text_edit.setPlaceholderText("")
-        self.text_edit.setPlainText(response)
-        self.apply_btn.setEnabled(True)
-        self.paste_btn.setEnabled(True)
-
-    def _on_error(self, error):
-        self.text_edit.setPlaceholderText("")
-        self.text_edit.setPlainText(tr("请求失败") + f": {error}")
-        self.apply_btn.setEnabled(False)
-        self.paste_btn.setEnabled(False)
-
-    def _copy(self):
-        text = self.text_edit.toPlainText()
-        if text:
-            QApplication.clipboard().setText(text)
-        self.close()
-
-    def _paste(self):
-        text = self.text_edit.toPlainText()
-        if not text:
-            return
-        if self._main_window:
-            editor = self._main_window.get_current_editor()
-            if editor:
-                editor.text_edit.textCursor().insertText(text)
-        self.close()
-
-    def _apply(self):
-        text = self.text_edit.toPlainText()
-        if not text:
-            return
-        if self._main_window:
-            self._main_window.activateWindow()
-            self._main_window.raise_()
-            editor = self._main_window.get_current_editor()
-            if editor:
-                editor.text_edit.setFocus()
-                editor.text_edit.textCursor().insertText(text)
-        self.close()
 
 
 class ImageLabel(QLabel):

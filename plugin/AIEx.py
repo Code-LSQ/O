@@ -4,16 +4,17 @@ import uuid
 from datetime import datetime
 
 import markdown
-
-from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QTextBrowser, QPushButton, QTextEdit, QFrame, QComboBox, QLabel, QApplication, QFileDialog, QToolTip, QLineEdit, QDialog, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QTextBrowser, QPushButton, QTextEdit, QFrame, QComboBox, QLabel, QApplication, QFileDialog, QToolTip, QLineEdit, QDialog, QListWidget, QListWidgetItem, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QAbstractSpinBox, QMenu
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QPixmap, QCursor, QTextCursor
-from PySide6.QtCore import Qt, Signal, QThread, QTimer
+from PySide6.QtCore import Qt, Signal, QThread, QTimer, QByteArray
 
 from src.plugin import PluginBase
-from src.util import data_dir, logger, getFilePath, messageBox, inputDialog
+from src.util import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp
+from src.core.input import GlobalHotkeyListener, copy_selection
 from src.core.AI import AI_ADAPTER, getAIClient, resolve_image_urls, get_adapter_endpoint
 
-history_file = data_dir / "ai.json"
+AI_dir = data_dir / "AI"
+history_file = AI_dir / "ai.json"
 
 class AutoHeightTextBrowser(QTextBrowser):
     def __init__(self, parent=None):
@@ -38,51 +39,164 @@ class AutoHeightTextBrowser(QTextBrowser):
     def wheelEvent(self, event):
         event.ignore()
 
-class AINonStreamThread(QThread):
-    """AI非流式响应线程"""
-    finished = Signal(str)
-    error = Signal(str)
-
-    def __init__(self, messages, client):
-        super().__init__()
-        self.messages = messages
-        self.client = client
-
-    def run(self):
-        try:
-            text, _, _ = self.client.chat(messages=self.messages)
-            self.finished.emit(text)
-        except Exception as e:
-            self.error.emit(str(e))
-
-class AIStreamThread(QThread):
-    """AI流式响应线程"""
+class AIThread(QThread):
+    """AI工作线程（支持流式和非流式）"""
     chunk_received = Signal(str)
     finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, messages, client):
+    _alive: set = set()
+
+    def __init__(self, messages, prompt_name=None, stream=True):
         super().__init__()
         self.messages = messages
-        self.client = client
-        self._is_running = True
+        self.prompt_name = prompt_name
+        self.stream = stream
+        AIThread._alive.add(self)
+        self.finished.connect(self._cleanup)
+        self.error.connect(self._cleanup)
+
+    def _cleanup(self):
+        AIThread._alive.discard(self)
 
     def run(self):
         try:
-            full_response = []
-
-            def on_chunk(chunk):
-                if self._is_running:
+            client = getAIClient()
+            if self.stream:
+                full_response = []
+                def on_chunk(chunk):
+                    if self.isInterruptionRequested():
+                        return
                     full_response.append(chunk)
                     self.chunk_received.emit(chunk)
-
-            self.client.stream_chat(self.messages, callback=on_chunk)
-            self.finished.emit(''.join(full_response))
+                client.stream_chat(
+                    messages=self.messages,
+                    callback=on_chunk,
+                    prompt_name=self.prompt_name
+                )
+                if not self.isInterruptionRequested():
+                    self.finished.emit(''.join(full_response))
+            else:
+                text, _, _ = client.chat(messages=self.messages, prompt_name=self.prompt_name)
+                if not self.isInterruptionRequested():
+                    self.finished.emit(text)
         except Exception as e:
-            self.error.emit(str(e))
+            if not self.isInterruptionRequested():
+                self.error.emit(str(e))
 
-    def stop(self):
-        self._is_running = False
+
+class AIDialog(QDialog):
+    """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
+
+    def __init__(self, messages, prompt_name, stream=True, dialog="", main_window=None, on_geometry_save=None):
+        super().__init__()
+        self._main_window = main_window
+        self._on_geometry_save = on_geometry_save
+        self.setWindowTitle("AI " + tr("回复"))
+        self.setMinimumSize(300, 200)
+        self.resize(420, 280)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+
+        if dialog:
+            self.restoreGeometry(QByteArray.fromBase64(dialog.encode()))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(False)
+        self.text_edit.setPlaceholderText(tr("连接中..."))
+        layout.addWidget(self.text_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+
+        copy_btn = QPushButton(tr("复制"))
+        copy_btn.clicked.connect(self._copy)
+        btn_layout.addWidget(copy_btn)
+
+        self.paste_btn = QPushButton(tr("粘贴"))
+        self.paste_btn.setEnabled(False)
+        self.paste_btn.clicked.connect(self._paste)
+        btn_layout.addWidget(self.paste_btn)
+
+        self.apply_btn = QPushButton(tr("编辑器"))
+        self.apply_btn.setEnabled(False)
+        self.apply_btn.clicked.connect(self._apply)
+        btn_layout.addWidget(self.apply_btn)
+
+        btn_layout.addStretch()
+
+        close_btn = QPushButton(tr("关闭"))
+        close_btn.clicked.connect(self.close)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+
+        self.worker = AIThread(messages, prompt_name, stream=stream)
+        if stream:
+            self.worker.chunk_received.connect(self._on_chunk)
+        self.worker.finished.connect(self._on_finished)
+        self.worker.error.connect(self._on_error)
+        self.worker.start()
+
+    def closeEvent(self, event):
+        if self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.worker.wait(3000)
+        if self._on_geometry_save:
+            self._on_geometry_save(self.saveGeometry().toBase64().data().decode())
+        super().closeEvent(event)
+
+    def _on_chunk(self, chunk):
+        self.text_edit.setPlaceholderText("")
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(chunk)
+        self.text_edit.setTextCursor(cursor)
+
+    def _on_finished(self, response):
+        self.text_edit.setPlaceholderText("")
+        self.text_edit.setPlainText(response)
+        self.apply_btn.setEnabled(True)
+        self.paste_btn.setEnabled(True)
+
+    def _on_error(self, error):
+        self.text_edit.setPlaceholderText("")
+        self.text_edit.setPlainText(tr("请求失败") + f": {error}")
+        self.apply_btn.setEnabled(False)
+        self.paste_btn.setEnabled(False)
+
+    def _copy(self):
+        text = self.text_edit.toPlainText()
+        if text:
+            QApplication.clipboard().setText(text)
+        self.close()
+
+    def _paste(self):
+        text = self.text_edit.toPlainText()
+        if not text:
+            return
+        if self._main_window:
+            editor = self._main_window.get_current_editor()
+            if editor:
+                editor.text_edit.textCursor().insertText(text)
+        self.close()
+
+    def _apply(self):
+        text = self.text_edit.toPlainText()
+        if not text:
+            return
+        if self._main_window:
+            self._main_window.activateWindow()
+            self._main_window.raise_()
+            editor = self._main_window.get_current_editor()
+            if editor:
+                editor.text_edit.setFocus()
+                editor.text_edit.textCursor().insertText(text)
+        self.close()
 
 
 class AIExtendPlugin(PluginBase):
@@ -90,7 +204,7 @@ class AIExtendPlugin(PluginBase):
 
     version = "1.0.0"
     description = "AI 扩展"
-    file = [history_file]
+    file = [AI_dir]
 
     def __init__(self, main_window):
         super().__init__(main_window)
@@ -115,6 +229,39 @@ class AIExtendPlugin(PluginBase):
         self._preview_bar = None
         self._model_combo_updating = False
         self._standalone_window = None
+        self._ai_capturing = False
+        self._pending_ai_prompt = None
+
+    def loadConfig(self):
+        super().loadConfig()
+        if self.main_window and hasattr(self.main_window, 'config'):
+            ai_config = self.main_window.config.get("AI", {})
+            if ai_config:
+                for key in ("stream", "active", "profiles", "load_balance", "prompts"):
+                    if key in ai_config:
+                        self.settings[key] = ai_config[key]
+        self.settings.setdefault("profiles", {"默认配置": {
+            "api_key": "", "model": "", "api_url": "https://api.deepseek.com",
+            "custom_url": "https://api.deepseek.com", "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
+        }})
+        self.settings.setdefault("active", "默认配置")
+        self.settings.setdefault("stream", False)
+        self.settings.setdefault("dialog", "")
+        self.settings.setdefault("load_balance", {"enabled": False, "profiles": {}})
+        self.settings.setdefault("prompts", {
+            "系统提示词": "",
+            "提取内容": "请提取以下内容中的关键信息，按条理清晰的结构输出，不需要额外解释。",
+            "代码": "你是一位经验丰富的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有广泛的知识。请帮助我编写和优化以下代码。\n\n{request}",
+            "翻译": "你是一名翻译，请将以下文本 {request} 翻译成中文，你只需要返回翻译结果，无需额外解释。",
+            "写作": "你是一名作家，请帮助我改进以下文本 {request} 的流畅性和表达，不需要过多的修饰和形容词。"
+        })
+
+    def saveConfig(self):
+        if self.main_window and hasattr(self.main_window, 'config'):
+            for key in ("stream", "active", "profiles", "load_balance", "prompts"):
+                self.main_window.config.set("AI." + key, self.settings.get(key))
+            self.main_window.config.save()
+        return super().saveConfig()
 
     def initialize(self):
         if not super().initialize():
@@ -128,15 +275,646 @@ class AIExtendPlugin(PluginBase):
         return None
 
     def getAction(self):
-        if self._toggle_action is None:
-            self._toggle_action = QAction(self.description, self.main_window)
-            self._toggle_action.triggered.connect(self._toggle_panel)
-        return self._toggle_action
+        menu = QMenu(self.description, self.main_window)
+
+        settings_act = QAction("AI 设置", self.main_window)
+        settings_act.triggered.connect(self._show_settings_dialog)
+        menu.addAction(settings_act)
+
+        panel_act = QAction("面板", self.main_window)
+        panel_act.triggered.connect(self._toggle_panel)
+        menu.addAction(panel_act)
+
+        menu.addSeparator()
+
+        self._rebuild_prompts_menu(menu)
+        menu.aboutToShow.connect(lambda: self._rebuild_prompts_menu(menu))
+
+        return menu
 
     def cleanup(self):
         if not self._initialized:
             return
         self._destroy_dock()
+
+    # ── AI 捕获流程 ──
+
+    def run_ai_prompt(self, name: str):
+        """运行 AI 提示词（由 main.py 委托调用）"""
+        if not name or getattr(self, '_ai_capturing', False):
+            return
+        self._ai_capturing = True
+        GlobalHotkeyListener()._is_pasting = True
+        self._pending_ai_prompt = name
+        QTimer.singleShot(300, self._do_ai_capture)
+
+    def _do_ai_capture(self):
+        copy_selection()
+        QTimer.singleShot(100, self._finish_ai_capture)
+
+    def _finish_ai_capture(self):
+        self._ai_capturing = False
+        GlobalHotkeyListener()._is_pasting = False
+        name = getattr(self, '_pending_ai_prompt', None)
+
+        mime = QApplication.clipboard().mimeData()
+        if mime.hasUrls():
+            for url in mime.urls():
+                path = url.toLocalFile()
+                if not path:
+                    continue
+                if os.path.isfile(path):
+                    messages = getAIClient().build_file_message(path)
+                    if messages:
+                        self._open_ai_dialog(messages, name)
+                    return
+                if os.path.isdir(path):
+                    messages = getAIClient().build_folder_message(path)
+                    if messages:
+                        self._open_ai_dialog(messages, name)
+                    return
+
+        text = QApplication.clipboard().text().strip()
+        if not text:
+            return
+        self._open_ai_dialog([{"role": "user", "content": text}], name)
+
+    def _open_ai_dialog(self, messages, prompt_name):
+        stream = self.settings.get("stream", False)
+        geometry = self.settings.get("dialog", "")
+        def on_geometry_save(geo):
+            self.settings["dialog"] = geo
+            self.saveConfig()
+        dialog = AIDialog(messages, prompt_name, stream=stream,
+                          dialog=geometry, main_window=self._launcher,
+                          on_geometry_save=on_geometry_save)
+        if self._launcher:
+            dialog.setStyleSheet(self._launcher.styleSheet())
+        dialog.show()
+
+    def _rebuild_prompts_menu(self, menu):
+        """动态重建提示词菜单项"""
+        prompts = self.settings.get("prompts", {})
+        names = [n for n in prompts if n != "系统提示词"]
+
+        menu.clear()
+        settings_act = QAction("AI 设置", self.main_window)
+        settings_act.triggered.connect(self._show_settings_dialog)
+        menu.addAction(settings_act)
+
+        panel_act = QAction("面板", self.main_window)
+        panel_act.triggered.connect(self._toggle_panel)
+        menu.addAction(panel_act)
+
+        menu.addSeparator()
+
+        if names:
+            for name in names:
+                act = QAction(name, self.main_window)
+                act.triggered.connect(lambda checked, n=name: self.run_ai_prompt(n))
+                menu.addAction(act)
+        else:
+            empty_act = QAction("没有提示词", self.main_window)
+            empty_act.setEnabled(False)
+            menu.addAction(empty_act)
+
+    # ── AI 设置 ──
+
+    def _show_settings_dialog(self):
+        """打开 AI 设置对话框"""
+        dlg = QDialog(self._launcher)
+        dlg.setWindowTitle("AI " + tr("设置"))
+        dlg.setMinimumSize(500, 500)
+        layout = QVBoxLayout(dlg)
+
+        tab = self._build_settings_tab(dlg)
+        layout.addWidget(tab, 1)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton(tr("确定"))
+        ok_btn.clicked.connect(lambda: self._save_settings(dlg))
+        btn_layout.addWidget(ok_btn)
+        cancel_btn = QPushButton(tr("取消"))
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        dlg.exec()
+
+    def _build_settings_tab(self, parent):
+        """构建 AI 设置界面"""
+        tab = QWidget(parent)
+        layout = QVBoxLayout(tab)
+
+        # 暂存当前配置用于编辑
+        self._edit_profiles = {k: dict(v) for k, v in self.settings.get("profiles", {"默认配置": {}}).items()}
+        self._edit_load_balance = {k: v for k, v in self.settings.get("load_balance", {"enabled": False, "profiles": {}}).items()}
+        self._edit_prompts = dict(self.settings.get("prompts", {}))
+        active = self.settings.get("active", "")
+        if not active and self._edit_profiles:
+            active = list(self._edit_profiles.keys())[0]
+        self._edit_active = active
+
+        # 配置选择区
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel(tr("当前配置")))
+        self._settings_profile_combo = QComboBox()
+        self._settings_profile_combo.setFixedWidth(160)
+        for name in self._edit_profiles:
+            self._settings_profile_combo.addItem(name, name)
+        idx = self._settings_profile_combo.findText(self._edit_active)
+        if idx >= 0:
+            self._settings_profile_combo.setCurrentIndex(idx)
+        self._settings_profile_combo.currentIndexChanged.connect(self._on_settings_profile_changed)
+        profile_row.addWidget(self._settings_profile_combo)
+
+        rename_btn = QPushButton(tr("重命名"))
+        rename_btn.setFixedWidth(70)
+        rename_btn.clicked.connect(lambda: self._settings_rename_profile(parent))
+        profile_row.addWidget(rename_btn)
+
+        new_btn = QPushButton(tr("新建"))
+        new_btn.setFixedWidth(60)
+        new_btn.clicked.connect(lambda: self._settings_new_profile(parent))
+        profile_row.addWidget(new_btn)
+
+        copy_btn = QPushButton(tr("复制"))
+        copy_btn.setFixedWidth(60)
+        copy_btn.clicked.connect(lambda: self._settings_copy_profile(parent))
+        profile_row.addWidget(copy_btn)
+
+        delete_btn = QPushButton(tr("删除"))
+        delete_btn.setFixedWidth(60)
+        delete_btn.clicked.connect(lambda: self._settings_delete_profile(parent))
+        profile_row.addWidget(delete_btn)
+
+        profile_row.addStretch()
+        layout.addLayout(profile_row)
+
+        # API 端点
+        endpoint_layout = QFormLayout()
+        self._settings_endpoint_combo = QComboBox()
+        for name, cls, url in AI_ADAPTER:
+            self._settings_endpoint_combo.addItem(name, url)
+        endpoint_layout.addRow("API " + tr("接口"), self._settings_endpoint_combo)
+
+        self._settings_endpoint_combo.currentTextChanged.connect(self._on_settings_endpoint_changed)
+        self._settings_custom_url_edit = QLineEdit()
+        self._settings_custom_url_edit.setPlaceholderText(tr("输入API地址"))
+        endpoint_layout.addRow(tr("接口地址"), self._settings_custom_url_edit)
+        layout.addLayout(endpoint_layout)
+
+        # API Key
+        key_layout = QHBoxLayout()
+        key_layout.addWidget(QLabel("API Key"))
+        self._settings_api_key_edit = QLineEdit()
+        self._settings_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        key_layout.addWidget(self._settings_api_key_edit)
+        layout.addLayout(key_layout)
+
+        # 模型
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel(tr("模型")))
+        self._settings_model_combo = QComboBox()
+        self._settings_model_combo.setEditable(True)
+        self._settings_model_combo.setMinimumWidth(300)
+        model_layout.addWidget(self._settings_model_combo)
+        self._settings_refresh_btn = QPushButton(tr("刷新"))
+        self._settings_refresh_btn.setFixedWidth(70)
+        self._settings_refresh_btn.clicked.connect(lambda: self._settings_refresh_models(parent))
+        model_layout.addWidget(self._settings_refresh_btn)
+        model_layout.addStretch()
+        layout.addLayout(model_layout)
+
+        # 参数
+        param_row = QHBoxLayout()
+        left = QHBoxLayout()
+        left.addWidget(QLabel(tr("温度")))
+        self._settings_temp_spin = QDoubleSpinBox()
+        self._settings_temp_spin.setRange(0.0, 1.0)
+        self._settings_temp_spin.setSingleStep(0.1)
+        self._settings_temp_spin.setFixedWidth(120)
+        self._settings_temp_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        left.addWidget(self._settings_temp_spin)
+        left.addStretch()
+        param_row.addLayout(left)
+        right = QHBoxLayout()
+        right.addStretch()
+        right.addWidget(QLabel(tr("最大Token")))
+        self._settings_max_tokens_spin = QSpinBox()
+        self._settings_max_tokens_spin.setRange(100, 10000)
+        self._settings_max_tokens_spin.setFixedWidth(120)
+        self._settings_max_tokens_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        right.addWidget(self._settings_max_tokens_spin)
+        param_row.addLayout(right)
+        layout.addLayout(param_row)
+
+        # 流式输出 + 按钮行
+        action_row = QHBoxLayout()
+        self._settings_stream_cb = QCheckBox(tr("流式输出"))
+        self._settings_stream_cb.setChecked(self.settings.get("stream", False))
+        action_row.addWidget(self._settings_stream_cb)
+        action_row.addStretch()
+        balance_btn = QPushButton(tr("负载均衡"))
+        balance_btn.clicked.connect(lambda: self._settings_show_balance(parent))
+        action_row.addWidget(balance_btn)
+        test_btn = QPushButton(tr("测试"))
+        test_btn.clicked.connect(lambda: self._settings_test(parent))
+        action_row.addWidget(test_btn)
+        layout.addLayout(action_row)
+
+        self._settings_prompt_list = QListWidget()
+        self._settings_prompt_list.setMaximumHeight(120)
+        layout.addWidget(self._settings_prompt_list)
+
+        prompt_btn_row = QHBoxLayout()
+        add_prompt_btn = QPushButton(tr("添加"))
+        add_prompt_btn.clicked.connect(self._settings_prompt_add)
+        prompt_btn_row.addWidget(add_prompt_btn)
+        edit_prompt_btn = QPushButton(tr("编辑"))
+        edit_prompt_btn.clicked.connect(self._settings_prompt_edit)
+        prompt_btn_row.addWidget(edit_prompt_btn)
+        delete_prompt_btn = QPushButton(tr("删除"))
+        delete_prompt_btn.clicked.connect(self._settings_prompt_delete)
+        prompt_btn_row.addWidget(delete_prompt_btn)
+        prompt_btn_row.addStretch()
+        layout.addLayout(prompt_btn_row)
+
+        layout.addStretch()
+
+        # 加载当前配置
+        self._settings_load_profile()
+        self._settings_reload_prompt_list()
+
+        return tab
+
+    def _on_settings_profile_changed(self, index):
+        profile_name = self._settings_profile_combo.currentText()
+        if not profile_name:
+            return
+        self._edit_active = profile_name
+        self._settings_load_profile()
+
+    def _on_settings_endpoint_changed(self, text):
+        if text == "自定义":
+            self._settings_custom_url_edit.clear()
+            self._settings_custom_url_edit.setPlaceholderText(tr("输入自定义API地址"))
+        else:
+            for name, cls, url in AI_ADAPTER:
+                if name == text:
+                    self._settings_custom_url_edit.setText(url)
+                    break
+
+    def _settings_load_profile(self):
+        profile = self._edit_profiles.get(self._edit_active, {})
+        self._settings_api_key_edit.setText(profile.get("api_key", ""))
+
+        endpoint_name = profile.get("endpoint", "")
+        idx = self._settings_endpoint_combo.findText(endpoint_name)
+        if idx >= 0:
+            self._settings_endpoint_combo.setCurrentIndex(idx)
+        else:
+            self._settings_endpoint_combo.setCurrentText("自定义")
+
+        if self._settings_endpoint_combo.currentText() == "自定义":
+            self._settings_custom_url_edit.setText(profile.get("custom_url", ""))
+        else:
+            for name, cls, url in AI_ADAPTER:
+                if name == self._settings_endpoint_combo.currentText():
+                    self._settings_custom_url_edit.setText(url)
+                    break
+
+        self._settings_model_combo.clear()
+        model = profile.get("model", "")
+        if model:
+            self._settings_model_combo.addItem(model)
+        self._settings_temp_spin.setValue(profile.get("temperature", 0.7))
+        self._settings_max_tokens_spin.setValue(profile.get("max_tokens", 2000))
+
+    def _settings_save_profile(self):
+        endpoint_name = self._settings_endpoint_combo.currentText()
+        api_url = self._settings_custom_url_edit.text().strip()
+        self._edit_profiles[self._edit_active] = {
+            "api_key": self._settings_api_key_edit.text(),
+            "api_url": api_url,
+            "custom_url": api_url,
+            "model": self._settings_model_combo.currentText(),
+            "temperature": self._settings_temp_spin.value(),
+            "max_tokens": self._settings_max_tokens_spin.value(),
+            "endpoint": endpoint_name,
+        }
+
+    def _settings_rename_profile(self, parent):
+        old_name = self._settings_profile_combo.currentText()
+        if not old_name:
+            return
+        new_name = inputDialog(parent, tr("重命名配置"), tr("新名称"), default=old_name)
+        if new_name and new_name != old_name:
+            self._edit_profiles[new_name] = self._edit_profiles.pop(old_name)
+            self._edit_active = new_name
+            idx = self._settings_profile_combo.findText(old_name)
+            if idx >= 0:
+                self._settings_profile_combo.setItemText(idx, new_name)
+                self._settings_profile_combo.setCurrentIndex(idx)
+
+    def _settings_new_profile(self, parent):
+        name = inputDialog(parent, tr("新建配置"), tr("配置名称"), default="新配置")
+        if name:
+            self._edit_profiles[name] = {
+                "api_key": "", "model": "", "api_url": "https://api.deepseek.com",
+                "custom_url": "https://api.deepseek.com", "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
+            }
+            self._edit_active = name
+            self._settings_profile_combo.addItem(name, name)
+            self._settings_profile_combo.setCurrentIndex(self._settings_profile_combo.count() - 1)
+
+    def _settings_copy_profile(self, parent):
+        current = self._settings_profile_combo.currentText()
+        if not current or current not in self._edit_profiles:
+            return
+        name = inputDialog(parent, tr("复制配置"), tr("新配置名称"), default=current + " - 副本")
+        if name:
+            self._edit_profiles[name] = dict(self._edit_profiles[current])
+            self._edit_active = name
+            self._settings_profile_combo.addItem(name, name)
+            self._settings_profile_combo.setCurrentIndex(self._settings_profile_combo.count() - 1)
+
+    def _settings_delete_profile(self, parent):
+        current = self._settings_profile_combo.currentText()
+        if not current:
+            return
+        if len(self._edit_profiles) <= 1:
+            messageBox(parent, tr("警告"), tr("至少保留一个配置，不能删除"), 1)
+            return
+        if messageBox(parent, tr("确认删除"), f"{tr('确定要删除配置')} \"{current}\" {tr('吗')}？"):
+            self._edit_profiles.pop(current, None)
+            self._settings_profile_combo.removeItem(self._settings_profile_combo.currentIndex())
+            if self._edit_profiles:
+                self._edit_active = list(self._edit_profiles.keys())[0]
+                idx = self._settings_profile_combo.findText(self._edit_active)
+                if idx >= 0:
+                    self._settings_profile_combo.setCurrentIndex(idx)
+
+    def _settings_refresh_models(self, parent):
+        self._settings_save_profile()
+        profile = self._edit_profiles[self._edit_active]
+        api_key = profile.get("api_key", "")
+        api_url = profile.get("api_url", "")
+        endpoint_name = profile.get("endpoint", "")
+        if not api_url:
+            messageBox(parent, tr("警告"), tr("请先设置 API 地址"), 1)
+            return
+        is_ollama = endpoint_name == "Ollama" or "127.0.0.1:11434" in api_url or "localhost:11434" in api_url
+        if not is_ollama and not api_key:
+            messageBox(parent, tr("警告"), tr("请先设置 API Key"), 1)
+            return
+        original_text = self._settings_refresh_btn.text()
+        original_enabled = self._settings_refresh_btn.isEnabled()
+        self._settings_refresh_btn.setText(tr("刷新中..."))
+        self._settings_refresh_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            adapter = get_adapter_endpoint(endpoint_name, self.main_window.config,
+                                           api_key=api_key, api_url=api_url)
+            models = adapter.get_models()
+            current_model = self._settings_model_combo.currentText()
+            self._settings_model_combo.clear()
+            self._settings_model_combo.addItems(models)
+            if models:
+                if current_model in models:
+                    idx = self._settings_model_combo.findText(current_model)
+                    if idx >= 0:
+                        self._settings_model_combo.setCurrentIndex(idx)
+                else:
+                    self._settings_model_combo.setCurrentIndex(0)
+            messageBox(parent, tr("刷新成功"), f"{tr('已获取')} {len(models)} {tr('个模型')}", 1)
+        except Exception as e:
+            messageBox(parent, tr("刷新失败"), f"{tr('获取模型列表失败')}: {str(e)}", 1)
+        finally:
+            self._settings_refresh_btn.setText(original_text)
+            self._settings_refresh_btn.setEnabled(original_enabled)
+            QApplication.restoreOverrideCursor()
+
+    def _settings_show_balance(self, parent):
+        dlg2 = QDialog(parent)
+        dlg2.setWindowTitle(tr("负载均衡配置"))
+        dlg2.setMinimumSize(300, 300)
+        layout2 = QVBoxLayout(dlg2)
+
+        lb_enable_cb = QCheckBox(tr("启用负载均衡"))
+        lb_enable_cb.setChecked(self._edit_load_balance.get("enabled", False))
+        layout2.addWidget(lb_enable_cb)
+
+        layout2.addWidget(QLabel(tr("优先级（0 禁用，1-10 值越小越优先）；权重：同优先级内按比例分配")))
+        existing = self._edit_load_balance.get("profiles", {})
+        rows = []
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        form = QFormLayout(scroll_widget)
+        for name in self._edit_profiles:
+            cfg = existing.get(name, {"priority": 1, "weight": 1})
+            priority_sb = QSpinBox()
+            priority_sb.setRange(0, 10)
+            priority_sb.setSpecialValueText(tr("禁用"))
+            priority_sb.setValue(cfg.get("priority", 1))
+            priority_sb.setMinimumWidth(60)
+            priority_sb.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            weight_sb = QSpinBox()
+            weight_sb.setRange(1, 100)
+            weight_sb.setValue(cfg.get("weight", 1))
+            weight_sb.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            h = QHBoxLayout()
+            h.addWidget(QLabel(tr("优先级")))
+            h.addWidget(priority_sb)
+            h.addSpacing(10)
+            h.addWidget(QLabel(tr("权重")))
+            h.addWidget(weight_sb)
+            h.addStretch()
+            form.addRow(name, h)
+            rows.append((name, priority_sb, weight_sb))
+        scroll.setWidget(scroll_widget)
+        layout2.addWidget(scroll)
+
+        if dialogBox(layout2, dlg2):
+            profiles_dict = {}
+            for name, p_sb, w_sb in rows:
+                profiles_dict[name] = {"priority": p_sb.value(), "weight": w_sb.value()}
+            self._edit_load_balance = {
+                "enabled": lb_enable_cb.isChecked(),
+                "profiles": profiles_dict
+            }
+
+    def _settings_test(self, parent):
+        dlg2 = QDialog(parent)
+        dlg2.setWindowTitle(tr("测试配置连通性"))
+        dlg2.setMinimumWidth(450)
+        layout2 = QVBoxLayout(dlg2)
+
+        items = []
+        for name in self._edit_profiles:
+            cb = QCheckBox(name)
+            cb.setChecked(False)
+            status = QLabel(tr("等待测试"))
+            status.setFixedWidth(200)
+            row = QHBoxLayout()
+            row.addWidget(cb)
+            row.addWidget(status)
+            row.addStretch()
+            layout2.addLayout(row)
+            items.append((name, cb, status))
+
+        def _run_test(selected_only):
+            for pname, cb, status in items:
+                if selected_only and not cb.isChecked():
+                    continue
+                status.setText(tr("测试中..."))
+                status.setStyleSheet("color: orange")
+                QApplication.processEvents()
+                try:
+                    profile = self._edit_profiles.get(pname, {})
+                    api_url = profile.get("api_url", "")
+                    if not api_url:
+                        status.setText("API URL " + tr("未设置"))
+                        status.setStyleSheet("color: red")
+                        continue
+                    is_ollama = "127.0.0.1:11434" in api_url or "localhost:11434" in api_url
+                    if not is_ollama and not profile.get("api_key"):
+                        status.setText("API Key " + tr("未设置"))
+                        status.setStyleSheet("color: red")
+                        continue
+                    endpoint_name = profile.get("endpoint", "")
+                    adapter = get_adapter_endpoint(endpoint_name, self.main_window.config,
+                                                   api_key=profile.get("api_key", ""),
+                                                   api_url=api_url)
+                    test_model = profile.get("model", "")
+                    if not test_model:
+                        status.setText(tr("模型未设置"))
+                        status.setStyleSheet("color: red")
+                        continue
+                    adapter.chat(messages=[{"role": "user", "content": "Hello"}],
+                                 model=test_model, temperature=0.7, max_tokens=10)
+                    status.setText(tr("响应正常"))
+                    status.setStyleSheet("color: green")
+                except Exception as e:
+                    status.setText(f"× {str(e)[:40]}")
+                    status.setStyleSheet("color: red")
+                QApplication.processEvents()
+
+        btn_layout = QHBoxLayout()
+        test_sel_btn = QPushButton(tr("测试已选"))
+        test_sel_btn.clicked.connect(lambda: _run_test(True))
+        btn_layout.addWidget(test_sel_btn)
+        test_all_btn = QPushButton(tr("测试全部"))
+        test_all_btn.clicked.connect(lambda: _run_test(False))
+        btn_layout.addWidget(test_all_btn)
+        btn_layout.addStretch()
+        close_btn = QPushButton(tr("关闭"))
+        close_btn.clicked.connect(dlg2.close)
+        btn_layout.addWidget(close_btn)
+        layout2.addLayout(btn_layout)
+        dlg2.exec()
+
+    def _save_settings(self, dlg):
+        self._settings_save_profile()
+        self.settings["active"] = self._edit_active
+        self.settings["profiles"] = self._edit_profiles
+        self.settings["stream"] = self._settings_stream_cb.isChecked()
+        self.settings["load_balance"] = self._edit_load_balance
+        self.settings["prompts"] = self._edit_prompts
+        self.saveConfig()
+        dlg.accept()
+
+    def _settings_reload_prompt_list(self):
+        """重新加载提示词列表"""
+        self._settings_prompt_list.clear()
+        for name, value in self._edit_prompts.items():
+            builtin = name in ("系统提示词",)
+            display = name + "  (内置)" if builtin else name
+            item = QListWidgetItem(display)
+            item.setData(Qt.ItemDataRole.UserRole, {"name": name, "value": value})
+            self._settings_prompt_list.addItem(item)
+
+    def _settings_prompt_add(self):
+        dlg = QDialog(self._settings_prompt_list)
+        dlg.setWindowTitle(tr("添加提示词"))
+        dlg.setMinimumSize(500, 400)
+        d_layout = QVBoxLayout(dlg)
+        form_layout = QFormLayout()
+        form_layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        name_edit = QLineEdit()
+        form_layout.addRow(tr("提示词名称"), name_edit)
+        value_edit = QTextEdit()
+        form_layout.addRow(tr("提示词内容"), value_edit)
+        d_layout.addLayout(form_layout)
+        if dialogBox(d_layout, dlg):
+            name = name_edit.text().strip()
+            value = value_edit.toPlainText().strip()
+            if not name:
+                messageBox(self._settings_prompt_list, tr("警告"), tr("提示词名称不能为空"), 1)
+                return
+            self._edit_prompts[name] = value
+            self._settings_reload_prompt_list()
+
+    def _settings_prompt_edit(self):
+        current_item = self._settings_prompt_list.currentItem()
+        if not current_item:
+            messageBox(self._settings_prompt_list, tr("警告"), tr("请先选择一个要编辑的项"), 1)
+            return
+        data = current_item.data(Qt.ItemDataRole.UserRole)
+        old_name = data.get("name", "")
+        old_value = data.get("value", "")
+        builtin = old_name in ("系统提示词",)
+
+        dlg = QDialog(self._settings_prompt_list)
+        dlg.setWindowTitle(tr("编辑提示词"))
+        dlg.setMinimumSize(500, 400)
+        d_layout = QVBoxLayout(dlg)
+        form_layout = QFormLayout()
+        form_layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+
+        name_edit = QLineEdit()
+        name_edit.setText(old_name)
+        if builtin:
+            name_edit.setReadOnly(True)
+            name_edit.setStyleSheet("background: #e0e0e0;")
+        form_layout.addRow(tr("提示词名称"), name_edit)
+
+        value_edit = QTextEdit()
+        value_edit.setPlainText(old_value)
+        form_layout.addRow(tr("提示词内容"), value_edit)
+
+        d_layout.addLayout(form_layout)
+        if dialogBox(d_layout, dlg):
+            name = name_edit.text().strip()
+            value = value_edit.toPlainText().strip()
+            if not name:
+                messageBox(self._settings_prompt_list, tr("警告"), tr("提示词名称不能为空"), 1)
+                return
+            if name != old_name and name in self._edit_prompts:
+                messageBox(self._settings_prompt_list, tr("警告"), tr("提示词名称已存在"), 1)
+                return
+            if name != old_name:
+                del self._edit_prompts[old_name]
+            self._edit_prompts[name] = value
+            self._settings_reload_prompt_list()
+
+    def _settings_prompt_delete(self):
+        current_item = self._settings_prompt_list.currentItem()
+        if not current_item:
+            messageBox(self._settings_prompt_list, tr("警告"), tr("请先选择一个要删除的项"), 1)
+            return
+        data = current_item.data(Qt.ItemDataRole.UserRole)
+        name = data.get("name", "") if isinstance(data, dict) else current_item.text()
+        if name in ("系统提示词",):
+            messageBox(self._settings_prompt_list, tr("禁止删除"), tr("内置提示词不可删除"), 1)
+            return
+        if messageBox(self._settings_prompt_list, tr("确认删除"), f"{tr('确定要删除')} '{current_item.text()}' {tr('吗')}？"):
+            self._edit_prompts.pop(name, None)
+            self._settings_reload_prompt_list()
+
+    # ── 提示词管理 ──
 
     def _create_ui(self, editor):
         if self.dock is not None:
@@ -277,8 +1055,7 @@ class AIExtendPlugin(PluginBase):
         layout.addWidget(top_frame)
 
     def _build_prompt_bar(self, layout):
-        config = self.main_window.config if self.main_window else None
-        prompts = config.get("AI.prompts", {}) if config else {}
+        prompts = self.settings.get("prompts", {})
         visible_prompts = [n for n in prompts if n != "系统提示词"]
 
         if visible_prompts:
@@ -366,20 +1143,15 @@ class AIExtendPlugin(PluginBase):
     # ── 对话 / 配置 切换 ──────────────────────────────
 
     def _get_available_profiles(self):
-        config = self.main_window.config if self.main_window else None
-        if not config:
-            return ["默认配置"]
-        profiles = config.get("AI.profiles", {})
+        profiles = self.settings.get("profiles", {})
         return list(profiles.keys()) if profiles else ["默认配置"]
 
     def _on_profile_changed(self, index):
         name = self._profile_combo.currentText()
         if not name:
             return
-        config = self.main_window.config
-        if config:
-            config.set("AI.active", name)
-            config.save()
+        self.settings["active"] = name
+        self.saveConfig()
         self._update_model_combo()
         self._reload_conversation_list()
 
@@ -577,38 +1349,30 @@ class AIExtendPlugin(PluginBase):
 
     def _update_model_combo(self):
         self._model_combo_updating = True
-        config = self.main_window.config if self.main_window else None
-        if config:
-            profiles = config.config.get("AI", {}).get("profiles", {})
-            name = self._get_profile_name()
-            profile = profiles.get(name, {})
-            model = profile.get("model", "") or ""
-            if model:
-                self._model_combo.setCurrentText(model)
-            else:
-                self._model_combo.setCurrentText("")
-                if self._model_combo.lineEdit():
-                    self._model_combo.lineEdit().setPlaceholderText("输入模型名...")
+        profiles = self.settings.get("profiles", {})
+        name = self._get_profile_name()
+        profile = profiles.get(name, {})
+        model = profile.get("model", "") or ""
+        if model:
+            self._model_combo.setCurrentText(model)
+        else:
+            self._model_combo.setCurrentText("")
+            if self._model_combo.lineEdit():
+                self._model_combo.lineEdit().setPlaceholderText("输入模型名...")
         self._model_combo_updating = False
 
     def _on_model_changed(self, text):
         if self._model_combo_updating:
             return
-        config = self.main_window.config if self.main_window else None
-        if not config:
-            return
-        profiles = config.config.get("AI", {}).get("profiles", {})
+        profiles = self.settings.get("profiles", {})
         name = self._get_profile_name()
         if name in profiles:
             profiles[name]["model"] = text
-            config.save()
+            self.saveConfig()
 
     def _refresh_models(self):
-        config = self.main_window.config if self.main_window else None
-        if not config:
-            return
         try:
-            profiles = config.config.get("AI", {}).get("profiles", {})
+            profiles = self.settings.get("profiles", {})
             name = self._get_profile_name()
             profile = profiles.get(name, {})
             if not profile.get("api_key") or not profile.get("api_url"):
@@ -619,7 +1383,7 @@ class AIExtendPlugin(PluginBase):
                     break
             else:
                 endpoint_name = "自定义"
-            adapter = get_adapter_endpoint(endpoint_name, config,
+            adapter = get_adapter_endpoint(endpoint_name, self.main_window.config,
                                            api_key=profile.get("api_key", ""),
                                            api_url=profile.get("api_url", ""))
             models = adapter.get_models()
@@ -665,7 +1429,7 @@ class AIExtendPlugin(PluginBase):
         self._panel = None
 
     def _refresh_lb_ui(self):
-        lb = self.main_window.config.get("AI.load_balance", {}).get("enabled", False) if self.main_window else False
+        lb = self.settings.get("load_balance", {}).get("enabled", False)
         self._profile_combo.setEnabled(not lb)
         if lb:
             if not hasattr(self, '_lb_label') or not self._lb_label:
@@ -719,8 +1483,7 @@ class AIExtendPlugin(PluginBase):
             logger.exception("保存 AI 历史失败")
 
     def _get_profile_name(self):
-        config = self.main_window.config if self.main_window else None
-        active = config.get("AI.active", "默认配置") if config else "默认配置"
+        active = self.settings.get("active", "默认配置")
         return active or "默认配置"
 
     def _get_current_conv(self):
@@ -1063,10 +1826,7 @@ class AIExtendPlugin(PluginBase):
                 self._message_scroll.verticalScrollBar().maximum()))
 
     def _on_prompt_clicked(self, prompt_name):
-        config = self.main_window.config if self.main_window else None
-        if not config:
-            return
-        prompts = config.get("AI.prompts", {})
+        prompts = self.settings.get("prompts", {})
         if isinstance(prompts, dict):
             value = prompts.get(prompt_name, "")
             if "{request}" in value:
@@ -1126,14 +1886,11 @@ class AIExtendPlugin(PluginBase):
 
         full_messages = self._get_messages()
         resolve_image_urls(full_messages)
-        client = getAIClient(self.main_window.config if self.main_window else None)
 
-        use_stream = self.main_window.config.get("AI.stream", True) if self.main_window else True
+        use_stream = self.settings.get("stream", False)
+        self.stream_thread = AIThread(full_messages, stream=use_stream)
         if use_stream:
-            self.stream_thread = AIStreamThread(full_messages, client)
             self.stream_thread.chunk_received.connect(self._on_chunk_received)
-        else:
-            self.stream_thread = AINonStreamThread(full_messages, client)
         self.stream_thread.finished.connect(self._on_stream_finished)
         self.stream_thread.error.connect(self._on_stream_error)
         self.stream_thread.start()
@@ -1175,7 +1932,7 @@ class AIExtendPlugin(PluginBase):
             self._standalone_window = None
         if self.dock:
             if self.stream_thread and self.stream_thread.isRunning():
-                self.stream_thread.stop()
+                self.stream_thread.requestInterruption()
                 self.stream_thread.wait(2000)
             self.main_window.removeDockWidget(self.dock)
             self.dock.deleteLater()
