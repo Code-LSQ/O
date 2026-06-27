@@ -94,6 +94,7 @@ class AIViewPlugin(PluginBase):
 
     def __init__(self, main_window):
         super().__init__(main_window)
+        self._launcher = main_window
         self.dock = None
         self._toggle_action = None
         self._panel = None
@@ -119,8 +120,12 @@ class AIViewPlugin(PluginBase):
         if not super().initialize():
             return
         self._load_history()
-        self._create_ui()
-        self.dock.setStyleSheet(self.main_window.styleSheet())
+        self._ensure_content()
+
+    def _get_editor_window(self):
+        if hasattr(self._launcher, '_editor_window') and self._launcher._editor_window:
+            return self._launcher._editor_window
+        return None
 
     def getAction(self):
         if self._toggle_action is None:
@@ -133,11 +138,11 @@ class AIViewPlugin(PluginBase):
             return
         self._destroy_dock()
 
-    def _create_ui(self):
+    def _create_ui(self, editor):
         if self.dock is not None:
             return
 
-        self.dock = QDockWidget("AI助手", self.main_window)
+        self.dock = QDockWidget("AI助手", editor)
         self.dock.setObjectName("AIViewDock")
         self.dock.setMaximumWidth(600)
         self.dock.setFeatures(
@@ -151,9 +156,20 @@ class AIViewPlugin(PluginBase):
         self.dock.setWidget(self._panel)
         self.dock.visibilityChanged.connect(self._on_visibility_changed)
 
-        self.main_window.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
+        editor.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        self.dock.setStyleSheet(editor.styleSheet())
         self._reload_conversation_list()
         self.dock.hide()
+
+    def _ensure_dock_in_editor(self):
+        editor = self._get_editor_window()
+        if not editor:
+            return
+        if self.dock is None:
+            self._create_ui(editor)
+        elif self.dock.parent() is not editor:
+            editor.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+            self.dock.setStyleSheet(editor.styleSheet())
 
     def _ensure_content(self):
         if self._panel is not None:
@@ -642,6 +658,12 @@ class AIViewPlugin(PluginBase):
     def _on_visibility_changed(self, visible):
         if visible:
             self._refresh_lb_ui()
+        else:
+            self._destroy_dock()
+
+    def _on_standalone_destroyed(self):
+        self._standalone_window = None
+        self._panel = None
 
     def _refresh_lb_ui(self):
         lb = self.main_window.config.get("AI.load_balance", {}).get("enabled", False) if self.main_window else False
@@ -749,22 +771,27 @@ class AIViewPlugin(PluginBase):
 
     def _toggle_panel(self):
         self.initialize()
-        main_visible = self.main_window.isVisible() and not (self.main_window.windowState() & Qt.WindowState.WindowMinimized)
-        if not main_visible:
-            self._toggle_standalone()
-            return
-
-        if self._standalone_window:
-            self._move_panel_to_dock()
-        if self.dock:
-            if self.dock.widget() is not self._panel:
+        editor = self._get_editor_window()
+        if editor:
+            if self.dock and self.dock.isVisible():
+                self._destroy_dock()
+                return
+            self._ensure_dock_in_editor()
+            if self._standalone_window and self._standalone_window.isVisible():
+                self._move_panel_to_dock()
+            if self.dock:
                 self.dock.setWidget(self._panel)
-            self.dock.setVisible(not self.dock.isVisible())
+                self.dock.show()
+        else:
+            if self._standalone_window and self._standalone_window.isVisible():
+                self._standalone_window.close()
+                return
+            self._toggle_standalone()
 
     def _toggle_standalone(self):
         self.initialize()
         if self._standalone_window and self._standalone_window.isVisible():
-            self._move_panel_to_dock()
+            self._standalone_window.close()
             return
 
         if self._standalone_window:
@@ -778,8 +805,9 @@ class AIViewPlugin(PluginBase):
             self.dock.setWidget(QWidget())
 
         self._standalone_window = QFrame(None, Qt.Window | Qt.WindowStaysOnTopHint)
+        self._standalone_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self._standalone_window.destroyed.connect(self._on_standalone_destroyed)
         self._standalone_window.setStyleSheet(self.main_window.styleSheet())
-        self._standalone_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
         layout = QVBoxLayout(self._standalone_window)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._panel)

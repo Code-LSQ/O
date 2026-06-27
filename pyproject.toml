@@ -5,7 +5,7 @@ description = "o"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "Markdown==3.10",
+    "Markdown==3.9",
     "requests==2.34.0",
     "psutil==7.2.0",
     "pynput==1.8.2",
