@@ -671,3 +671,18 @@ QPushButton#settings_btn {
 QPushButton#settings_btn:hover {
     background: rgba(0, 0, 0, 0.06);
 }
+
+QMenu#tray {
+    background: #ffffff;
+    border: 1px solid #d4d4d4;
+}
+
+QMenu#tray::item {
+    padding: 4px 16px;
+    background: transparent;
+}
+
+QMenu#tray::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #ececec, stop:1 #e0e0e0);
+}

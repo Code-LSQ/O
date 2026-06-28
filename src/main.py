@@ -71,22 +71,10 @@ class SystemTray:
         self.tray_icon = QSystemTrayIcon(icon, self.parent)
         self.tray_icon.setToolTip(f"{APP_NAME}")
         
-        self.tray_menu = QMenu()
+        self.tray_menu = QMenu(self.parent)
+        self.tray_menu.setObjectName("tray")
         self.tray_menu.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.tray_menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.tray_menu.setStyleSheet("""
-            QMenu {
-                background: #ffffff;
-                border: 1px solid #c0c0c0;
-            }
-            QMenu::item {
-                padding: 4px 16px;
-                background: transparent;
-            }
-            QMenu::item:selected {
-                background: #e0e0e0;
-            }
-        """)
         self.tray_menu.setFixedWidth(80)
         
         show_action = self.tray_menu.addAction(tr("主窗口"))
@@ -327,7 +315,7 @@ TYPES = {
 }
 
 
-class DraggableToolButton(QToolButton):
+class DragToolButton(QToolButton):
     """支持拖拽排序的工具按钮"""
     
     drag_started = Signal(QWidget, QPoint)  # 拖拽开始信号，传递按钮和起始位置
@@ -629,7 +617,7 @@ def argsPlaceholder(args: str) -> str:
 
 def _get_groups(config) -> list:
     tools = config.get("Launch.tools", {})
-    return list(tools.keys()) if tools else ["默认"]
+    return list(tools.keys()) if tools else []
 
 
 def _get_group_tools(config, group: str) -> list:
@@ -641,33 +629,14 @@ class MainWindow(WindowMouse, QMainWindow):
     def __init__(self, app: QApplication=None, file_path=None):
         super().__init__()
 
-        self.setStyleSheet("""
-            QToolTip {
-                background-color: #f0f0f0;
-                color: #333333;
-                border: none;
-                padding: 2px 4px;
-                font-size: 14px;
-            }
-            QMenu {
-                font-size: 16px;
-                padding: 2px;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #cccccc;
-                margin: 2px 4px;
-            }
-        """)
-
         self.app = app
         self._editor_window = None
         self.config = getConfig()
+        self.setStatusBar(None)
         self.system_tray = SystemTray(self, self.app)
         Translator().setLanguage(self.config.get("language", "简体中文"))
-        self._current_group = getConfig().get("Launch.active_group", "默认")
+        self._current_group = getConfig().get("Launch.active_group", "")
         self._fallback_size = (600, 400)
-        self._first_show = True
         self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
         self.setAcceptDrops(True)
@@ -1003,8 +972,6 @@ class MainWindow(WindowMouse, QMainWindow):
                 messageBox(self, "警告", "分组名称已存在", 1)
                 return
             tools = getConfig().get("Launch.tools", {})
-            if not tools:
-                tools["默认"] = []
             tools[name.strip()] = []
             getConfig().set("Launch.tools", tools)
             getConfig().save()
@@ -1033,11 +1000,6 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _delete_group(self, group: str):
         """删除分组"""
-        groups = _get_groups(getConfig())
-        if len(groups) <= 1:
-            messageBox(self, "警告", "至少保留一个分组", 1)
-            return
-        
         if messageBox(self, "确认删除", f"确定要删除分组 \"{group}\" 吗？\n该分组下的启动项将被删除。"):
             tools = getConfig().get("Launch.tools", {})
             del tools[group]
@@ -1045,7 +1007,7 @@ class MainWindow(WindowMouse, QMainWindow):
             
             if self._current_group == group:
                 groups = _get_groups(getConfig())
-                self._current_group = groups[0] if groups else "默认"
+                self._current_group = groups[0] if groups else ""
                 getConfig().set("Launch.active_group", self._current_group)
             
             getConfig().save()
@@ -1180,7 +1142,7 @@ class MainWindow(WindowMouse, QMainWindow):
             btn.setFixedSize(item_width, item_height)
             self.tools_layout.addWidget(btn, i // cols, i % cols)
 
-    def _create_tool_button(self, tool: dict, index: int) -> DraggableToolButton:
+    def _create_tool_button(self, tool: dict, index: int) -> DragToolButton:
         """创建工具按钮"""
         name = tool.get("name", "未命名")
         tool_type = tool.get("type", "文件")
@@ -1188,7 +1150,7 @@ class MainWindow(WindowMouse, QMainWindow):
         path = tool.get("path", "") or tool.get("url", "")
         note = tool.get("note", "")
         
-        btn = DraggableToolButton()
+        btn = DragToolButton()
         btn.setObjectName("tool_btn")
         
         # 设置提示
@@ -1512,6 +1474,17 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def runItem(self, tool: dict):
         """启动工具"""
+        args_raw = tool.get("args", "")
+
+        if "{Select}" in args_raw and not GlobalHotkeyListener._placeholders.get("Select"):
+            self._delayed_tool = tool
+            self._capture_placeholders()
+            return
+
+        if "{Clipboard}" in args_raw and not GlobalHotkeyListener._placeholders.get("Clipboard"):
+            clip = QApplication.clipboard()
+            GlobalHotkeyListener._placeholders["Clipboard"] = clip.text() or ""
+
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
         cwd = tool.get("cwd", "")
@@ -1853,21 +1826,13 @@ class MainWindow(WindowMouse, QMainWindow):
         super().showEvent(event)
         self.refreshTool()
     
-    def show(self):
-        if self._first_show:
-            self._first_show = False
-        else:
-            if getConfig().get("Launch.capture", True):
-                self._capture_placeholders()
-        super().show()
-    
     def _capture_placeholders(self):
         """捕获当前剪贴板和选中文本到 GlobalHotkeyListener._placeholders"""
         clip = QApplication.clipboard()
         GlobalHotkeyListener._placeholders["Clipboard"] = clip.text() or ""
         self._pending_clipboard = GlobalHotkeyListener._placeholders["Clipboard"]
         copy_selection()
-        QTimer.singleShot(50, self._finish_capture_placeholders)
+        QTimer.singleShot(300, self._finish_capture_placeholders)
     
     def _finish_capture_placeholders(self):
         clip = QApplication.clipboard()

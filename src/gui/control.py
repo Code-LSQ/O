@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy
 from PySide6.QtGui import QKeySequence, QAction, QIcon
 from PySide6.QtCore import Qt
 
-from src.util import tr, ENCODING_MAP, icon_dir, messageBox
+from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger
 from src.plugin import getPluginManager, pluginActionMenu
 from src.config import DEFAULT_CONFIG
 
@@ -314,11 +314,12 @@ class PluginControl:
         """重新加载所有插件"""
         self.plugin_manager.initConfig(self.main.config)
         self.refresh_plugin_menu()
-        self.main.statusBar().showMessage(tr("插件已重新加载"), 2000)
+        logger.info(tr("插件已重新加载"))
 
     def show_plugin_manager(self):
         """显示插件管理对话框"""
         dialog = QDialog(self.main)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.setWindowTitle(tr("插件管理"))
         dialog.setMinimumWidth(450)
 
@@ -383,12 +384,13 @@ class PluginControl:
     def _getPluginItem(self, plugin_name: str) -> str:
         """获取插件列表项的显示文本"""
         is_enabled = self.plugin_manager.isPluginEnabled(plugin_name)
+        status = tr('启用') if is_enabled else tr('禁用')
         plugin = self.plugin_manager.plugins.get(plugin_name)
         if plugin:
-            return f"{plugin.description} ({tr('启用') if is_enabled else tr('禁用')})"
+            return f"{plugin.description} ({status})"
         cls = self.plugin_manager.getPluginClass(plugin_name)
         name = getattr(cls, 'description', plugin_name) if cls else plugin_name
-        return f"{name} ({tr('未加载')})"
+        return f"{name} ({status})"
 
     def toggle_plugin(self, plugins: list, plugin_list: QListWidget, enable: bool):
         """启用或禁用插件"""
@@ -400,10 +402,10 @@ class PluginControl:
 
         if enable:
             self.plugin_manager.enablePlugin(plugin_name)
-            self.main.statusBar().showMessage(plugin_name + " " + tr("插件已启用"), 2000)
+            logger.info(plugin_name + " " + tr("插件已启用"))
         else:
             self.plugin_manager.disablePlugin(plugin_name)
-            self.main.statusBar().showMessage(plugin_name + " " + tr("插件已禁用"), 2000)
+            logger.info(plugin_name + " " + tr("插件已禁用"))
 
         self.save_plugin_config()
         self.refresh_plugin_menu()

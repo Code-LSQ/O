@@ -19,10 +19,14 @@ from src.file import FileSelect
 
 _MAX_SEARCH_FILE_SIZE = 10 * 1024 * 1024
 
+cache_file = data_dir / "MD5.json"
+copy_file = data_dir / "copy.txt"
 
 class ToolBox(PluginBase):
+
     version = "1.0.0"
     description = "工具箱"
+    file = [cache_file, copy_file]
 
     def __init__(self, main_window):
         super().__init__(main_window)
@@ -103,27 +107,27 @@ class ToolBox(PluginBase):
         self.initialize()
         if self._scroll_timer.enabled:
             self._scroll_timer.stop()
-            self._status_msg("自动滑动已停止")
+            logger.info("自动滑动已停止")
         else:
             speed = self.settings.get("scroll.speed", 50)
             self._scroll_timer.start(speed)
-            self._status_msg(f"自动滑动已启动 (速度: {speed})")
+            logger.info(f"自动滑动已启动 (速度: {speed})")
 
     def _toggle_copy(self):
         self.initialize()
         if self._copy_mgr.enabled:
             self._copy_mgr.set_enabled(False)
-            self._status_msg("自动复制已停止")
+            logger.info("自动复制已停止")
         else:
             self._copy_mgr.target_file = self.settings.get("copy.target_file", "data/copy.txt")
             self._copy_mgr.set_enabled(True)
-            self._status_msg("自动复制已启动")
+            logger.info("自动复制已启动")
 
     def _toggle_search(self):
         self.initialize()
         if self._search_mgr.enabled:
             self._search_mgr.set_enabled(False)
-            self._status_msg("自动搜索已停止")
+            logger.info("自动搜索已停止")
         else:
             self._search_mgr.search_paths = self.settings.get("search.paths", [])
             self._search_mgr.case_sensitive = self.settings.get("search.case_sensitive", False)
@@ -131,31 +135,31 @@ class ToolBox(PluginBase):
             self._search_mgr.close_delay = self.settings.get("search.close_delay", 3)
             self._search_mgr.set_enabled(True)
             if not self._search_mgr.search_paths:
-                self._status_msg("自动搜索已启动（未设置搜索路径）")
+                logger.info("自动搜索已启动（未设置搜索路径）")
             else:
-                self._status_msg("自动搜索已启动")
+                logger.info("自动搜索已启动")
 
     def _toggle_enter(self):
         self.initialize()
         if self._enter_mgr.enabled:
             self._enter_mgr.set_enabled(False)
-            self._status_msg("自动回车已停止")
+            logger.info("自动回车已停止")
         else:
             self._enter_mgr.interval = self.settings.get("enter.interval", 3)
             self._enter_mgr._digit_control = self.settings.get("enter.digit_control", True)
             self._enter_mgr.set_enabled(True)
-            self._status_msg(f"自动回车已启动（间隔: {self.settings.get('enter.interval', 3)}秒）")
+            logger.info(f"自动回车已启动（间隔: {self.settings.get('enter.interval', 3)}秒）")
 
     def _toggle_click(self):
         self.initialize()
         if self._click_mgr.enabled:
             self._click_mgr.set_enabled(False)
-            self._status_msg("自动点击已停止")
+            logger.info("自动点击已停止")
         else:
             self._click_mgr.interval = self.settings.get("click.interval", 3)
             self._click_mgr._digit_control = True
             self._click_mgr.set_enabled(True)
-            self._status_msg(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
+            logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
 
     def _batch_rename(self):
         dialog = BatchRenameDialog(self.main_window)
@@ -183,9 +187,9 @@ class ToolBox(PluginBase):
         self.settings["duplicate.paths"] = paths
         self.settings["duplicate.exclude"] = rules
         self.saveConfig()
-        self._status_msg("正在扫描重复文件...")
+        logger.info("正在扫描重复文件...")
         finder = DuplicateFinder(files, folder_path=paths[0] if paths else None)
-        finder.progress.connect(lambda c, t: self._status_msg(f"正在扫描: {c}/{t}"))
+        finder.progress.connect(lambda c, t: logger.info(f"正在扫描: {c}/{t}"))
         finder.finished.connect(lambda dups, g=gen: self._on_dup_finished(editor, dups, g))
         finder.error.connect(lambda err: messageBox(editor, "错误", f"扫描失败: {err}", 1))
         finder.start()
@@ -194,7 +198,7 @@ class ToolBox(PluginBase):
     def _on_dup_finished(self, editor, duplicates: dict, gen: int = 0):
         if gen != self._dup_finder_gen:
             return
-        self._status_msg("扫描完成")
+        logger.info("扫描完成")
         if not duplicates:
             messageBox(editor, "查找结果", "未找到重复文件", 1)
             return
@@ -247,14 +251,6 @@ class ToolBox(PluginBase):
         if hasattr(mw, '_open_editor'):
             return mw._open_editor()
         return None
-
-    def _status_msg(self, msg: str, timeout: int = 2000):
-        sb = getattr(self.main_window, 'statusBar', None)
-        if sb:
-            bar = sb()
-            if bar:
-                bar.showMessage(msg, timeout)
-
 
 class FileSearcher:
     def __init__(self, search_text: str, case_sensitive: bool = False, regex: bool = False):
@@ -673,9 +669,6 @@ class BatchRenameDialog(QDialog):
         self.file_count_label.setText("文件数: 0")
         self.update_list()
         self.execute_btn.setEnabled(False)
-
-
-cache_file = data_dir / "MD5.json"
 
 
 class DuplicateFinder(QThread):

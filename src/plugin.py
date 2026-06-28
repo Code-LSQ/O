@@ -18,6 +18,9 @@ from abc import ABC
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+
 from src.util import plugin_dir, logger, Singleton
 
 
@@ -63,6 +66,7 @@ class PluginBase(ABC):
         self.enabled = False
         self.settings = {}
         self._initialized = False
+        self._cleanup_hooks: list = []
 
     def getAction(self):
         """获取插件动作菜单，返回 QMenu、QAction 或 None"""
@@ -82,8 +86,13 @@ class PluginBase(ABC):
         """清理插件资源。子类重写时开头守卫:
             if not self._initialized:
                 return
-        """
-        pass
+        基类会自动执行注册的清理钩子。"""
+        for fn in self._cleanup_hooks:
+            try:
+                fn()
+            except Exception:
+                pass
+        self._cleanup_hooks.clear()
 
     def loadConfig(self):
         """加载插件配置。子类覆盖时开头必须调 super().loadConfig()，
@@ -100,12 +109,19 @@ class PluginBase(ABC):
         if self.main_window and hasattr(self.main_window, 'config'):
             plugin_config = self.main_window.config.get("Plugin", {})
             existing = plugin_config.get(self.name, {})
+            enabled = existing.get("enabled", True)
             existing.update(self.settings)
+            existing["enabled"] = enabled
             plugin_config[self.name] = existing
-            self.main_window.config.set("Plugin", plugin_config)
             self.main_window.config.save()
         return self.settings
     
+    def getSelect(self, callback):
+        """异步获取当前选中文本，完成后回调 callback(text)"""
+        from src.core.input import copy_selection
+        copy_selection()
+        QTimer.singleShot(300, lambda: callback(QApplication.clipboard().text() or ""))
+
     def onFileOpen(self, file_path: str):
         """文件打开时的回调"""
         pass
@@ -310,15 +326,18 @@ class PluginManager(Singleton):
     
     def saveConfig(self, config):
         """将当前插件启用状态和 settings 写回 config["Plugin"]"""
-        plugin_data = {}
+        plugin_config = config.get("Plugin")
+        if plugin_config is None:
+            plugin_config = {}
+            config.set("Plugin", plugin_config)
         for plugin_name in self._scan_cache:
             is_enabled = self.enabled_plugins.get(plugin_name, False)
-            entry = {"enabled": is_enabled}
+            if plugin_name not in plugin_config:
+                plugin_config[plugin_name] = {}
             plugin = self.plugins.get(plugin_name)
             if plugin and plugin.settings:
-                entry.update(plugin.settings)
-            plugin_data[plugin_name] = entry
-        config.set("Plugin", plugin_data)
+                plugin_config[plugin_name].update(plugin.settings)
+            plugin_config[plugin_name]["enabled"] = is_enabled
         config.save()
     
     def deletePlugin(self, plugin_name: str) -> list:

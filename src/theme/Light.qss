@@ -334,3 +334,31 @@ QPushButton#settings_btn {
 QPushButton#settings_btn:hover {
     background: rgba(0, 0, 0, 0.1);
 }
+
+QMenu#tray {
+    background: #ffffff;
+    border: 1px solid #c0c0c0;
+}
+
+QMenu#tray::item {
+    padding: 4px 16px;
+    background: transparent;
+}
+
+QMenu#tray::item:selected {
+    background: #e0e0e0;
+}
+
+QToolTip {
+    background-color: #f0f0f0;
+    color: #333333;
+    border: none;
+    padding: 2px 4px;
+    font-size: 14px;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #cccccc;
+    margin: 2px 4px;
+}

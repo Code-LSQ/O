@@ -1,203 +1,18 @@
 import os
 import json
-import uuid
-from datetime import datetime
 
-import markdown
-from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QTextBrowser, QPushButton, QTextEdit, QFrame, QComboBox, QLabel, QApplication, QFileDialog, QToolTip, QLineEdit, QDialog, QListWidget, QListWidgetItem, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QAbstractSpinBox, QMenu
+from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QTextBrowser, QPushButton, QTextEdit, QFrame, QComboBox, QLabel, QApplication, QFileDialog, QToolTip, QLineEdit, QDialog, QListWidget, QListWidgetItem, QFormLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QAbstractSpinBox, QMenu, QProgressBar
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QPixmap, QCursor, QTextCursor
 from PySide6.QtCore import Qt, Signal, QThread, QTimer, QByteArray
 
 from src.plugin import PluginBase
-from src.util import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp
-from src.core.input import GlobalHotkeyListener, copy_selection
+from src.util import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp, FileDrop, imageBase64
+
 from src.core.AI import AI_ADAPTER, getAIClient, resolve_image_urls, get_adapter_endpoint
 
 AI_dir = data_dir / "AI"
+AI_dir.mkdir(parents=True, exist_ok=True)
 history_file = AI_dir / "ai.json"
-
-class AutoHeightTextBrowser(QTextBrowser):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.document().contentsChanged.connect(self._adjust_height)
-
-    def _adjust_height(self):
-        w = self.viewport().width()
-        if w <= 0:
-            return
-        self.document().setTextWidth(w)
-        h = int(self.document().size().height()) + 5
-        if self.height() != h:
-            self.setFixedHeight(h)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._adjust_height()
-
-    def wheelEvent(self, event):
-        event.ignore()
-
-class AIThread(QThread):
-    """AI工作线程（支持流式和非流式）"""
-    chunk_received = Signal(str)
-    finished = Signal(str)
-    error = Signal(str)
-
-    _alive: set = set()
-
-    def __init__(self, messages, prompt_name=None, stream=True):
-        super().__init__()
-        self.messages = messages
-        self.prompt_name = prompt_name
-        self.stream = stream
-        AIThread._alive.add(self)
-        self.finished.connect(self._cleanup)
-        self.error.connect(self._cleanup)
-
-    def _cleanup(self):
-        AIThread._alive.discard(self)
-
-    def run(self):
-        try:
-            client = getAIClient()
-            if self.stream:
-                full_response = []
-                def on_chunk(chunk):
-                    if self.isInterruptionRequested():
-                        return
-                    full_response.append(chunk)
-                    self.chunk_received.emit(chunk)
-                client.stream_chat(
-                    messages=self.messages,
-                    callback=on_chunk,
-                    prompt_name=self.prompt_name
-                )
-                if not self.isInterruptionRequested():
-                    self.finished.emit(''.join(full_response))
-            else:
-                text, _, _ = client.chat(messages=self.messages, prompt_name=self.prompt_name)
-                if not self.isInterruptionRequested():
-                    self.finished.emit(text)
-        except Exception as e:
-            if not self.isInterruptionRequested():
-                self.error.emit(str(e))
-
-
-class AIDialog(QDialog):
-    """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
-
-    def __init__(self, messages, prompt_name, stream=True, dialog="", main_window=None, on_geometry_save=None):
-        super().__init__()
-        self._main_window = main_window
-        self._on_geometry_save = on_geometry_save
-        self.setWindowTitle("AI " + tr("回复"))
-        self.setMinimumSize(300, 200)
-        self.resize(420, 280)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-
-        if dialog:
-            self.restoreGeometry(QByteArray.fromBase64(dialog.encode()))
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-
-        self.text_edit = QTextEdit()
-        self.text_edit.setReadOnly(False)
-        self.text_edit.setPlaceholderText(tr("连接中..."))
-        layout.addWidget(self.text_edit)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.setContentsMargins(0, 0, 0, 0)
-
-        copy_btn = QPushButton(tr("复制"))
-        copy_btn.clicked.connect(self._copy)
-        btn_layout.addWidget(copy_btn)
-
-        self.paste_btn = QPushButton(tr("粘贴"))
-        self.paste_btn.setEnabled(False)
-        self.paste_btn.clicked.connect(self._paste)
-        btn_layout.addWidget(self.paste_btn)
-
-        self.apply_btn = QPushButton(tr("编辑器"))
-        self.apply_btn.setEnabled(False)
-        self.apply_btn.clicked.connect(self._apply)
-        btn_layout.addWidget(self.apply_btn)
-
-        btn_layout.addStretch()
-
-        close_btn = QPushButton(tr("关闭"))
-        close_btn.clicked.connect(self.close)
-        btn_layout.addWidget(close_btn)
-
-        layout.addLayout(btn_layout)
-
-        self.worker = AIThread(messages, prompt_name, stream=stream)
-        if stream:
-            self.worker.chunk_received.connect(self._on_chunk)
-        self.worker.finished.connect(self._on_finished)
-        self.worker.error.connect(self._on_error)
-        self.worker.start()
-
-    def closeEvent(self, event):
-        if self.worker.isRunning():
-            self.worker.requestInterruption()
-            self.worker.wait(3000)
-        if self._on_geometry_save:
-            self._on_geometry_save(self.saveGeometry().toBase64().data().decode())
-        super().closeEvent(event)
-
-    def _on_chunk(self, chunk):
-        self.text_edit.setPlaceholderText("")
-        cursor = self.text_edit.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(chunk)
-        self.text_edit.setTextCursor(cursor)
-
-    def _on_finished(self, response):
-        self.text_edit.setPlaceholderText("")
-        self.text_edit.setPlainText(response)
-        self.apply_btn.setEnabled(True)
-        self.paste_btn.setEnabled(True)
-
-    def _on_error(self, error):
-        self.text_edit.setPlaceholderText("")
-        self.text_edit.setPlainText(tr("请求失败") + f": {error}")
-        self.apply_btn.setEnabled(False)
-        self.paste_btn.setEnabled(False)
-
-    def _copy(self):
-        text = self.text_edit.toPlainText()
-        if text:
-            QApplication.clipboard().setText(text)
-        self.close()
-
-    def _paste(self):
-        text = self.text_edit.toPlainText()
-        if not text:
-            return
-        if self._main_window:
-            editor = self._main_window.get_current_editor()
-            if editor:
-                editor.text_edit.textCursor().insertText(text)
-        self.close()
-
-    def _apply(self):
-        text = self.text_edit.toPlainText()
-        if not text:
-            return
-        if self._main_window:
-            self._main_window.activateWindow()
-            self._main_window.raise_()
-            editor = self._main_window.get_current_editor()
-            if editor:
-                editor.text_edit.setFocus()
-                editor.text_edit.textCursor().insertText(text)
-        self.close()
-
 
 class AIExtendPlugin(PluginBase):
     """AI Extension"""
@@ -231,23 +46,20 @@ class AIExtendPlugin(PluginBase):
         self._standalone_window = None
         self._ai_capturing = False
         self._pending_ai_prompt = None
+        self._current_ai_dialog = None
+        self._prompts_separator = None
 
     def loadConfig(self):
         super().loadConfig()
-        if self.main_window and hasattr(self.main_window, 'config'):
-            ai_config = self.main_window.config.get("AI", {})
-            if ai_config:
-                for key in ("stream", "active", "profiles", "load_balance", "prompts"):
-                    if key in ai_config:
-                        self.settings[key] = ai_config[key]
+        self.settings.setdefault("active", "默认配置")
+        self.settings.setdefault("stream", False)
         self.settings.setdefault("profiles", {"默认配置": {
             "api_key": "", "model": "", "api_url": "https://api.deepseek.com",
             "custom_url": "https://api.deepseek.com", "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
         }})
-        self.settings.setdefault("active", "默认配置")
-        self.settings.setdefault("stream", False)
         self.settings.setdefault("dialog", "")
         self.settings.setdefault("load_balance", {"enabled": False, "profiles": {}})
+        self.settings.setdefault("prompt", "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。")
         self.settings.setdefault("prompts", {
             "系统提示词": "",
             "提取内容": "请提取以下内容中的关键信息，按条理清晰的结构输出，不需要额外解释。",
@@ -256,12 +68,8 @@ class AIExtendPlugin(PluginBase):
             "写作": "你是一名作家，请帮助我改进以下文本 {request} 的流畅性和表达，不需要过多的修饰和形容词。"
         })
 
-    def saveConfig(self):
-        if self.main_window and hasattr(self.main_window, 'config'):
-            for key in ("stream", "active", "profiles", "load_balance", "prompts"):
-                self.main_window.config.set("AI." + key, self.settings.get(key))
-            self.main_window.config.save()
-        return super().saveConfig()
+    # def saveConfig(self):
+    #     pass
 
     def initialize(self):
         if not super().initialize():
@@ -277,45 +85,38 @@ class AIExtendPlugin(PluginBase):
     def getAction(self):
         menu = QMenu(self.description, self.main_window)
 
-        settings_act = QAction("AI 设置", self.main_window)
-        settings_act.triggered.connect(self._show_settings_dialog)
-        menu.addAction(settings_act)
+        menu.addAction("AI 设置", self._show_settings_dialog)
+        menu.addAction("AI 文本识别", self.show_ocr_dialog)
+        menu.addAction("面板", self._toggle_panel)
 
-        panel_act = QAction("面板", self.main_window)
-        panel_act.triggered.connect(self._toggle_panel)
-        menu.addAction(panel_act)
+        self._prompts_separator = menu.addSeparator()
 
-        menu.addSeparator()
-
-        self._rebuild_prompts_menu(menu)
         menu.aboutToShow.connect(lambda: self._rebuild_prompts_menu(menu))
+        self._cleanup_hooks.append(menu.aboutToShow.disconnect)
 
         return menu
 
     def cleanup(self):
         if not self._initialized:
             return
+        super().cleanup()
         self._destroy_dock()
 
-    # ── AI 捕获流程 ──
-
     def run_ai_prompt(self, name: str):
-        """运行 AI 提示词（由 main.py 委托调用）"""
-        if not name or getattr(self, '_ai_capturing', False):
+        """运行 AI 提示词"""
+        if not name or self._ai_capturing:
             return
+        self.initialize()
         self._ai_capturing = True
-        GlobalHotkeyListener()._is_pasting = True
         self._pending_ai_prompt = name
-        QTimer.singleShot(300, self._do_ai_capture)
+        self.getSelect(self.selectionCapture)
 
-    def _do_ai_capture(self):
-        copy_selection()
-        QTimer.singleShot(100, self._finish_ai_capture)
-
-    def _finish_ai_capture(self):
+    def selectionCapture(self, text):
         self._ai_capturing = False
-        GlobalHotkeyListener()._is_pasting = False
         name = getattr(self, '_pending_ai_prompt', None)
+        text = text.strip()
+        if not text:
+            return
 
         mime = QApplication.clipboard().mimeData()
         if mime.hasUrls():
@@ -324,19 +125,16 @@ class AIExtendPlugin(PluginBase):
                 if not path:
                     continue
                 if os.path.isfile(path):
-                    messages = getAIClient().build_file_message(path)
+                    messages = getAIClient(self.settings).build_file_message(path)
                     if messages:
                         self._open_ai_dialog(messages, name)
                     return
                 if os.path.isdir(path):
-                    messages = getAIClient().build_folder_message(path)
+                    messages = getAIClient(self.settings).build_folder_message(path)
                     if messages:
                         self._open_ai_dialog(messages, name)
                     return
 
-        text = QApplication.clipboard().text().strip()
-        if not text:
-            return
         self._open_ai_dialog([{"role": "user", "content": text}], name)
 
     def _open_ai_dialog(self, messages, prompt_name):
@@ -347,26 +145,33 @@ class AIExtendPlugin(PluginBase):
             self.saveConfig()
         dialog = AIDialog(messages, prompt_name, stream=stream,
                           dialog=geometry, main_window=self._launcher,
-                          on_geometry_save=on_geometry_save)
+                          on_geometry_save=on_geometry_save,
+                          config=self.settings)
         if self._launcher:
             dialog.setStyleSheet(self._launcher.styleSheet())
+        if self._current_ai_dialog is not None:
+            self._current_ai_dialog.close()
+        self._current_ai_dialog = dialog
+        dialog.finished.connect(lambda _: setattr(self, '_current_ai_dialog', None))
         dialog.show()
 
+    def show_ocr_dialog(self):
+        self.initialize()
+        dlg = OCRDialog(self._launcher, self)
+        dlg.show()
+
+    def _build_ai_client(self, profile_name=None):
+        name = profile_name or self.settings.get("active", "默认配置")
+        return getAIClient(self.settings, profile_name=name)
+
     def _rebuild_prompts_menu(self, menu):
-        """动态重建提示词菜单项"""
+        actions = menu.actions()
+        sep_idx = actions.index(self._prompts_separator)
+        for act in actions[sep_idx + 1:]:
+            menu.removeAction(act)
+
         prompts = self.settings.get("prompts", {})
         names = [n for n in prompts if n != "系统提示词"]
-
-        menu.clear()
-        settings_act = QAction("AI 设置", self.main_window)
-        settings_act.triggered.connect(self._show_settings_dialog)
-        menu.addAction(settings_act)
-
-        panel_act = QAction("面板", self.main_window)
-        panel_act.triggered.connect(self._toggle_panel)
-        menu.addAction(panel_act)
-
-        menu.addSeparator()
 
         if names:
             for name in names:
@@ -383,6 +188,7 @@ class AIExtendPlugin(PluginBase):
     def _show_settings_dialog(self):
         """打开 AI 设置对话框"""
         dlg = QDialog(self._launcher)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.setWindowTitle("AI " + tr("设置"))
         dlg.setMinimumSize(500, 500)
         layout = QVBoxLayout(dlg)
@@ -1162,7 +968,7 @@ class AIExtendPlugin(PluginBase):
             self._load_messages_to_ui()
 
     def _new_conversation(self):
-        conv_id = str(uuid.uuid4())[:8]
+        conv_id = getTimestamp()
         profile = self._get_profile_name()
         if profile not in self._history:
             self._history[profile] = {}
@@ -1460,7 +1266,7 @@ class AIExtendPlugin(PluginBase):
             self._history[profile] = {}
         convs = self._history[profile]
         if not convs:
-            conv_id = str(uuid.uuid4())[:8]
+            conv_id = getTimestamp()
             convs[conv_id] = {"title": "对话 1", "messages": []}
             self._current_conv_id = conv_id
         elif self._current_conv_id is None or self._current_conv_id not in convs:
@@ -1513,7 +1319,7 @@ class AIExtendPlugin(PluginBase):
         conv["messages"].append({
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": getTimestamp()
         })
         max_messages = 100
         if len(conv["messages"]) > max_messages:
@@ -1608,7 +1414,7 @@ class AIExtendPlugin(PluginBase):
         urls = event.mimeData().urls()
         if not urls:
             return
-        client = getAIClient(self.main_window.config if self.main_window else None)
+        client = getAIClient(config=self.settings)
         for url in urls:
             path = url.toLocalFile()
             if not path:
@@ -1801,6 +1607,7 @@ class AIExtendPlugin(PluginBase):
         self._scroll_to_bottom()
 
     def _render_markdown(self, text: str) -> str:
+        import markdown
         html = markdown.markdown(text, extensions=['fenced_code', 'tables', 'nl2br'])
         css = """
             <style>
@@ -1837,7 +1644,7 @@ class AIExtendPlugin(PluginBase):
         file_path = getFilePath(self.main_window, "选择文件")
         if not file_path:
             return
-        client = getAIClient(self.main_window.config if self.main_window else None)
+        client = getAIClient(config=self.settings)
         messages = client.build_file_message(file_path)
         if messages:
             self._send_messages(messages)
@@ -1856,7 +1663,7 @@ class AIExtendPlugin(PluginBase):
         if content_parts:
             messages.append({"role": "user", "content": content_parts})
 
-        client = getAIClient(self.main_window.config if self.main_window else None)
+        client = getAIClient(config=self.settings)
         for path in self._pending_files:
             file_msgs = client.build_file_message(path)
             if file_msgs:
@@ -1888,7 +1695,7 @@ class AIExtendPlugin(PluginBase):
         resolve_image_urls(full_messages)
 
         use_stream = self.settings.get("stream", False)
-        self.stream_thread = AIThread(full_messages, stream=use_stream)
+        self.stream_thread = AIThread(full_messages, stream=use_stream, config=self.settings)
         if use_stream:
             self.stream_thread.chunk_received.connect(self._on_chunk_received)
         self.stream_thread.finished.connect(self._on_stream_finished)
@@ -1938,3 +1745,450 @@ class AIExtendPlugin(PluginBase):
             self.dock.deleteLater()
             self.dock = None
             self._panel = None
+
+
+class AIThread(QThread):
+    """AI工作线程（支持流式和非流式）"""
+    chunk_received = Signal(str)
+    finished = Signal(str)
+    error = Signal(str)
+
+    _alive: set = set()
+
+    def __init__(self, messages, prompt_name=None, stream=True, config=None):
+        super().__init__()
+        self.messages = messages
+        self.prompt_name = prompt_name
+        self.stream = stream
+        self._config = config
+        AIThread._alive.add(self)
+        self.finished.connect(self._cleanup)
+        self.error.connect(self._cleanup)
+
+    def _cleanup(self):
+        AIThread._alive.discard(self)
+
+    def run(self):
+        try:
+            client = getAIClient(config=self._config)
+            if self.stream:
+                full_response = []
+                def on_chunk(chunk):
+                    if self.isInterruptionRequested():
+                        return
+                    full_response.append(chunk)
+                    self.chunk_received.emit(chunk)
+                client.stream_chat(
+                    messages=self.messages,
+                    callback=on_chunk,
+                    prompt_name=self.prompt_name
+                )
+                if not self.isInterruptionRequested():
+                    self.finished.emit(''.join(full_response))
+            else:
+                text, _, _ = client.chat(messages=self.messages, prompt_name=self.prompt_name)
+                if not self.isInterruptionRequested():
+                    self.finished.emit(text)
+        except Exception as e:
+            if not self.isInterruptionRequested():
+                self.error.emit(str(e))
+
+
+class AIDialog(QDialog):
+    """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
+
+    def __init__(self, messages, prompt_name, stream=True, dialog="", main_window=None, on_geometry_save=None, config=None):
+        super().__init__()
+        self._main_window = main_window
+        self._on_geometry_save = on_geometry_save
+        self.setWindowTitle("AI " + tr("回复"))
+        self.setMinimumSize(300, 200)
+        self.resize(420, 280)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+
+        if dialog:
+            self.restoreGeometry(QByteArray.fromBase64(dialog.encode()))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(False)
+        self.text_edit.setPlaceholderText(tr("连接中..."))
+        layout.addWidget(self.text_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+
+        copy_btn = QPushButton(tr("复制"))
+        copy_btn.clicked.connect(self._copy)
+        btn_layout.addWidget(copy_btn)
+
+        self.paste_btn = QPushButton(tr("粘贴"))
+        self.paste_btn.setEnabled(False)
+        self.paste_btn.clicked.connect(self._paste)
+        btn_layout.addWidget(self.paste_btn)
+
+        self.apply_btn = QPushButton(tr("编辑器"))
+        self.apply_btn.setEnabled(False)
+        self.apply_btn.clicked.connect(self._apply)
+        btn_layout.addWidget(self.apply_btn)
+
+        btn_layout.addStretch()
+
+        close_btn = QPushButton(tr("关闭"))
+        close_btn.clicked.connect(self.close)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+
+        self.worker = AIThread(messages, prompt_name, stream=stream, config=config)
+        if stream:
+            self.worker.chunk_received.connect(self._on_chunk)
+        self.worker.finished.connect(self._on_finished)
+        self.worker.error.connect(self._on_error)
+        self.worker.start()
+
+    def closeEvent(self, event):
+        if self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.worker.wait(3000)
+        if self._on_geometry_save:
+            self._on_geometry_save(self.saveGeometry().toBase64().data().decode())
+        super().closeEvent(event)
+
+    def _on_chunk(self, chunk):
+        self.text_edit.setPlaceholderText("")
+        cursor = self.text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(chunk)
+        self.text_edit.setTextCursor(cursor)
+
+    def _on_finished(self, response):
+        self.text_edit.setPlaceholderText("")
+        self.text_edit.setPlainText(response)
+        self.apply_btn.setEnabled(True)
+        self.paste_btn.setEnabled(True)
+
+    def _on_error(self, error):
+        self.text_edit.setPlaceholderText("")
+        self.text_edit.setPlainText(tr("请求失败") + f": {error}")
+        self.apply_btn.setEnabled(False)
+        self.paste_btn.setEnabled(False)
+
+    def _copy(self):
+        text = self.text_edit.toPlainText()
+        if text:
+            QApplication.clipboard().setText(text)
+        self.close()
+
+    def _paste(self):
+        text = self.text_edit.toPlainText()
+        if not text:
+            return
+        if self._main_window:
+            editor = self._main_window.get_current_editor()
+            if editor:
+                editor.text_edit.textCursor().insertText(text)
+        self.close()
+
+    def _apply(self):
+        text = self.text_edit.toPlainText()
+        if not text:
+            return
+        if self._main_window:
+            self._main_window.activateWindow()
+            self._main_window.raise_()
+            editor = self._main_window.get_current_editor()
+            if editor:
+                editor.text_edit.setFocus()
+                editor.text_edit.textCursor().insertText(text)
+        self.close()
+
+class AutoHeightTextBrowser(QTextBrowser):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.document().contentsChanged.connect(self._adjust_height)
+
+    def _adjust_height(self):
+        w = self.viewport().width()
+        if w <= 0:
+            return
+        self.document().setTextWidth(w)
+        h = int(self.document().size().height()) + 5
+        if self.height() != h:
+            self.setFixedHeight(h)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adjust_height()
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+class OCRThread(QThread):
+    """OCR处理线程"""
+    finished = Signal(str)
+    progress = Signal(int, str)
+
+    def __init__(self, file_paths, ai_client, prompt="", parent=None):
+        super().__init__(parent)
+        self.file_paths = file_paths[:]
+        self.ai_client = ai_client
+        self.prompt = prompt or "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。"
+
+    def run(self):
+        results = []
+        total = len(self.file_paths)
+
+        for i, file_path in enumerate(self.file_paths):
+            try:
+                self.progress.emit(int((i / total) * 100), os.path.basename(file_path))
+
+                img_data, mime = imageBase64(file_path)
+
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": self.prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_data}"}}
+                        ]
+                    }
+                ]
+
+                response, _, _ = self.ai_client.chat(messages)
+                results.append(f"=== {os.path.basename(file_path)} ===\n{response}\n")
+
+            except Exception as e:
+                error_msg = str(e)
+                if "image_url" in error_msg.lower() or "multimodal" in error_msg.lower():
+                    error_msg += "\n\n提示：当前AI模型不支持多模态识别。\n请切换到支持多模态的模型后再试。"
+                results.append(f"=== {os.path.basename(file_path)} ===\n错误: {error_msg}\n")
+
+        self.progress.emit(100, "完成")
+        self.finished.emit("\n\n".join(results))
+
+
+class OCRDialog(QDialog):
+    """OCR对话框"""
+
+    def __init__(self, parent, plugin: AIExtendPlugin):
+        super().__init__(parent)
+        self.plugin = plugin
+        self.setWindowTitle("AI OCR 识别")
+        self.setMinimumSize(600, 450)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
+        self._init_ui()
+        self.ocr_thread = None
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(10, 10, 10, 10)
+
+        prompt_label = QLabel("OCR提示词（注意-多模态大模型能进行OCR，纯文本大模型不能）:")
+        content_layout.addWidget(prompt_label)
+
+        self.prompt_edit = QTextEdit()
+        self.prompt_edit.setMaximumHeight(60)
+        self.prompt_edit.setText(self.plugin.settings.get("prompt", "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。"))
+        content_layout.addWidget(self.prompt_edit)
+
+        self.drop_widget = FileDrop(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'])
+        self.drop_widget.filesDropped.connect(self._on_files_dropped)
+        self.drop_widget.folderDropped.connect(self._on_folder_dropped)
+        content_layout.addWidget(self.drop_widget)
+
+        self.file_list = QListWidget()
+        self.file_list.setAlternatingRowColors(True)
+        content_layout.addWidget(self.file_list)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        content_layout.addWidget(self.progress_bar)
+
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #666;")
+        content_layout.addWidget(self.status_label)
+
+        bottom_bar = QFrame()
+        bottom_bar.setObjectName("bottom_bar")
+        bottom_bar.setStyleSheet("background: #f0f0f0;")
+        bottom_layout = QHBoxLayout(bottom_bar)
+
+        bottom_layout.addWidget(QLabel("AI配置:"))
+
+        self.ai_profile_combo = QComboBox()
+        self._refresh_ai_profiles()
+        bottom_layout.addWidget(self.ai_profile_combo)
+
+        bottom_layout.addSpacing(10)
+
+        add_files_btn = QPushButton(tr("添加文件"))
+        add_files_btn.clicked.connect(self._add_files)
+        bottom_layout.addWidget(add_files_btn)
+
+        add_folder_btn = QPushButton(tr("选择文件夹"))
+        add_folder_btn.clicked.connect(self._add_folder)
+        bottom_layout.addWidget(add_folder_btn)
+
+        bottom_layout.addStretch()
+
+        self.start_btn = QPushButton("开始识别")
+        self.start_btn.clicked.connect(self._start_ocr)
+        self.start_btn.setEnabled(False)
+        bottom_layout.addWidget(self.start_btn)
+
+        save_btn = QPushButton("保存设置")
+        save_btn.clicked.connect(self._save_settings)
+        bottom_layout.addWidget(save_btn)
+
+        clear_btn = QPushButton("清空")
+        clear_btn.clicked.connect(self._clear_files)
+        bottom_layout.addWidget(clear_btn)
+
+        content_layout.addWidget(bottom_bar)
+
+        layout.addWidget(content)
+
+        self.file_paths = []
+        self.ocr_result = ""
+
+    def _refresh_ai_profiles(self):
+        """刷新AI配置列表"""
+        profiles = self.plugin.settings.get("profiles", {})
+        profile_names = list(profiles.keys()) if profiles else ["默认配置"]
+
+        self.ai_profile_combo.clear()
+        self.ai_profile_combo.addItems(profile_names)
+
+        current_profile = self.plugin.settings.get("active", "默认配置")
+        self.ai_profile_combo.setCurrentText(current_profile)
+
+    def _on_files_dropped(self, files: list):
+        for path in files:
+            self._add_file(path)
+
+    def _on_folder_dropped(self, folder: str):
+        self._add_folder_files(folder)
+
+    def _add_files(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "选择图片", "",
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;所有文件 (*.*)"
+        )
+        for f in files:
+            self._add_file(f)
+
+    def _add_folder(self):
+        folder = getFilePath(self, "选择文件夹", mode="dir")
+        if folder:
+            self._add_folder_files(folder)
+
+    def _add_folder_files(self, folder: str):
+        image_exts = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        for root, _, files in os.walk(folder):
+            for f in files:
+                if os.path.splitext(f)[1].lower() in image_exts:
+                    self._add_file(os.path.join(root, f))
+
+    def _add_file(self, path: str):
+        path = os.path.normpath(path)
+        if path not in self.file_paths:
+            self.file_paths.append(path)
+            self.file_list.addItem(path)
+            self.start_btn.setEnabled(len(self.file_paths) > 0)
+
+    def _clear_files(self):
+        self.file_paths.clear()
+        self.file_list.clear()
+        self.start_btn.setEnabled(False)
+
+    def _start_ocr(self):
+        if not self.file_paths:
+            return
+
+        self.start_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.status_label.setText("正在识别...")
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+        try:
+            self._save_settings(show_message=False)
+            ai_client = self.plugin._build_ai_client(
+                profile_name=self.ai_profile_combo.currentText().strip()
+            )
+            prompt = self.prompt_edit.toPlainText().strip() or self.plugin.settings.get("prompt", "")
+
+            self.ocr_thread = OCRThread(self.file_paths, ai_client, prompt)
+            self.ocr_thread.progress.connect(self._on_progress)
+            self.ocr_thread.finished.connect(self._on_finished)
+            self.ocr_thread.start()
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            messageBox(self, "错误", f"初始化AI失败: {str(e)}", 1)
+            self.start_btn.setEnabled(True)
+            self.progress_bar.setVisible(False)
+
+    def _save_settings(self, show_message=True):
+        try:
+            self.plugin.settings["prompt"] = self.prompt_edit.toPlainText().strip()
+            self.plugin.settings["active"] = self.ai_profile_combo.currentText().strip()
+            self.plugin.saveConfig()
+            if show_message:
+                messageBox(self, "保存成功", "OCR设置已保存", 1)
+        except Exception as e:
+            if show_message:
+                messageBox(self, "保存失败", f"保存设置时出错: {str(e)}", 1)
+
+    def _on_progress(self, value: int, filename: str):
+        self.progress_bar.setValue(value)
+        self.status_label.setText(f"正在识别: {filename}")
+
+    def _on_finished(self, result: str):
+        QApplication.restoreOverrideCursor()
+        self.ocr_result = result
+        self.status_label.setText("识别完成")
+        self.progress_bar.setVisible(False)
+        self.start_btn.setEnabled(True)
+
+        self._save_to_default()
+        messageBox(self, "完成", "OCR识别完成，结果已自动保存", 1)
+
+    def _save_to_default(self):
+        if not self.ocr_result:
+            return
+
+        save_path = AI_dir / f"{getTimestamp()}.txt"
+
+        try:
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(self.ocr_result)
+
+            self._open_file_with_app(str(save_path))
+
+        except Exception as e:
+            messageBox(self, "保存失败", str(e), 1)
+
+    def _open_file_with_app(self, file_path: str):
+        try:
+            main_window = self.parent()
+            if main_window and hasattr(main_window, 'open_file_path'):
+                main_window.open_file_path(file_path)
+            elif main_window and hasattr(main_window, 'open_file'):
+                main_window.open_file()
+            else:
+                os.startfile(file_path)
+        except Exception:
+            logger.exception("打开文件失败")

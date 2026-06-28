@@ -5,10 +5,10 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
+from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, Singleton, ManagePair, dictDialog, setAutoStart, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, theme_dir, lang_dir, dialogBox, messageBox, inputDialog
+from src.util import root, config_file, logger, Singleton, setAutoStart, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, theme_dir, lang_dir, dialogBox, messageBox
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 
 DEFAULT_CONFIG = {
@@ -29,13 +29,12 @@ DEFAULT_CONFIG = {
         "hotkey": "",
         "mouse_side": False,
         "double_ctrl": False,
-        "capture": True,
         "on_top": False,
         "run_hide": False,
         "hover_switch": False,
         "layout": "horizontal",
         "path_mode": "absolute",
-        "active_group": "默认",
+        "active_group": "",
         "g_w": 90, "g_h": 30,
         "i_w": 100, "i_h": 75,
         "icon": 32, "padding": 8,
@@ -43,7 +42,7 @@ DEFAULT_CONFIG = {
         "height": 400,
         "x": None,
         "y": None,
-        "tools": {"默认": []}
+        "tools": {}
     },
     "Edit": {
         "width": 1000,
@@ -82,35 +81,7 @@ DEFAULT_CONFIG = {
             "GitHub": "https://github.com/search?q={query}"
         }
     },
-    "Plugin": {},
-    "AI": {
-        "enabled": False,
-        "stream": False,
-        "dialog": "",
-        "active": "默认配置",
-        "profiles": {
-            "默认配置": {
-                "api_key": "",
-                "model": "",
-                "api_url": "",
-                "custom_url": "",
-                "temperature": 0.7,
-                "max_tokens": 2000,
-                "endpoint": ""
-            }
-        },
-        "load_balance": {
-            "enabled": False,
-            "profiles": {}
-        },
-        "prompts": {
-            "系统提示词": "",
-            "提取内容": "请提取以下内容中的关键信息，按条理清晰的结构输出，不需要额外解释。",
-            "代码": "你是一位经验丰富的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有广泛的知识。请帮助我编写和优化以下代码。\n\n{request}",
-            "翻译": "你是一名翻译，请将以下文本 {request} 翻译成中文，你只需要返回翻译结果，无需额外解释。",
-            "写作": "你是一名作家，请帮助我改进以下文本 {request} 的流畅性和表达，不需要过多的修饰和形容词。"
-        }
-    }
+    "Plugin": {}
 }
 
 
@@ -188,7 +159,7 @@ class ConfigManager(Singleton):
                 os.unlink(tmp)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置项，支持点号访问嵌套字段如AI.enabled"""
+        """获取配置项，支持点号访问嵌套字段"""
         if '.' in key:
             parts = key.split('.')
             value = self.config
@@ -403,9 +374,6 @@ class SettingsDialog(QDialog):
         self.launcher_double_ctrl_check = QCheckBox("连按 Ctrl 响应")
         self.launcher_double_ctrl_check.setChecked(launcher_config.get("double_ctrl", False))
 
-        self.launcher_capture_check = QCheckBox("获取剪贴板与选中")
-        self.launcher_capture_check.setChecked(launcher_config.get("capture", True))
-
         launch_grid_widget = QWidget()
         launch_grid = QGridLayout(launch_grid_widget)
         launch_grid.setContentsMargins(20, 0, 0, 0)
@@ -414,8 +382,7 @@ class SettingsDialog(QDialog):
         launch_grid.addWidget(self.launcher_on_top_check, 1, 0)
         launch_grid.addWidget(self.launcher_hide, 1, 1)
 
-        launch_grid.addWidget(self.launcher_double_ctrl_check, 2, 0)
-        launch_grid.addWidget(self.launcher_capture_check, 2, 1)
+        launch_grid.addWidget(self.launcher_double_ctrl_check, 2, 0, 1, 2)
         launch_grid.setColumnStretch(0, 1)
         launch_grid.setColumnStretch(1, 1)
         layout.addRow(launch_grid_widget)
@@ -870,7 +837,6 @@ class SettingsDialog(QDialog):
 
             launch["mouse_side"] = self.launcher_mouse_side_check.isChecked()
             launch["double_ctrl"] = self.launcher_double_ctrl_check.isChecked()
-            launch["capture"] = self.launcher_capture_check.isChecked()
             launch["on_top"] = self.launcher_on_top_check.isChecked()
             launch["run_hide"] = self.launcher_hide.isChecked()
 

@@ -152,7 +152,7 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 C:\Users\User\.ollama 会被移动到 C:\Tool\AppData  内部，形成 C:\Tool\AppData\.ollama 的路径，然后在 C:\Users\User\.ollama 创建一个指向 C:\Tool\AppData\.ollama 的符号链接，从而达到访问 C:\Users\User\.ollama 实际上是访问 C:\Tool\AppData\.ollama 的效果。
 符号链接的原理导致移动文件夹才能达到减小 C 盘或统一管理文件的目的。
 
-在 C:\Tool\AppData 文件夹存在且内部没有 .ollama 文件夹的情况下，大致等效于下方的 cmd 命令。
+在 C:\Tool\AppData 文件夹存在且内部没有 .ollama 文件夹的情况下，大致等效于下方的 cmd 命令。不过增加了校验和回退。
 ```
 move C:\Users\User\.ollama C:\Tool\AppData
 mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
@@ -163,11 +163,6 @@ mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
 
 测试具体行为，检测所有保存的符号链接路径，源路径是否存在，是符号链接还是文件、文件夹，目标路径是否存在，是符号链接还是文件、文件夹
 
-
-
-#### OCR
-
-此插件使用 AI 对图片进行批量的 OCR。
 
 #### OpenCC
 
@@ -192,20 +187,21 @@ https://github.com/OpenListTeam/OpenList/releases
 
 ### 问题
 
-已发现但未能解决的问题包括：
-1.若启用行距，换行时，第一个Enter键无效，只让该行和下一行变为无行距，没有换行，然后Enter键才能换行。目前缓解方法是禁用行距。建议编辑时不使用行距，纯阅读才启用行距。
+已发现但尚未解决的问题包括：
+1.
 2.
 
 ### 计划
 
-待实现的功能有
-1.UI 界面配色自定义
+0. 在不增加新依赖的情况下尽可能扩展功能
+1. 清理代码
+
 
 
 可能会实现的功能有
-1.改用 Nuitka 打包
-2.支持 .pyd 插件
-3.图片质量比较、图片相似度比较
+1. 改用 Nuitka 打包
+2. 图片质量比较、图片相似度比较
+3. UI 界面配色自定义
 
 
 #### 其他

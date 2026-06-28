@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Any, ClassVar
 
 import requests
 
-from src.config import getConfig
 from src.util import logger, EXTENSION, imageBase64
 from src.file import fileTree
 
@@ -15,65 +14,34 @@ _session = requests.Session()
 
 
 def _resolveContentImage(content_parts: List[Dict]):
-    """将 content 数组中的 file:// 图片路径转 base64 data URI，原地修改"""
-    for part in content_parts:
+    """移除 content 数组中的图片，仅保留纯文本"""
+    i = 0
+    while i < len(content_parts):
+        part = content_parts[i]
         if not isinstance(part, dict):
+            i += 1
             continue
-        if part.get("type") != "image_url":
+        if part.get("type") == "image_url":
+            content_parts.pop(i)
             continue
-        url = part.get("url", "") or part.get("image_url", {}).get("url", "")
-        if not url.startswith("file://"):
-            continue
-        path = url[7:]
-        try:
-            data, mime = imageBase64(path)
-            part["image_url"] = {"url": f"data:{mime};base64,{data}"}
-            part.pop("url", None)
-        except Exception:
-            logger.exception(f"读取图片失败: {path}")
-            part["text"] = f"[图片加载失败: {os.path.basename(path)}]"
-            part["type"] = "text"
-            part.pop("url", None)
-            part.pop("image_url", None)
+        i += 1
 
 def resolve_image_urls(messages: List[Dict]) -> List[Dict]:
-    """遍历消息列表，将所有 content 中的 file:// 图片路径转 base64"""
+    """遍历消息列表，移除 content 中的图片，仅保留纯文本"""
     for msg in messages:
         content = msg.get("content", "")
         if isinstance(content, list):
             _resolveContentImage(content)
     return messages
 
-def _getConfig(config, key: str, default=None):
-    """获取配置值，支持点号访问嵌套字典"""
-    if hasattr(config, 'get') and callable(config.get):
-        if isinstance(config, dict):
-            if '.' in key:
-                parts = key.split('.')
-                value = config
-                for part in parts:
-                    if isinstance(value, dict):
-                        value = value.get(part)
-                    else:
-                        return default
-                return value if value is not None else default
-            else:
-                return config.get(key, default)
-        else:
-            return config.get(key, default)
-    else:
-        return default
-
-def _get_profile(config) -> dict:
+def _get_profile(settings) -> dict:
     """获取当前激活的配置"""
-    active_profile = _getConfig(config, "AI.active")
-    profiles = _getConfig(config, "AI.profiles", {})
+    active_profile = settings.get("active", "")
+    profiles = settings.get("profiles", {})
     if not profiles:
         return {}
-    if not active_profile:
-        active_profile = list(profiles.keys())[0]
-    if active_profile not in profiles:
-        active_profile = list(profiles.keys())[0]
+    if not active_profile or active_profile not in profiles:
+        active_profile = next(iter(profiles), "")
     return profiles.get(active_profile, {})
 
 class AIBaseAdapter(ABC):
@@ -682,14 +650,15 @@ class AIClient:
     _LB_THRESHOLD = 3
 
     def __init__(self, config=None, profile_name=None):
-        self.config = config or getConfig()
+        self.config = config or {}
         self._adapter = None
+        self._active_profile = None
         if profile_name:
             self._switch_profile(profile_name)
 
     def _switch_profile(self, name):
         """切换到指定名称的AI配置"""
-        profiles = _getConfig(self.config, "AI.profiles", {})
+        profiles = self.config.get("profiles", {})
         if name not in profiles:
             profile_names = list(profiles.keys())
             if profile_names:
@@ -697,17 +666,20 @@ class AIClient:
             else:
                 logger.warning(f"配置 [{name}] 不存在，使用当前激活的配置")
                 return
-        if isinstance(self.config, dict):
-            self.config = {**self.config}
-            ai = {**self.config.get("AI", {})}
-            self.config["AI"] = ai
-            ai["active"] = name
-        else:
-            self.config.set("AI.active", name)
+        self._active_profile = name
+
+    def _get_profile(self) -> dict:
+        profiles = self.config.get("profiles", {})
+        if not profiles:
+            return {}
+        active = self._active_profile or self.config.get("active", "")
+        if not active or active not in profiles:
+            active = next(iter(profiles), "")
+        return profiles.get(active, {})
 
     def _get_endpoint_name(self) -> str:
         """获取当前选中的端点名称"""
-        profile = _get_profile(self.config)
+        profile = self._get_profile()
         api_url = profile.get("api_url", "") or "https://api.deepseek.com"
         
         for name, cls, url in AI_ADAPTER:
@@ -743,7 +715,7 @@ class AIClient:
     
     def _lb_pick_groups(self) -> Optional[List[Dict[str, Any]]]:
         """按优先级分组返回 [{name: cfg, ...}, ...]，保留完整配置信息的权重"""
-        lb = _getConfig(self.config, "AI.load_balance", {})
+        lb = self.config.get("load_balance", {})
         if not lb.get("enabled"):
             return None
         pc = lb.get("profiles", {})
@@ -771,13 +743,13 @@ class AIClient:
     
     def get_model(self) -> str:
         """获取模型"""
-        profile = _get_profile(self.config)
+        profile = self._get_profile()
         model = profile.get("model", "") or "deepseek-chat"
         return str(model).strip()
     
     def get_temperature(self) -> float:
         """获取温度"""
-        profile = _get_profile(self.config)
+        profile = self._get_profile()
         temp = profile.get("temperature", 0.7)
         if temp is None:
             return 0.7
@@ -785,7 +757,7 @@ class AIClient:
     
     def get_max_tokens(self) -> int:
         """获取最大token数"""
-        profile = _get_profile(self.config)
+        profile = self._get_profile()
         tokens = profile.get("max_tokens", 2000)
         if tokens is None:
             return 2000
@@ -793,7 +765,7 @@ class AIClient:
     
     def get_prompt_by_name(self, name: str) -> Optional[str]:
         """根据名称获取提示词内容"""
-        return _getConfig(self.config, "AI.prompts", {}).get(name)
+        return self.config.get("prompts", {}).get(name)
     
     def _extract_user_message(self, messages: List[Dict[str, str]]) -> str:
         for msg in reversed(messages):
@@ -857,7 +829,7 @@ class AIClient:
                             selected = name
                             break
 
-                    profile = _getConfig(self.config, f"AI.profiles.{selected}", {})
+                    profile = self.config.get("profiles", {}).get(selected, {})
                     if not profile:
                         remaining.pop(selected, None)
                         continue
@@ -1010,24 +982,13 @@ class AIClient:
         return [{"role": "user", "content": content_parts}]
 
 
-_client_instance = None
-
-
-def getAIClient(config=None, profile_name=None) -> AIClient:
+def getAIClient(config, profile_name=None) -> AIClient:
     """获取AI客户端
-
-    设计说明：默认返回缓存的单例；传入 config 或 profile_name 时创建独立临时实例，
-    用于测试连通性、负载均衡轮询等需要不同配置的场景。
-
+    
     Args:
-        config: 配置对象，传入时创建新实例（不缓存）
-        profile_name: 指定AI配置名，传入时创建新实例（不缓存）
+        config: AI 配置 dict（包含 profiles、prompts 等字段）
+        profile_name: AI 配置名
     Returns:
         AIClient 实例
     """
-    global _client_instance
-    if config is not None or profile_name is not None:
-        return AIClient(config, profile_name=profile_name)
-    if _client_instance is None:
-        _client_instance = AIClient()
-    return _client_instance
+    return AIClient(config, profile_name=profile_name)

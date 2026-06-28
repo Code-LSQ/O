@@ -16,13 +16,14 @@ DISP_CHANGE_SUCCESSFUL = 0
 
 
 class ResolutionPlugin(PluginBase):
+    """快速修改分辨率，仅适用于 Windows 。不用管缩放，Windows 会自动切换，只要改分辨率"""
 
     version = "1.0.0"
     description = "修改分辨率"
 
     def __init__(self, main_window):
         super().__init__(main_window)
-        self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]  # Windows 会自动切换缩放，不用管
+        self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]
         self._original_devmode = None
 
     def loadConfig(self):

@@ -769,7 +769,7 @@ class TestLoadBalancing(unittest.TestCase):
             p.stop()
 
     def test_lb_disabled_no_groups(self):
-        config = {"AI": {"load_balance": {"enabled": False}}}
+        config = {"load_balance": {"enabled": False}}
         client = self.getAIClient(config=config)
         result = client._lb_pick_groups()
         self.assertIsNone(result)
@@ -782,12 +782,10 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_single_profile(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "DeepSeek": {"priority": 1, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "DeepSeek": {"priority": 1, "weight": 1}
                 }
             }
         }
@@ -797,13 +795,11 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_multiple_profiles_same_priority(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "A": {"priority": 1, "weight": 1},
-                        "B": {"priority": 1, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "A": {"priority": 1, "weight": 1},
+                    "B": {"priority": 1, "weight": 1}
                 }
             }
         }
@@ -816,13 +812,11 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_different_priorities(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "Primary": {"priority": 1, "weight": 1},
-                        "Secondary": {"priority": 2, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "Primary": {"priority": 1, "weight": 1},
+                    "Secondary": {"priority": 2, "weight": 1}
                 }
             }
         }
@@ -834,13 +828,11 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_priority_zero_disabled(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "Disabled": {"priority": 0, "weight": 1},
-                        "Active": {"priority": 1, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "Disabled": {"priority": 0, "weight": 1},
+                    "Active": {"priority": 1, "weight": 1}
                 }
             }
         }
@@ -880,13 +872,11 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_disabled_profile_excluded(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "Bad": {"priority": 1, "weight": 1},
-                        "Good": {"priority": 1, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "Bad": {"priority": 1, "weight": 1},
+                    "Good": {"priority": 1, "weight": 1}
                 }
             }
         }
@@ -898,12 +888,10 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_all_disabled_returns_none(self):
         config = {
-            "AI": {
-                "load_balance": {
-                    "enabled": True,
-                    "profiles": {
-                        "A": {"priority": 1, "weight": 1}
-                    }
+            "load_balance": {
+                "enabled": True,
+                "profiles": {
+                    "A": {"priority": 1, "weight": 1}
                 }
             }
         }
@@ -1183,43 +1171,6 @@ class TestAIClientBuildFileMessage(unittest.TestCase):
         path = self._make_file("binary.bin", bytes(range(256)))
         result = client.build_file_message(path)
         self.assertIsNotNone(result)
-
-
-class TestBaseAdapterConfig(unittest.TestCase):
-    def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
-        from src.core.AI import OpenAIAdapter
-        self.OpenAIAdapter = OpenAIAdapter
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
-    def test_config_dict_access_dotted_key(self):
-        cfg = {"AI": {"active_profile": "test"}}
-        adapter = self.OpenAIAdapter(config=cfg)
-        val = adapter._getConfig("AI.active_profile")
-        self.assertEqual(val, "test")
-
-    def test_config_dict_access_simple_key(self):
-        cfg = {"theme": "dark"}
-        adapter = self.OpenAIAdapter(config=cfg)
-        val = adapter._getConfig("theme")
-        self.assertEqual(val, "dark")
-
-    def test_config_dict_access_missing_key(self):
-        cfg = {}
-        adapter = self.OpenAIAdapter(config=cfg)
-        val = adapter._getConfig("nonexistent", default="fallback")
-        self.assertEqual(val, "fallback")
-
-    def test_config_dict_access_dotted_nested_missing(self):
-        cfg = {"AI": {}}
-        adapter = self.OpenAIAdapter(config=cfg)
-        val = adapter._getConfig("AI.active_profile", default="default")
-        self.assertEqual(val, "default")
 
 
 # Group: sync (20 tests)
@@ -1906,7 +1857,7 @@ _register('ai', [
     TestResolveImageUrls, TestAIClientBuildPromptContent,
     TestAIClientExtractUserMessage, TestLoadBalancing,
     TestAdaptersBuildChatRequest, TestAdapterMap,
-    TestAIClientBuildFileMessage, TestBaseAdapterConfig,
+    TestAIClientBuildFileMessage
 ], "AI 适配器 (OpenAI, Claude, Ollama, Gemini)")
 
 _register('sync', [
@@ -1960,8 +1911,8 @@ def _mem_take_snapshot():
     total_size = sum(stat.size_diff for stat in stats)
     total_count = sum(stat.count_diff for stat in stats)
 
-    logger.info(f"=== 内存快照 #{_MEM.count} 增量 TOP10 ===")
-    for i, stat in enumerate(stats[:10]):
+    logger.info(f"=== 内存快照 #{_MEM.count} 增量 TOP20 ===")
+    for i, stat in enumerate(stats[:20]):
         logger.info(f"  #{i+1} {stat}")
     logger.info(f"  总计: {total_size / 1024:.1f} KB, {total_count} 个对象")
 

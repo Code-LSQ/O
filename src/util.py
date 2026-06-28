@@ -79,6 +79,12 @@ def encodingName(actual: str) -> str:
             return label
     return actual.upper()
 
+def openLog():
+    log_file
+
+def openConfig():
+    config_file
+
 def service(services: list, action, timeout):
     for service in services:
         try:

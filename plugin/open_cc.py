@@ -4,6 +4,7 @@ import opencc
 from PySide6.QtWidgets import QMenu
 
 from src.plugin import PluginBase
+from src.util import logger
 
 PluginLib = ["OpenCC==1.2.0"]  # 额外的第三方库
 
@@ -32,7 +33,7 @@ class OpenCCPlugin(PluginBase):
         if not editor:
             return
         editor.setPlainText(self._t2s.convert(editor.toPlainText()))
-        self.main_window.statusBar().showMessage("已转换为简体", 2000)
+        logger.info("已转换为简体")
 
     def chs_to_cht(self):
         self.initialize()
@@ -40,4 +41,4 @@ class OpenCCPlugin(PluginBase):
         if not editor:
             return
         editor.setPlainText(self._s2t.convert(editor.toPlainText()))
-        self.main_window.statusBar().showMessage("已转换为繁体", 2000)
+        logger.info("已转换为繁体")
