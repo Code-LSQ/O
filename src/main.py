@@ -1271,6 +1271,16 @@ class MainWindow(WindowMouse, QMainWindow):
         copy_action = QAction("复制", self)
         copy_action.triggered.connect(lambda: self.copyTool(tool))
         menu.addAction(copy_action)
+
+        move_menu = menu.addMenu("移动到")
+        groups = _get_groups(getConfig())
+        for g in groups:
+            if g == self._current_group:
+                continue
+            action = QAction(g, self)
+            action.triggered.connect(lambda checked, target=g, t=tool, i=index:
+                self._move_tool_to_group(t, i, target))
+            move_menu.addAction(action)
         
         menu.addSeparator()
         
@@ -1452,6 +1462,16 @@ class MainWindow(WindowMouse, QMainWindow):
         getConfig().set("Launch.tools", tools)
         getConfig().save()
         self.refreshTool()
+
+    def _move_tool_to_group(self, tool: dict, index: int, target_group: str):
+        """将工具移动到目标分组"""
+        tools = getConfig().get("Launch.tools", {})
+        tools[self._current_group].pop(index)
+        tools.setdefault(target_group, []).append(tool)
+        getConfig().set("Launch.tools", tools)
+        getConfig().save()
+        self.refreshTool()
+        self.refreshGroup()
     
     def _open_tool_location(self, tool: dict):
         """打开工具文件位置"""

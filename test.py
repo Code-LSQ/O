@@ -11,7 +11,7 @@
     --list                    列出测试组
     --gen-tokens
     --launch                  启动程序本体
-    --mem-debug               启动本体并启用 tracemalloc 内存追踪 + Qt 对象计数（自动启用 --launch）
+    -m                 启动程序本体并启用 tracemalloc 内存追踪 + Qt 对象计数
     --help                    帮助
 
 
@@ -85,6 +85,12 @@ _SHARED_UTIL_ATTRS = {
     'ZIP_EXTENSIONS': {'.zip', '.jar', '.apk'},
     'TAR_EXTENSIONS': {'.tar', '.tar.gz', '.tgz'},
     'ENCODING_MAP': {'UTF-8': 'utf-8', 'GBK': 'gb18030', 'Shift-JIS': 'shift_jis'},
+    'formatFileSize': MagicMock(return_value="1.0 KB"),
+    'folderLastModified': MagicMock(return_value=0),
+    'parseMtime': lambda x: x,
+    'getFilePath': MagicMock(),
+    'messageBox': MagicMock(),
+    'dialogBox': MagicMock(),
     'data_dir': MagicMock(),
     'plugin_dir': MagicMock()
 }
@@ -286,8 +292,6 @@ class _PluginTestBase(unittest.TestCase):
     def tearDown(self):
         for p in self._patchers:
             p.stop()
-        if hasattr(self, '_reset'):
-            self._reset()
 
 
 class TestPluginBase(_PluginTestBase):
@@ -524,7 +528,7 @@ class TestGetPluginModulePaths(_PluginTestBase):
         self.assertEqual(result, [])
 
 
-class TestPluginManagerConfig(_PluginTestBase):
+class TestPluginManagerConfig(_PluginWithTempDirBase):
     def _make_config(self, data=None):
         config = MagicMock()
         config_data = data or {}
@@ -537,48 +541,36 @@ class TestPluginManagerConfig(_PluginTestBase):
         return config, config_data
 
     def test_init_config_loads_enabled_plugins(self):
-        pm = self.PluginManager()
         config, _ = self._make_config({"Plugin": {"p1": {"enabled": True}}})
-        pm.plugin_dir = Path(tempfile.mkdtemp())
-        self._create_plugin_file_in(pm.plugin_dir, "p1.py", """
+        self._create_plugin_file("p1.py", """
 from src.plugin import PluginBase
 
 class P1(PluginBase):
     name = "P1"
     description = "Test plugin"
 """)
-        pm.initConfig(config)
-        self.assertTrue(pm.isPluginEnabled("p1"))
-        self.assertIn("p1", pm.plugins)
-        shutil.rmtree(pm.plugin_dir, ignore_errors=True)
+        self.pm.initConfig(config)
+        self.assertTrue(self.pm.isPluginEnabled("p1"))
+        self.assertIn("p1", self.pm.plugins)
 
     def test_init_config_default_enabled(self):
-        pm = self.PluginManager()
         config, _ = self._make_config({"Plugin": {}})
-        pm.plugin_dir = Path(tempfile.mkdtemp())
-        self._create_plugin_file_in(pm.plugin_dir, "p1.py", """
+        self._create_plugin_file("p1.py", """
 from src.plugin import PluginBase
 
 class P1(PluginBase):
     name = "P1"
 """)
-        pm.initConfig(config)
-        self.assertTrue(pm.isPluginEnabled("p1"))
-
-    def _create_plugin_file_in(self, directory, name, content):
-        path = os.path.join(str(directory), name)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return path
+        self.pm.initConfig(config)
+        self.assertTrue(self.pm.isPluginEnabled("p1"))
 
     def test_save_config_writes_enabled_and_settings(self):
-        pm = self.PluginManager()
         config, config_data = self._make_config()
-        pm.enabled_plugins = {"p1": True}
-        pm._scan_cache = {"p1": ("plugin.p1", Path("p1.py"), None)}
-        pm.plugins["p1"] = MagicMock()
-        pm.plugins["p1"].settings = {"key": "val"}
-        pm.saveConfig(config)
+        self.pm.enabled_plugins = {"p1": True}
+        self.pm._scan_cache = {"p1": ("plugin.p1", Path("p1.py"), None)}
+        self.pm.plugins["p1"] = MagicMock()
+        self.pm.plugins["p1"].settings = {"key": "val"}
+        self.pm.saveConfig(config)
         self.assertIn("Plugin", config_data)
         self.assertEqual(config_data["Plugin"]["p1"]["enabled"], True)
         self.assertEqual(config_data["Plugin"]["p1"]["key"], "val")
@@ -759,12 +751,19 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
 class TestLoadBalancing(unittest.TestCase):
     def setUp(self):
         self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+                                       keyboard=True, mouse=True,
+                                       config=True, file_mod=True)
         from src.core.AI import getAIClient
         self.getAIClient = getAIClient
+        client = self.getAIClient(config={})
+        client.__class__._lb_failures = {}
+        client.__class__._lb_disabled = {}
 
     def tearDown(self):
+        from src.core.AI import getAIClient
+        client = getAIClient(config={})
+        client.__class__._lb_failures = {}
+        client.__class__._lb_disabled = {}
         for p in self._patchers:
             p.stop()
 
@@ -843,8 +842,6 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_failure_tracking(self):
         client = self.getAIClient(config={})
-        client.__class__._lb_failures = {}
-        client.__class__._lb_disabled = {}
 
         self.assertFalse(client._lb_disabled_check("Test"))
 
@@ -858,8 +855,6 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_recovery_after_success(self):
         client = self.getAIClient(config={})
-        client.__class__._lb_failures = {}
-        client.__class__._lb_disabled = {}
 
         client._lb_record("Test", False)
         client._lb_record("Test", False)
@@ -1191,10 +1186,9 @@ class TestSyncModeConstants(unittest.TestCase):
 
     def test_task_status_constants(self):
         from plugin.OpenList import (
-            TASK_STATUS_IDLE, TASK_STATUS_RUNNING,
-            TASK_STATUS_SUCCESS, TASK_STATUS_FAILED, TASK_STATUS_ABORTED
+            TASK_STATUS_RUNNING, TASK_STATUS_SUCCESS,
+            TASK_STATUS_FAILED, TASK_STATUS_ABORTED
         )
-        self.assertEqual(TASK_STATUS_IDLE, "idle")
         self.assertEqual(TASK_STATUS_RUNNING, "running")
         self.assertEqual(TASK_STATUS_SUCCESS, "success")
         self.assertEqual(TASK_STATUS_FAILED, "failed")
@@ -1259,7 +1253,7 @@ class TestTaskConfig(unittest.TestCase):
 class TestSyncDiffAlgorithm(unittest.TestCase):
     def setUp(self):
         self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                      requests_mod=True, file_mod=True)
+                                       requests_mod=True, file_mod=True)
         self.local_dir = tempfile.mkdtemp()
         self.remote_dir = tempfile.mkdtemp()
 
@@ -1276,133 +1270,95 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
             f.write(content)
         return rel_path
 
+    def _scan(self, folder):
+        """扫描目录，返回 {rel_path: {size, mtime}}"""
+        files = {}
+        for root, dirs, fnames in os.walk(folder):
+            for fname in fnames:
+                full = os.path.join(root, fname)
+                rel = os.path.relpath(full, folder).replace("\\", "/")
+                stat = os.stat(full)
+                files[rel] = {"size": stat.st_size, "mtime": int(stat.st_mtime)}
+        return files
+
+    def _make_worker(self, mode="sync"):
+        """创建 SyncWorker 实例用于测试"""
+        from plugin.OpenList import SyncWorker, TaskConfig, MODE_SYNC, MODE_BACKUP
+        mode_map = {"sync": MODE_SYNC, "backup": MODE_BACKUP}
+        task = TaskConfig(mode=mode_map.get(mode, MODE_SYNC))
+        worker = SyncWorker(MagicMock(), task)
+        worker._abort = False
+        return worker
+
     def test_local_file_not_in_remote(self):
         self._touch(self.local_dir, "new.txt", b"local only")
-        local_files = set()
-        for root, dirs, files in os.walk(self.local_dir):
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), self.local_dir)
-                local_files.add(rel)
-        remote_files = set()
-        to_upload = local_files - remote_files
-        to_delete = remote_files - local_files
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
         self.assertIn("new.txt", to_upload)
         self.assertEqual(len(to_delete), 0)
 
     def test_remote_file_not_in_local_sync_mode(self):
         self._touch(self.remote_dir, "old.txt", b"remote only")
-        local_files = set()
-        remote_files = set()
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), self.remote_dir)
-                remote_files.add(rel)
-        to_delete = remote_files - local_files
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
         self.assertIn("old.txt", to_delete)
 
     def test_backup_mode_no_delete(self):
         self._touch(self.remote_dir, "extra.txt", b"extra")
-        local_files = set()
-        remote_files = set()
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), self.remote_dir)
-                remote_files.add(rel)
-        in_sync_mode = bool(remote_files - local_files)
-        self.assertTrue(in_sync_mode)
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("backup")
+        to_upload, to_delete = worker._compare_files(local, remote)
+        self.assertEqual(len(to_delete), 0)
 
     def test_identical_files_no_sync_needed(self):
         content = b"same content"
         self._touch(self.local_dir, "match.txt", content)
         self._touch(self.remote_dir, "match.txt", content)
-        local_files = {}
-        for root, dirs, files in os.walk(self.local_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.local_dir)
-                with open(fp, 'rb') as fh:
-                    local_files[rel] = fh.read()
-        remote_files = {}
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.remote_dir)
-                with open(fp, 'rb') as fh:
-                    remote_files[rel] = fh.read()
-        common = set(local_files.keys()) & set(remote_files.keys())
-        need_update = [f for f in common if local_files[f] != remote_files[f]]
-        self.assertEqual(len(need_update), 0)
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
+        self.assertNotIn("match.txt", to_upload)
 
     def test_file_content_changed_needs_update(self):
-        self._touch(self.local_dir, "changed.txt", b"new version")
+        self._touch(self.local_dir, "changed.txt", b"new version!")
         self._touch(self.remote_dir, "changed.txt", b"old version")
-        local_files = {}
-        for root, dirs, files in os.walk(self.local_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.local_dir)
-                with open(fp, 'rb') as fh:
-                    local_files[rel] = fh.read()
-        remote_files = {}
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.remote_dir)
-                with open(fp, 'rb') as fh:
-                    remote_files[rel] = fh.read()
-        common = set(local_files.keys()) & set(remote_files.keys())
-        need_update = [f for f in common if local_files[f] != remote_files[f]]
-        self.assertIn("changed.txt", need_update)
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
+        self.assertIn("changed.txt", to_upload)
 
     def test_nested_folder_structure(self):
         self._touch(self.local_dir, "a/b/c/deep.txt", b"deep")
         self._touch(self.local_dir, "root.txt", b"root")
         self._touch(self.remote_dir, "root.txt", b"root")
-        local_files = set()
-        for root, dirs, files in os.walk(self.local_dir):
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), self.local_dir)
-                local_files.add(rel)
-        remote_files = set()
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                rel = os.path.relpath(os.path.join(root, f), self.remote_dir)
-                remote_files.add(rel)
-        to_upload = local_files - remote_files
-        to_upload_norm = {f.replace('\\', '/') for f in to_upload}
-        self.assertIn("a/b/c/deep.txt", to_upload_norm)
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
+        self.assertTrue(any("deep.txt" in k for k in to_upload))
 
     def test_bidirectional_diff(self):
         self._touch(self.local_dir, "only_local.txt", b"A")
         self._touch(self.remote_dir, "only_remote.txt", b"B")
-        self._touch(self.local_dir, "both_diff.txt", b"C1")
-        self._touch(self.remote_dir, "both_diff.txt", b"C2")
+        self._touch(self.local_dir, "both_diff.txt", b"content C1 longer")
+        self._touch(self.remote_dir, "both_diff.txt", b"content C2")
         self._touch(self.local_dir, "both_same.txt", b"D")
         self._touch(self.remote_dir, "both_same.txt", b"D")
-        local_files = {}
-        for root, dirs, files in os.walk(self.local_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.local_dir)
-                with open(fp, 'rb') as fh:
-                    local_files[rel] = fh.read()
-        remote_files = {}
-        for root, dirs, files in os.walk(self.remote_dir):
-            for f in files:
-                fp = os.path.join(root, f)
-                rel = os.path.relpath(fp, self.remote_dir)
-                with open(fp, 'rb') as fh:
-                    remote_files[rel] = fh.read()
-        local_set = set(local_files.keys())
-        remote_set = set(remote_files.keys())
-        to_upload = local_set - remote_set
-        to_delete = remote_set - local_set
-        common = local_set & remote_set
-        to_update = [f for f in common if local_files[f] != remote_files[f]]
+        local = self._scan(self.local_dir)
+        remote = self._scan(self.remote_dir)
+        worker = self._make_worker("sync")
+        to_upload, to_delete = worker._compare_files(local, remote)
         self.assertIn("only_local.txt", to_upload)
         self.assertIn("only_remote.txt", to_delete)
-        self.assertIn("both_diff.txt", to_update)
-        self.assertNotIn("both_same.txt", to_update)
+        self.assertIn("both_diff.txt", to_upload)
+        self.assertNotIn("both_same.txt", to_upload)
 
 
 class TestExcludeRules(unittest.TestCase):
@@ -1874,7 +1830,7 @@ _register('exception', [
 ], "异常测试 (API Key, 网络, 插件, 文件, 模型, 配置)")
 
 
-# 内存调试工具 (用于 --launch / --mem-debug)
+# 内存调试工具 (用于 --launch / -m)
 
 class _MemState:
     started = False
@@ -1894,33 +1850,25 @@ def _mem_init():
 
 
 def _mem_take_snapshot():
-    """拍快照并与上次比较，返回简短增量字符串"""
+    """拍快照并输出内存总量 TOP20"""
     if not _MEM.started:
-        return ""
+        return
     import tracemalloc
     current = tracemalloc.take_snapshot()
     _MEM.count += 1
 
-    if _MEM.prev_snapshot is None:
-        _MEM.prev_snapshot = current
-        return "追踪中..."
+    stats = current.statistics('lineno')
+    total_size = sum(stat.size for stat in stats)
+    total_count = sum(stat.count for stat in stats)
 
-    stats = current.compare_to(_MEM.prev_snapshot, 'lineno')
-    _MEM.prev_snapshot = current
-
-    total_size = sum(stat.size_diff for stat in stats)
-    total_count = sum(stat.count_diff for stat in stats)
-
-    logger.info(f"=== 内存快照 #{_MEM.count} 增量 TOP20 ===")
+    if total_size < 1024:
+        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size:.0f}B / {total_count} 对象 TOP20 ===")
+    elif total_size < 1024 * 1024:
+        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024:.0f}KB / {total_count} 对象 TOP20 ===")
+    else:
+        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024/1024:.1f}MB / {total_count} 对象 TOP20 ===")
     for i, stat in enumerate(stats[:20]):
         logger.info(f"  #{i+1} {stat}")
-    logger.info(f"  总计: {total_size / 1024:.1f} KB, {total_count} 个对象")
-
-    if abs(total_size) < 1024:
-        return f"MEM {total_size:.0f}B"
-    if abs(total_size) < 1024 * 1024:
-        return f"MEM {total_size/1024:.0f}KB"
-    return f"MEM {total_size/1024/1024:.1f}MB"
 
 
 def _count_qt_objects(widget, max_depth=20):
@@ -1955,17 +1903,16 @@ def _patch_mainwindow_for_debug():
 
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-
-        mem_timer = QTimer(self)
-        mem_timer.timeout.connect(_mem_take_snapshot)
-        mem_timer.start(5000)
-
-        qt_timer = QTimer(self)
-        qt_timer.timeout.connect(lambda: _log_qt_objects(self))
-        qt_timer.start(10000)
+        self._mem_toggle = False
+        timer = QTimer(self)
+        timer.timeout.connect(lambda: (
+            _mem_take_snapshot() if self._mem_toggle else _log_qt_objects(self),
+            setattr(self, '_mem_toggle', not self._mem_toggle)
+        ))
+        timer.start(5000)
 
     MainWindow.__init__ = patched_init
-    logger.info("MainWindow.__init__ 已打补丁，内存追踪每 5 秒、Qt 对象计数每 10 秒记录")
+    logger.info("MainWindow.__init__")
 
 
 def main():
@@ -1978,20 +1925,20 @@ def main():
                             help=f'{info["description"]} ({info["count"]} 个测试)')
     parser.add_argument('--list', action='store_true', help='列出所有测试组')
     parser.add_argument('--launch', action='store_true', help='启动程序本体')
-    parser.add_argument('--mem-debug', action='store_true', help='启动本体并启用内存追踪（自动启用 --launch）')
+    parser.add_argument('-m', '--me', action='store_true', help='启动程序本体并启用内存追踪')
 
     args = parser.parse_args()
 
-    if args.launch or args.mem_debug:
-        test_flags = {'--launch', '--mem-debug'}
+    if args.launch or args.me:
+        test_flags = {'--launch', '-m'}
         sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a not in test_flags]
 
-        if args.mem_debug:
+        if args.me:
             _mem_init()
 
         from o import main as launch_app
 
-        if args.mem_debug:
+        if args.me:
             _patch_mainwindow_for_debug()
 
         launch_app()

@@ -360,5 +360,5 @@ QToolTip {
 QMenu::separator {
     height: 1px;
     background: #cccccc;
-    margin: 2px 4px;
+    margin: 2px 0px;
 }
