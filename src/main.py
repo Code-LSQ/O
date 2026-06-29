@@ -352,6 +352,7 @@ class EditTool(QDialog):
         super().__init__(parent)
         self.tool_data = tool_data or {}
         self.setMinimumWidth(450)
+        self.setWindowTitle(tr("添加"))
         self.setWindowFlags(Qt.WindowType.Window)
         self._setup_ui()
         self._load_data()
@@ -654,6 +655,9 @@ class MainWindow(WindowMouse, QMainWindow):
 
         QTimer.singleShot(0, self._lazy_init)
 
+        if self.app:
+            self.app.aboutToQuit.connect(lambda: getConfig().save())
+
     def _open_editor(self, file_path=None):
         """打开/激活编辑器窗口"""
         from src.edit import EditorWindow
@@ -925,6 +929,9 @@ class MainWindow(WindowMouse, QMainWindow):
                 btn.installEventFilter(self)
             self.group_layout.addWidget(btn)
         
+        if not groups:
+            h = getConfig().get("Launch.g_h", 30)
+            self.group_frame.setFixedHeight(h)
         self.group_layout.addStretch()
     
     def eventFilter(self, obj, event):
@@ -1022,14 +1029,12 @@ class MainWindow(WindowMouse, QMainWindow):
         if 0 <= new_idx < len(groups):
             groups[idx], groups[new_idx] = groups[new_idx], groups[idx]
             getConfig().set("Launch.tools", {g: getConfig().get("Launch.tools", {}).get(g, []) for g in groups})
-            getConfig().save()
             self.refreshGroup()
     
     def switchGroup(self, group: str):
         """切换分组"""
         self._current_group = group
         getConfig().set("Launch.active_group", group)
-        getConfig().save()
         self.refreshGroup()
         self.refreshTool()
     
@@ -1704,7 +1709,6 @@ class MainWindow(WindowMouse, QMainWindow):
         getConfig().set("Launch.height", geometry.height())
         getConfig().set("Launch.x", geometry.x())
         getConfig().set("Launch.y", geometry.y())
-        getConfig().save()
     
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -1794,6 +1798,7 @@ class MainWindow(WindowMouse, QMainWindow):
             event.ignore()
             self.hide()
         else:
+            getConfig().save()
             event.accept()
             if self.app:
                 self.app.quit()
@@ -1807,7 +1812,11 @@ class MainWindow(WindowMouse, QMainWindow):
     @Slot()
     def _toggle_launcher(self):
         """接收全局快捷键（双击 Ctrl、Ctrl+L），显示/隐藏启动器"""
-        if self.isVisible():
+        if self.windowState() & Qt.WindowState.WindowMinimized:
+            self.setWindowState(Qt.WindowState.WindowActive)
+            self.raise_()
+            self.activateWindow()
+        elif self.isVisible():
             self.hide()
         else:
             self.show()

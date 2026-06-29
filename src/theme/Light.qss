@@ -310,10 +310,10 @@ QPushButton#group_btn:hover {
 }
 
 QToolButton#tool_btn {
+    font-size: 14px;
     border: none;
     background: transparent;
-    padding: 4px 2px;
-    font-size: 16px;
+    padding: 2px 2px;
 }
 
 QToolButton#tool_btn:hover {

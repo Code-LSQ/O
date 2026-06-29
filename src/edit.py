@@ -607,7 +607,6 @@ class EditorWindow(WindowMouse, QMainWindow):
     def _clear_favorites(self):
         """清空收藏夹"""
         self.config.set("Edit.favorites", [])
-        self.config.save()
         self._update_favorites_menu()
         self.statusBar().showMessage(tr("已清空收藏夹"), 2000)
     
@@ -638,7 +637,6 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def _clear_recent(self):
         self.config.set("Edit.recent", [])
-        self.config.save()
         self._update_recent_menu()
         self.statusBar().showMessage(tr("已清空最近记录"), 2000)
     
@@ -647,7 +645,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         if file_path:
             normalized_path = os.path.normpath(file_path)
             self.config.add_favorite(normalized_path)
-            self.config.save()
             self._update_favorites_menu()
             self.statusBar().showMessage(tr("已添加到收藏夹") + f": {os.path.basename(normalized_path)}", 2000)
     
@@ -655,7 +652,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         """从收藏夹移除"""
         if file_path:
             self.config.remove_favorite(file_path)
-            self.config.save()
             self._update_favorites_menu()
             self.statusBar().showMessage(tr("已从收藏夹移除") + f": {os.path.basename(file_path)}", 2000)
     

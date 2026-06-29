@@ -21,11 +21,7 @@ DEFAULT_CONFIG = {
     "auto_start": False,
     "context_menu": False,
     "Launch": {
-        "Runtime": {
-            "Python": "",
-            "Java": "",
-            "Temp_Path": []
-        },
+        "Runtime": {"Python": "", "Java": "", "Temp_Path": []},
         "hotkey": "",
         "mouse_side": False,
         "double_ctrl": False,
@@ -35,9 +31,12 @@ DEFAULT_CONFIG = {
         "layout": "horizontal",
         "path_mode": "absolute",
         "active_group": "",
-        "g_w": 90, "g_h": 30,
-        "i_w": 100, "i_h": 75,
-        "icon": 32, "padding": 8,
+        "g_w": 90,
+        "g_h": 30,
+        "i_w": 100,
+        "i_h": 75,
+        "icon": 32,
+        "padding": 8,
         "width": 600,
         "height": 400,
         "x": None,
@@ -118,7 +117,7 @@ class ConfigManager(Singleton):
                 logger.info(f"配置文件加载成功: {self.config_path}")
             except json.JSONDecodeError:
                 logger.exception("配置文件格式错误")
-                self._backup_and_reset_config()
+                self._backupReset()
                 logger.info(f"配置文件已备份，创建默认配置")
             except Exception:
                 logger.exception("配置文件加载失败")
@@ -130,7 +129,7 @@ class ConfigManager(Singleton):
             self.save()
             logger.info(f"配置文件不存在，已创建默认配置: {self.config_path}")
 
-    def _backup_and_reset_config(self):
+    def _backupReset(self):
         """备份损坏的配置文件并重置为默认配置"""
         backup_path = self.config_path.with_suffix('.json.bak')
         try:
