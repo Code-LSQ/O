@@ -216,6 +216,7 @@ def filterList(items: list, whitelist: set, kind: str) -> list:
 def openFile(path: str, cwd=None, args=None, operation="open"):
     if sys.platform == "win32":
         # os.startfile(path) 不支持参数，所以使用 windll
+        path = os.path.expandvars(path)
         result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd, 1)
         if result <= 32:
             raise RuntimeError(f"打开文件失败 {result}")
@@ -1154,12 +1155,13 @@ class MainWindow(WindowMouse, QMainWindow):
         btn.setToolTip("\n".join(tip_parts))
         
         # 获取绝对路径用于图标
-        display_path = path
         path_mode = getConfig().get("Launch.path_mode", "absolute")
+        path = os.path.expandvars(path)
         if path_mode == "relative":
-            display_path = convertPath(path, "absolute")
+            path = convertPath(path, "absolute")
 
         # 设置图标
+        icon = QIcon()
         if icon_path:
             icon_check_path = convertPath(icon_path, "absolute") if path_mode == "relative" else icon_path
             if os.path.isfile(icon_check_path):
@@ -1168,10 +1170,7 @@ class MainWindow(WindowMouse, QMainWindow):
                     icon = provider.icon(QFileInfo(icon_check_path))
                 else:
                     icon = QIcon(icon_check_path)
-            else:
-                icon = QIcon()
         elif tool_type == "预设":
-            icon = QIcon()
             if name == "回收站":
                 local_icon_path = icon_dir / "Recycle.png"
                 if local_icon_path.exists():
@@ -1188,44 +1187,41 @@ class MainWindow(WindowMouse, QMainWindow):
                     exe_path = "/System/Applications/Utilities/Terminal.app"
                 provider = QFileIconProvider()
                 icon = provider.icon(QFileInfo(exe_path))
-        elif display_path and os.path.exists(display_path):
-            abs_path = os.path.normpath(os.path.abspath(display_path))
-            icon = QIcon()
-            if Path(abs_path).suffix.lower() == ".msc":
+        elif path and os.path.exists(path):
+            if Path(path).suffix.lower() == ".msc":
                 try:
                     from src.system import getFileIcon
-                    icon = getFileIcon(abs_path, getConfig().get("Launch.icon", 32) * 4)
+                    icon = getFileIcon(path, getConfig().get("Launch.icon", 32) * 4)
                 except Exception:
                     logger.exception("获取 .msc 文件图标失败")
             if icon.isNull():
                 provider = QFileIconProvider()
-                icon = provider.icon(QFileInfo(abs_path))
+                icon = provider.icon(QFileInfo(path))
         btn.setIcon(icon)
         icon_size = getConfig().get("Launch.icon", 32)
         btn.setIconSize(QSize(icon_size, icon_size))
 
-        # 根据按钮宽度在空格处自动换行
+        # 根据按钮宽度，在空格或英文与其他字符交界处自动换行
         item_width = getConfig().get("Launch.i_w", 100)
         padding = getConfig().get("Launch.padding", 8)
         fm = btn.fontMetrics()
         text_max_width = item_width - padding
-        if fm.horizontalAdvance(name) > text_max_width * 1.2:
+        if fm.horizontalAdvance(name) > text_max_width * 1.1:
             mid = len(name) // 2
             best = -1
-            for i in range(len(name)):
-                if name[i] == ' ' and (best == -1 or abs(i - mid) < abs(best - mid)):
+            for i in range(len(name) - 1):
+                a_eng = 'a' <= name[i].lower() <= 'z'
+                b_eng = 'a' <= name[i + 1].lower() <= 'z'
+                if a_eng != b_eng and (best == -1 or abs(i - mid) < abs(best - mid)):
                     best = i
             if best > 0:
-                name = name[:best] + '\n' + name[best + 1:]
+                name = name[:best + (name[best] != ' ')] + '\n' + name[best + 1:]
 
         # 设置文字在图标下方
         btn.setText(name)
         btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         
-        # 点击启动
         btn.clicked.connect(lambda checked=False, t=tool: self.runItem(t))
-        
-        # 拖拽排序
         btn.drag_started.connect(self._on_drag_started)
         
         # 右键菜单

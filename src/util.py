@@ -714,7 +714,9 @@ def parseMtime(mtime) -> float:
         return 0
 
 def convertPath(path: str, mode: str) -> str:
-    """绝对路径与相对路径转换"""
+    """绝对路径与相对路径转换，不处理有环境变量的路径"""
+    if "%" in path or "$" in path:
+        return path
     try:
         if mode == "relative" and os.path.isabs(path):
             return os.path.relpath(path, str(root))

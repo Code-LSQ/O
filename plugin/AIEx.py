@@ -47,7 +47,7 @@ class AIExtendPlugin(PluginBase):
         self._ai_capturing = False
         self._pending_ai_prompt = None
         self._current_ai_dialog = None
-        self._prompts_separator = None
+
 
     def loadConfig(self):
         super().loadConfig()
@@ -68,9 +68,6 @@ class AIExtendPlugin(PluginBase):
             "写作": "你是一名作家，请帮助我改进以下文本 {request} 的流畅性和表达，不需要过多的修饰和形容词。"
         })
 
-    # def saveConfig(self):
-    #     pass
-
     def initialize(self):
         if not super().initialize():
             return
@@ -89,10 +86,7 @@ class AIExtendPlugin(PluginBase):
         menu.addAction("OCR", self.show_ocr_dialog)
         menu.addAction("面板", self._toggle_panel)
 
-        self._prompts_separator = menu.addSeparator()
-
-        menu.aboutToShow.connect(lambda: self._rebuild_prompts_menu(menu))
-        self._cleanup_hooks.append(menu.aboutToShow.disconnect)
+        self._build_prompts_menu(menu)
 
         return menu
 
@@ -164,12 +158,7 @@ class AIExtendPlugin(PluginBase):
         name = profile_name or self.settings.get("active", "默认配置")
         return getAIClient(self.settings, profile_name=name)
 
-    def _rebuild_prompts_menu(self, menu):
-        actions = menu.actions()
-        sep_idx = actions.index(self._prompts_separator)
-        for act in actions[sep_idx + 1:]:
-            menu.removeAction(act)
-
+    def _build_prompts_menu(self, menu):
         prompts = self.settings.get("prompts", {})
         names = [n for n in prompts if n != "系统提示词"]
 
@@ -178,10 +167,6 @@ class AIExtendPlugin(PluginBase):
                 act = QAction(name, self.main_window)
                 act.triggered.connect(lambda checked, n=name: self.run_ai_prompt(n))
                 menu.addAction(act)
-        else:
-            empty_act = QAction("没有提示词", self.main_window)
-            empty_act.setEnabled(False)
-            menu.addAction(empty_act)
 
     # ── AI 设置 ──
 
