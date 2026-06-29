@@ -86,7 +86,7 @@ class AIExtendPlugin(PluginBase):
         menu = QMenu(self.description, self.main_window)
 
         menu.addAction("AI 设置", self._show_settings_dialog)
-        menu.addAction("AI 文本识别", self.show_ocr_dialog)
+        menu.addAction("OCR", self.show_ocr_dialog)
         menu.addAction("面板", self._toggle_panel)
 
         self._prompts_separator = menu.addSeparator()

@@ -1,4 +1,4 @@
-# 不导入本地模块，防止循环依赖
+"""工具模块，不导入本地模块，防止循环依赖"""
 import os
 import sys
 import json
@@ -78,12 +78,6 @@ def encodingName(actual: str) -> str:
         if name == actual:
             return label
     return actual.upper()
-
-def openLog():
-    log_file
-
-def openConfig():
-    config_file
 
 def service(services: list, action, timeout):
     for service in services:
@@ -333,42 +327,6 @@ def getAppPath():
         return sys.executable
     return os.path.abspath(sys.argv[0]) if sys.argv else ""
 
-def setAutoStart(enabled: bool) -> bool:
-    if sys.platform == "win32":
-        return windowsAutoStart(enabled)
-    elif sys.platform == "linux":
-        return linuxAutoStart(enabled)
-    elif sys.platform == "darwin":
-        return macosAutoStart(enabled)
-    return False
-
-def windowsAutoStart(enabled: bool) -> bool:
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0,
-            winreg.KEY_SET_VALUE
-        )
-        if enabled:
-            app_path = getAppPath()
-            if not app_path:
-                logger.error("开机自启失败：无法获取程序路径")
-                return False
-            winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{app_path}"')
-            logger.info("开机自启已启用")
-        else:
-            try:
-                winreg.DeleteValue(key, APP_NAME)
-                logger.info("开机自启已禁用")
-            except FileNotFoundError:
-                pass
-        winreg.CloseKey(key)
-        return True
-    except Exception:
-        logger.exception("设置开机自启失败")
-        return False
-
 def deleteRegistry(key_handle, sub_key):
     """递归删除注册表键及其所有子键"""
     try:
@@ -447,89 +405,6 @@ def setWindowsMenu(enabled: bool) -> bool:
 
     logger.info(f"右键菜单已{'注册' if enabled else '移除'}")
     return True
-
-
-def macosAutoStart(enabled: bool) -> bool:
-    plist_path = Path.home() / "Library" / "LaunchAgents" / f"com.{APP_NAME.lower()}.plist"
-    app_path = getAppPath()
-    if not app_path:
-        return False
-    
-    if enabled:
-        plist_path.parent.mkdir(parents=True, exist_ok=True)
-        plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.{APP_NAME.lower()}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{app_path}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>"""
-        try:
-            plist_path.write_text(plist_content, encoding='utf-8')
-            subprocess.run(["launchctl", "load", str(plist_path)], check=False)
-            return True
-        except Exception:
-            logger.exception("设置 macOS 开机启动失败")
-            return False
-    else:
-        if plist_path.exists():
-            try:
-                subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
-                plist_path.unlink()
-                return True
-            except Exception:
-                logger.exception("关闭 macOS 开机启动失败")
-                return False
-        return True
-
-
-def autoStartDirLinux() -> Path:
-    xdg_config = os.environ.get("XDG_CONFIG_HOME", "")
-    if xdg_config:
-        config_dir = Path(xdg_config)
-    else:
-        config_dir = Path.home() / ".config"
-    return config_dir / "autostart"
-
-def linuxAutostart(enabled: bool) -> bool:
-    autostart_dir = autoStartDirLinux()
-    desktop_file = autostart_dir / f"{APP_NAME}.desktop"
-    app_path = getAppPath()
-    if not app_path:
-        return False
-    
-    if enabled:
-        autostart_dir.mkdir(parents=True, exist_ok=True)
-        desktop_content = f"""[Desktop Entry]
-Type=Application
-Name={APP_NAME}
-Exec={app_path}
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-"""
-        try:
-            desktop_file.write_text(desktop_content, encoding='utf-8')
-            return True
-        except Exception:
-            logger.exception("设置 Linux 开机启动失败")
-            return False
-    else:
-        if desktop_file.exists():
-            try:
-                desktop_file.unlink()
-                return True
-            except Exception:
-                logger.exception("关闭 Linux 开机启动失败")
-                return False
-        return True
 
 
 process = Process()

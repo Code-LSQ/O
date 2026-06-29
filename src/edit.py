@@ -25,7 +25,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         super().__init__()
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        # 无边框似乎会造成程序启动时，在主窗口显示前有个窗口闪烁，暂未解决，问AI，说是 Windows 的图形界面系统与 Qt 框架创建无边框窗口的时序差异。问其他老资历开发者，说是 show 一个没有 parent 的子控件会这样
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle(f"{APP_NAME}")
         self.setAcceptDrops(True)
         self.app = app

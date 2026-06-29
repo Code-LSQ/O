@@ -12,13 +12,14 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, icon_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog
+from src.util import logger, theme_dir, icon_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file
 from src.config import SettingsDialog, getConfig
 from src.gui.mouse import WindowMouse
 from src.gui.control import WindowControl, PluginControl
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
 from src.plugin import getPluginManager, pluginActionMenu
+from src.system import SYSTEM_ACT
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -211,22 +212,7 @@ def filterList(items: list, whitelist: set, kind: str) -> list:
             safe.append(item)
     return safe
 
-# 打开回收站
-def openRecycle():
-    if sys.platform == "win32":
-        os.startfile("::{645FF040-5081-101B-9F08-00AA002F954E}")
-    elif sys.platform == "linux":
-        try:
-            subprocess.run(["gio", "open", "trash://"], check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            try:
-                subprocess.run(["xdg-open", "trash://"], check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                raise RuntimeError("无法打开回收站，请确保已安装 gio 或 xdg-utils")
-    elif sys.platform == "darwin":
-        subprocess.run(["open", "-a", "Finder", "~/.Trash"])
-
-# 打开文件或文件夹，不用检查 if os.path.exists(path): ，runItem 统一检查并抛异常
+# 打开文件或文件夹，不用检查文件存在性，runItem 统一检查并抛异常
 def openFile(path: str, cwd=None, args=None, operation="open"):
     if sys.platform == "win32":
         # os.startfile(path) 不支持参数，所以使用 windll
@@ -266,7 +252,7 @@ def runPython(path: str, cwd, args, operation):
         subprocess.Popen(cmd, shell=True, cwd=cwd or None)
     else:
         raise TypeError("仅支持 .py 文件")
-    
+
 def runJava(path: str, cwd, args, operation):
     run_path = getConfig().get("Launch.Runtime.Java", "")
     if not run_path:
@@ -666,6 +652,7 @@ class MainWindow(WindowMouse, QMainWindow):
             self._editor_window = EditorWindow(self.app, file_path, main_window=self)
             self.applyTheme(self._editor_window)
             self._editor_window._init_plugins()
+            self._editor_window.destroyed.connect(lambda: setattr(self, '_editor_window', None))
             getPluginManager().setMainWindow(self._editor_window)
         elif file_path:
             self._editor_window.open_file_path(file_path)
@@ -1184,6 +1171,7 @@ class MainWindow(WindowMouse, QMainWindow):
             else:
                 icon = QIcon()
         elif tool_type == "预设":
+            icon = QIcon()
             if name == "回收站":
                 local_icon_path = icon_dir / "Recycle.png"
                 if local_icon_path.exists():
@@ -1200,18 +1188,36 @@ class MainWindow(WindowMouse, QMainWindow):
                     exe_path = "/System/Applications/Utilities/Terminal.app"
                 provider = QFileIconProvider()
                 icon = provider.icon(QFileInfo(exe_path))
-            else:
-                icon = QIcon()
         elif display_path and os.path.exists(display_path):
             abs_path = os.path.normpath(os.path.abspath(display_path))
-            provider = QFileIconProvider()
-            icon = provider.icon(QFileInfo(abs_path))
-        else:
             icon = QIcon()
+            if Path(abs_path).suffix.lower() == ".msc":
+                try:
+                    from src.system import getFileIcon
+                    icon = getFileIcon(abs_path, getConfig().get("Launch.icon", 32) * 4)
+                except Exception:
+                    logger.exception("获取 .msc 文件图标失败")
+            if icon.isNull():
+                provider = QFileIconProvider()
+                icon = provider.icon(QFileInfo(abs_path))
         btn.setIcon(icon)
         icon_size = getConfig().get("Launch.icon", 32)
         btn.setIconSize(QSize(icon_size, icon_size))
-        
+
+        # 根据按钮宽度在空格处自动换行
+        item_width = getConfig().get("Launch.i_w", 100)
+        padding = getConfig().get("Launch.padding", 8)
+        fm = btn.fontMetrics()
+        text_max_width = item_width - padding
+        if fm.horizontalAdvance(name) > text_max_width * 1.2:
+            mid = len(name) // 2
+            best = -1
+            for i in range(len(name)):
+                if name[i] == ' ' and (best == -1 or abs(i - mid) < abs(best - mid)):
+                    best = i
+            if best > 0:
+                name = name[:best] + '\n' + name[best + 1:]
+
         # 设置文字在图标下方
         btn.setText(name)
         btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
@@ -1300,10 +1306,12 @@ class MainWindow(WindowMouse, QMainWindow):
         menu = QMenu(self)
         
         # 编辑器子菜单
-        in_menu = menu.addMenu("内部")
+        in_menu = menu.addMenu("功能")
         for name, path, note in [
             ("编辑器", "editor", "打开编辑器窗口"),
             ("插件管理", "plugin_manager", "管理插件启用/禁用"),
+            ("打开日志", "openLog", "打开日志文件"),
+            ("打开配置", "openConfig", "打开配置文件"),
             ("重启", "restart_app", "重启本程序"),
             ("退出", "quit_app", "退出本程序"),
         ]:
@@ -1311,15 +1319,13 @@ class MainWindow(WindowMouse, QMainWindow):
             action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._add_preset_item(n, p, nt))
             in_menu.addAction(action)
 
-        preset_items = [
-            ("回收站", "Recycle", "打开系统回收站"),
-            ("命令提示符", "Terminal", ""),
-        ]
-        
-        for name, path, note in preset_items:
+        # 系统子菜单
+        sys_menu = menu.addMenu("系统")
+
+        for name, path in SYSTEM_ACT.items():
             action = QAction(name, self)
-            action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._add_preset_item(n, p, nt))
-            menu.addAction(action)
+            action.triggered.connect(lambda checked, n=name, p=path: self._add_preset_item(n, p, ""))
+            sys_menu.addAction(action)
 
         # 获取插件列表
         plugin_items = self._get_plugin_items()
@@ -1535,29 +1541,26 @@ class MainWindow(WindowMouse, QMainWindow):
         """运行预设工具"""
         path = tool.get("path") or ""
         
-        if path == "Recycle":
-            openRecycle()
-            return
-        
         if path == "Terminal":
             cwd = tool.get("cwd", "")
             openTerminal(cwd if cwd else os.path.expanduser("~"), config=getConfig())
             return
         
-        if path == "editor":
-            self._open_editor()
-            return
-
-        if path == "restart_app":
-            restartApplication(self)
-            return
-
-        if path == "quit_app":
-            QApplication.quit()
+        func_act = {
+            "editor": lambda: self._open_editor(),
+            "restart_app": lambda: restartApplication(self),
+            "quit_app": QApplication.quit,
+            "plugin_manager": lambda: self._show_plugin_manager(),
+            "openLog": lambda: self._open_editor(str(log_file)),
+            "openConfig": lambda: self._open_editor(str(config_file)),
+        }
+        action = func_act.get(path)
+        if action:
+            action()
             return
         
-        if path == "plugin_manager":
-            self._show_plugin_manager()
+        if path in SYSTEM_ACT.values():
+            openFile(path)
             return
         
         if path.startswith("plugin_action:"):
@@ -1597,7 +1600,7 @@ class MainWindow(WindowMouse, QMainWindow):
             return
         
         messageBox(self, "警告", f"未知的预设功能: {path}", 1)
-    
+
     def _run_with_services(self, tool: dict, path: str, cwd: str, args: str, service_str: str, process_str: str):
         """启动带有附属服务/进程管理的 exe 程序"""
         services = [s.strip().strip('"') for s in service_str.split("|") if s.strip()]

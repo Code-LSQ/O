@@ -313,7 +313,7 @@ QToolButton#tool_btn {
     font-size: 14px;
     border: none;
     background: transparent;
-    padding: 2px 2px;
+    padding: 8px 2px 4px 2px;
 }
 
 QToolButton#tool_btn:hover {
