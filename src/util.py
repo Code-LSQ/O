@@ -738,6 +738,29 @@ def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
             edit.setText(path)
         return path
 
+def filePathWidget(parent, name, title="", filter="", mode="file"):
+    """封装 QLabel + QLineEdit + '选择' QPushButton 以及 getFilePath
+    返回 (QFormLayout, QLineEdit, QPushButton)"""
+    form = QFormLayout()
+    hbox = QHBoxLayout()
+    edit = QLineEdit()
+    hbox.addWidget(edit)
+
+    btn = QPushButton("选择")
+    btn.setFixedWidth(60)
+    btn.clicked.connect(lambda: getFilePath(parent, title, filter, mode, edit))
+    hbox.addWidget(btn)
+
+    form.addRow(name, hbox)
+    return form, edit, btn
+
+def labelEdit(parent, name):
+    """封装 QLabel + QLineEdit"""
+    form = QFormLayout()
+    edit = QLineEdit()
+    form.addRow(name, edit)
+    return form, edit
+
 
 class ClipboardMonitor(Singleton):
     """剪贴板监控器 - 使用 QClipboard 信号监听剪贴板变化"""

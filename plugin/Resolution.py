@@ -14,7 +14,6 @@ DM_PELSWIDTH = 0x00080000
 DM_PELSHEIGHT = 0x00100000
 DISP_CHANGE_SUCCESSFUL = 0
 
-
 class ResolutionPlugin(PluginBase):
     """快速修改分辨率，仅适用于 Windows 。不用管缩放，Windows 会自动切换，只要改分辨率"""
 
@@ -109,7 +108,6 @@ class ResolutionPlugin(PluginBase):
         logger.info("分辨率已恢复")
 
 
-
 class DEVMODE(Structure):
     _fields_ = [
         ("dmDeviceName", wintypes.WCHAR * 32),
@@ -157,7 +155,6 @@ def get_current_devmode():
         raise RuntimeError("无法获取当前显示设置")
     return devmode
 
-
 def test_resolution(width, height):
     try:
         devmode = get_current_devmode()
@@ -179,7 +176,6 @@ def test_resolution(width, height):
     }
     return False, error_map.get(result, f"未知错误 {result}")
 
-
 def apply_resolution(width, height, permanent=False):
     devmode = get_current_devmode()
     devmode.dmPelsWidth = width
@@ -187,7 +183,6 @@ def apply_resolution(width, height, permanent=False):
     devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT
     flags = CDS_UPDATEREGISTRY if permanent else 0
     return user32.ChangeDisplaySettingsW(byref(devmode), flags) == DISP_CHANGE_SUCCESSFUL
-
 
 def parse_resolution(text: str) -> Optional[Tuple[int, int]]:
     try:
@@ -242,4 +237,3 @@ class ResolutionSettingsDialog(QDialog):
             return
         self.resolutions = resolutions
         super().accept()
-

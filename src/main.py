@@ -12,14 +12,14 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, icon_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file
+from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file
 from src.config import SettingsDialog, getConfig
 from src.gui.mouse import WindowMouse
 from src.gui.control import WindowControl, PluginControl
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
 from src.plugin import getPluginManager, pluginActionMenu
-from src.system import SYSTEM_ACT
+from src.system import SYSTEM_ACT, getFileIcon
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -384,15 +384,8 @@ class EditTool(QDialog):
         form_layout.addRow(self.path_label, path_layout)
         
         # 工作目录
-        cwd_layout = QHBoxLayout()
-        self.cwd_edit = QLineEdit()
-        cwd_layout.addWidget(self.cwd_edit)
-        
-        self.cwd_browse_btn = QPushButton("浏览")
-        self.cwd_browse_btn.clicked.connect(lambda: getFilePath(self, "", "", "dir", self.cwd_edit))
-        self.cwd_browse_btn.setFixedWidth(80)
-        cwd_layout.addWidget(self.cwd_browse_btn)
-        form_layout.addRow("工作目录", cwd_layout)
+        cwd_layout, self.cwd_edit, self.cwd_browse_btn = filePathWidget(self, "工作目录", "", "", "dir")
+        form_layout.addRow(cwd_layout)
         
         # 参数
         self.args_edit = QLineEdit()
@@ -428,15 +421,8 @@ class EditTool(QDialog):
         form_layout.addRow("快捷键", hotkey_layout)
         
         # 图标
-        icon_layout = QHBoxLayout()
-        self.icon_edit = QLineEdit()
-        icon_layout.addWidget(self.icon_edit)
-        
-        self.icon_browse_btn = QPushButton("浏览")
-        self.icon_browse_btn.clicked.connect(lambda: getFilePath(self, "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)", edit=self.icon_edit))
-        self.icon_browse_btn.setFixedWidth(80)
-        icon_layout.addWidget(self.icon_browse_btn)
-        form_layout.addRow("图标", icon_layout)
+        icon_layout, self.icon_edit, _ = filePathWidget(self, "图标", "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)")
+        form_layout.addRow(icon_layout)
         
         layout.addLayout(form_layout)
         
@@ -1170,33 +1156,11 @@ class MainWindow(WindowMouse, QMainWindow):
                     icon = provider.icon(QFileInfo(icon_check_path))
                 else:
                     icon = QIcon(icon_check_path)
-        elif tool_type == "预设":
-            if name == "回收站":
-                local_icon_path = icon_dir / "Recycle.png"
-                if local_icon_path.exists():
-                    icon = QIcon(str(local_icon_path))
-                else:
-                    provider = QFileIconProvider()
-                    icon = provider.icon(QFileIconProvider.IconType.Trashcan)
-            elif name == "命令提示符":
-                if sys.platform == "win32":
-                    exe_path = "C:\\Windows\\System32\\cmd.exe"
-                elif sys.platform == "linux":
-                    exe_path = "/usr/bin/gnome-terminal"
-                elif sys.platform == "darwin":
-                    exe_path = "/System/Applications/Utilities/Terminal.app"
-                provider = QFileIconProvider()
-                icon = provider.icon(QFileInfo(exe_path))
-        elif path and os.path.exists(path):
-            if Path(path).suffix.lower() == ".msc":
-                try:
-                    from src.system import getFileIcon
-                    icon = getFileIcon(path, getConfig().get("Launch.icon", 32) * 4)
-                except Exception:
-                    logger.exception("获取 .msc 文件图标失败")
-            if icon.isNull():
-                provider = QFileIconProvider()
-                icon = provider.icon(QFileInfo(path))
+        elif path:
+            try:
+                icon = getFileIcon(path, getConfig().get("Launch.icon", 32) * 4)
+            except Exception:
+                logger.exception("获取图标失败")
         btn.setIcon(icon)
         icon_size = getConfig().get("Launch.icon", 32)
         btn.setIconSize(QSize(icon_size, icon_size))
@@ -1318,7 +1282,7 @@ class MainWindow(WindowMouse, QMainWindow):
             ("插件管理", "plugin_manager", "管理插件启用/禁用"),
             ("打开日志", "openLog", "打开日志文件"),
             ("打开配置", "openConfig", "打开配置文件"),
-            ("重启", "restart_app", "重启本程序"),
+            ("重启程序", "restart_app", "重启本程序"),
             ("退出", "quit_app", "退出本程序"),
         ]:
             action = QAction(name, self)
