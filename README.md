@@ -6,7 +6,23 @@
 
 ### 项目简介
 
-O，考虑到我是取名废，干脆用这个名字了，原名是 MiniWread，可以理解为极简读写，是一个带了一些奇怪功能的文本编辑器。但是你也可以完全抛弃它的文本编辑器功能来用。
+
+O，考虑到我是取名废，干脆用这个名字了，是一个带了一些奇怪功能的快速启动器。
+
+当前支持平台为 Windows 8.1+。
+
+Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
+
+Maye Lite，我有时候无法启动成功。
+uTools，需要安装且会自动更新，同时稍显笨重。
+Dawn Launcher，用 Electron ，速度比较慢，资源占用比较大。
+Flow Launcher，速度比较慢。
+Lucy，不支持高分辨率屏幕。
+Quicker 是会员制软件，虽然很好用但免费版翻页麻烦而且图标功能实在不便。
+Tiny，软件大小只有 10M，内存占用也小，不过有些细节我不喜欢。
+
+它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。
+
 
 提醒您，这是一个非常丑陋、抽象、无语的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者个人使用的。
 
@@ -42,8 +58,7 @@ Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 
 #### 插件规范
 
-插件路径为 /plugin/ ，其内的每个 .py 文件都是一个插件
-
+插件路径为 /plugin/ ，其内的每个 .py、.pyd 文件都是一个插件
 
 插件系统主要由两部分组成：
 1. PluginBase（基类） — 定义在 src/plugin.py，所有插件必须继承此类
@@ -58,47 +73,8 @@ Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 方法：
 getAction()，控制插件返回的按钮
 
-如果有需要额外导入的 Python 库依赖，请在 .py 文件中注释。
+如果有需要额外导入的 Python 库依赖，在 .py 文件中用 PluginLib 列表标明。
 
-getPluginManager(main_window=None) -> PluginManager，通过此函数获取管理器实例，首次调用时会自动扫描 plugin/ 目录。
-
-
-PluginBase — 插件基类
-
-所有插件必须继承 PluginBase 类
-
-实例属性（由管理器自动管理）：
-  main_window — 主窗口 QMainWindow 实例
-  enabled     — bool，当前是否已启用
-  settings    — dict，插件配置数据
-可重写的方法（按调用时机排列）：
-  初始化阶段：
-    initialize() — 插件初始化。
-      在 enablePlugin() 中被调用，此时 main_window 已可用。
-
-
-
-PluginManager — 插件管理器
-关键方法：
-scan_plugins(force=False) -> list，扫描 plugin/ 目录，返回所有可用插件名称。
-
-enablePlugin(plugin_name) -> bool，启用指定插件：实例化 -> initialize() -> activate()。如果插件已启用，直接返回 True。
-
-disablePlugin(plugin_name)，禁用指定插件：deactivate() -> cleanup() -> 从内存移除。
-
-loadEnablePlugin()，加载所有已配置为启用状态的插件。
-
-reloadPlugin(plugin_name) -> bool，重新加载单个插件（先禁用，再重新 import 并启用）。
-
-reloadPlugins()，重新加载所有已启用的插件。
-
-isPluginEnabled(plugin_name) -> bool
-
-save_config(config_file: Path)，将 enabled_plugins 和 plugin_configs 保存到 JSON 文件。
-
-load_config(config_file: Path)，从 JSON 文件加载插件配置并加载所有启用的插件。
-
-setMainWindow(main_window)，设置主窗口实例，更新所有已加载插件的 main_window 属性。
 
 
 配置保存
@@ -122,7 +98,6 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 1. 在 plugin/ 下新建 .py 文件
 2. 定义类继承 PluginBase，设置 description 属性
 3. 实现 getAction() 返回菜单项
-4. 在 init 中调用 super().init(main_window)，然后加载配置
 
 
 

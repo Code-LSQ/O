@@ -1504,13 +1504,9 @@ class MainWindow(WindowMouse, QMainWindow):
         args_raw = tool.get("args", "")
 
         if "{Select}" in args_raw and not GlobalHotkeyListener._placeholders.get("Select"):
-            self._delayed_tool = tool
-            self._capture_placeholders()
+            copy_selection()
+            QTimer.singleShot(300, lambda t=tool: self._finish_capture_and_run(t))
             return
-
-        if "{Clipboard}" in args_raw and not GlobalHotkeyListener._placeholders.get("Clipboard"):
-            clip = QApplication.clipboard()
-            GlobalHotkeyListener._placeholders["Clipboard"] = clip.text() or ""
 
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
@@ -1854,24 +1850,10 @@ class MainWindow(WindowMouse, QMainWindow):
         super().showEvent(event)
         self.refreshTool()
     
-    def _capture_placeholders(self):
-        """捕获当前剪贴板和选中文本到 GlobalHotkeyListener._placeholders"""
-        clip = QApplication.clipboard()
-        GlobalHotkeyListener._placeholders["Clipboard"] = clip.text() or ""
-        self._pending_clipboard = GlobalHotkeyListener._placeholders["Clipboard"]
-        copy_selection()
-        QTimer.singleShot(300, self._finish_capture_placeholders)
-    
-    def _finish_capture_placeholders(self):
-        clip = QApplication.clipboard()
-        current = clip.text() or ""
-        old = self._pending_clipboard
-        GlobalHotkeyListener._placeholders["Select"] = current
-        if old:
-            clip.setText(old)
-        if hasattr(self, '_delayed_tool') and self._delayed_tool:
-            self.runItem(self._delayed_tool)
-            self._delayed_tool = None
+    def _finish_capture_and_run(self, tool):
+        """捕获选中文本后执行工具"""
+        GlobalHotkeyListener._placeholders["Select"] = QApplication.clipboard().text() or ""
+        self.runItem(tool)
     
     def registerHotkeys(self):
         """注册所有工具快捷键"""

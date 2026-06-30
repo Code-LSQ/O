@@ -238,7 +238,6 @@
     "规则是 [查找, 替换] 格式": "Rule must be in [find, replace] format",
     "运行后隐藏": "Hide After Launch",
     "悬停切换分组": "Hover to Switch Group",
-    "获取剪贴板与选中": "Capture Clipboard & Selection",
     "绝对路径": "Absolute Path",
     "相对路径": "Relative Path",
     "路径": "Path",

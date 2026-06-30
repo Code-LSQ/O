@@ -38,7 +38,7 @@ class GlobalHotkeyListener(Singleton):
     _vk_pressed = set()
     _hotkey_triggered = False
     _is_pasting = False
-    _placeholders = {"Clipboard": "", "Select": ""}
+    _placeholders = {"Select": ""}
 
     _VK_TO_NAME = {
         0x41: 'a', 0x42: 'b', 0x43: 'c', 0x44: 'd', 0x45: 'e',

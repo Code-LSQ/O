@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from functools import lru_cache
 
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
@@ -87,11 +88,11 @@ if sys.platform == "win32":
         (0x9F, 0xDF, 0xE8, 0x99, 0x8D, 0xAA, 0x09, 0x50)
     )
 
+    @lru_cache(maxsize=256)
     def getFileIcon(file_path: str, size: int = 128) -> QIcon:
-        """获取文件的高分辨率图标"""
+        """获取文件的高分辨率图标（带缓存）"""
         if not os.path.exists(file_path):
             return QIcon()
-
         shinfo = SHFILEINFO()
         result = windll.shell32.SHGetFileInfoW(
             file_path, 0, byref(shinfo), sizeof(shinfo), SHGFI_SYSICONINDEX
@@ -112,21 +113,27 @@ if sys.platform == "win32":
         vtable_ptr = cast(image_list, POINTER(c_void_p))
         vtable = cast(vtable_ptr.contents, POINTER(c_void_p))
 
+        Release = cast(vtable[2], WINFUNCTYPE(c_ulong, c_void_p))
         GetIconFunc = WINFUNCTYPE(HRESULT, c_void_p, c_int, c_uint, POINTER(c_void_p))
         get_icon_func = cast(vtable[10], GetIconFunc)
 
         hicon = c_void_p()
         hr = get_icon_func(image_list, index, 0, byref(hicon))
         if hr != 0 or not hicon:
-            cast(vtable[2], WINFUNCTYPE(c_ulong, c_void_p))(image_list)
+            Release(image_list)
             return QIcon()
 
         screen_dc = windll.user32.GetDC(0)
+        if not screen_dc:
+            windll.user32.DestroyIcon(hicon)
+            Release(image_list)
+            return QIcon()
+
         mem_dc = windll.gdi32.CreateCompatibleDC(screen_dc)
         if not mem_dc:
             windll.user32.ReleaseDC(0, screen_dc)
             windll.user32.DestroyIcon(hicon)
-            cast(vtable[2], WINFUNCTYPE(c_ulong, c_void_p))(image_list)
+            Release(image_list)
             return QIcon()
 
         bmi = BITMAPINFOHEADER()
@@ -143,35 +150,28 @@ if sys.platform == "win32":
             windll.gdi32.DeleteDC(mem_dc)
             windll.user32.ReleaseDC(0, screen_dc)
             windll.user32.DestroyIcon(hicon)
-            cast(vtable[2], WINFUNCTYPE(c_ulong, c_void_p))(image_list)
+            Release(image_list)
             return QIcon()
 
         old_bmp = windll.gdi32.SelectObject(mem_dc, hbitmap)
         memset(bits, 0, size * size * 4)
         windll.user32.DrawIconEx(mem_dc, 0, 0, hicon, size, size, 0, None, 0x0003)
+        windll.gdi32.SelectObject(mem_dc, old_bmp)
 
         pixel_bytes = string_at(bits, size * size * 4)
-        img = QImage(size, size, QImage.Format_ARGB32)
-        for y in range(size):
-            for x in range(size):
-                idx = (y * size + x) * 4
-                img.setPixel(x, y,
-                    (pixel_bytes[idx + 3] << 24) |
-                    (pixel_bytes[idx + 2] << 16) |
-                    (pixel_bytes[idx + 1] << 8) |
-                    pixel_bytes[idx])
+        img = QImage(pixel_bytes, size, size, QImage.Format_ARGB32)
 
-        windll.gdi32.SelectObject(mem_dc, old_bmp)
+        icon = QIcon(QPixmap.fromImage(img))
+        if icon.isNull():
+            icon = QIcon()
+
         windll.gdi32.DeleteObject(hbitmap)
         windll.gdi32.DeleteDC(mem_dc)
         windll.user32.ReleaseDC(0, screen_dc)
         windll.user32.DestroyIcon(hicon)
-        cast(vtable[2], WINFUNCTYPE(c_ulong, c_void_p))(image_list)
+        Release(image_list)
 
-        pixmap = QPixmap.fromImage(img)
-        if pixmap and not pixmap.isNull():
-            return QIcon(pixmap)
-        return QIcon()
+        return icon
 
 
 elif sys.platform == "linux":
