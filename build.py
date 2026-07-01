@@ -19,6 +19,7 @@ mainpy = str(root / "o.py")
 # Linux，两种，x64、ARM64的  .AppImage ，可能会加上 .deb。
 # macOS，两种，x64、ARM64的 .dmg，可能会加上 .app。
 
+
 def pycache(path: Path):
     for pycache_dir in path.rglob("__pycache__"):
         if pycache_dir.is_dir():
@@ -27,6 +28,7 @@ def pycache(path: Path):
                 shutil.rmtree(pycache_dir)
             except Exception as e:
                 print(f"删除 {pycache_dir} 失败: {e}")
+
 
 def pluginLib():
     """扫描 /plugin 内所有 .py 文件，解析 PluginLib 得到额外依赖"""
@@ -45,11 +47,13 @@ def pluginLib():
             continue
 
         for node in tree.body:
-            if (isinstance(node, ast.Assign)
-                    and len(node.targets) == 1
-                    and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id == "PluginLib"
-                    and isinstance(node.value, ast.List)):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "PluginLib"
+                and isinstance(node.value, ast.List)
+            ):
                 for e in node.value.elts:
                     if isinstance(e, ast.Constant) and isinstance(e.value, str):
                         dep = e.value.split("==", 1)[0].strip().lower()
@@ -59,62 +63,66 @@ def pluginLib():
 
     return deps
 
+
 def main():
     if sys.platform == "win32":  # Windows
         args = [
             mainpy,
-            '--onedir',
-            '--noconfirm',
-            '--contents-directory=.',
-            f'--name={APP_NAME}',
-            f'--icon={logo_ico}',
-            f'--specpath={root}',
-            f'--distpath={dist}',
-            f'--workpath={work}',
-            '--add-data=README.md;.',
-            '--add-data=src;src',
-            '--add-data=plugin;plugin',
-            '--hidden-import=shiboken6',
-            '--exclude-module', 'tkinter',
-            '--windowed'
+            "--onedir",
+            "--noconfirm",
+            "--contents-directory=.",
+            f"--name={APP_NAME}",
+            f"--icon={logo_ico}",
+            f"--specpath={root}",
+            f"--distpath={dist}",
+            f"--workpath={work}",
+            "--add-data=README.md;.",
+            "--add-data=src;src",
+            "--add-data=plugin;plugin",
+            "--hidden-import=shiboken6",
+            "--exclude-module",
+            "tkinter",
+            "--windowed",
         ]
-        
+
     elif sys.platform == "linux":  # Linux
         args = [
             mainpy,
-            '--onedir',
-            '--noconfirm',
-            '--contents-directory=.',
-            f'--name={APP_NAME}',
-            f'--icon={logo_png}',
-            f'--specpath={root}',
-            f'--distpath={dist}',
-            f'--workpath={work}',
-            '--add-data=README.md:.',
-            '--add-data=src:src',
-            '--add-data=plugin:plugin',
-            '--hidden-import=shiboken6',
-            '--exclude-module', 'tkinter',
-            '--windowed'
+            "--onedir",
+            "--noconfirm",
+            "--contents-directory=.",
+            f"--name={APP_NAME}",
+            f"--icon={logo_png}",
+            f"--specpath={root}",
+            f"--distpath={dist}",
+            f"--workpath={work}",
+            "--add-data=README.md:.",
+            "--add-data=src:src",
+            "--add-data=plugin:plugin",
+            "--hidden-import=shiboken6",
+            "--exclude-module",
+            "tkinter",
+            "--windowed",
         ]
 
     elif sys.platform == "darwin":  # macOS
         args = [
             mainpy,
-            '--onedir',
-            '--noconfirm',
-            '--contents-directory=.',
-            f'--name={APP_NAME}',
-            f'--icon={logo_icn}',
-            f'--specpath={root}',
-            f'--distpath={dist}',
-            f'--workpath={work}',
-            '--add-data=README.md:.',
-            '--add-data=src:src',
-            '--add-data=plugin:plugin',
-            '--hidden-import=shiboken6',
-            '--exclude-module', 'tkinter',
-            '--windowed'
+            "--onedir",
+            "--noconfirm",
+            "--contents-directory=.",
+            f"--name={APP_NAME}",
+            f"--icon={logo_icn}",
+            f"--specpath={root}",
+            f"--distpath={dist}",
+            f"--workpath={work}",
+            "--add-data=README.md:.",
+            "--add-data=src:src",
+            "--add-data=plugin:plugin",
+            "--hidden-import=shiboken6",
+            "--exclude-module",
+            "tkinter",
+            "--windowed",
         ]
 
     # for dep in pluginLib():
@@ -122,7 +130,7 @@ def main():
 
     pycache(root)
 
-    PyInstaller.__main__.run(args)
+    return PyInstaller.__main__.run(args)
 
 
 if __name__ == "__main__":

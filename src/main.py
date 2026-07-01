@@ -269,27 +269,6 @@ def runJava(path: str, cwd, args, operation):
     else:
         raise TypeError("仅支持 .jar 文件")
 
-def runScript(path: str, cwd, args, operation="open"):
-    ext = Path(path).suffix.lower()
-    if sys.platform == "win32":
-        if ext in ('.bat', '.cmd', '.vbs'):
-            windll.shell32.ShellExecuteW(None, operation, path, args or None, cwd or None, 1)
-        elif ext == '.ps1':
-            cmd = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', path]
-            if args:
-                cmd.append(args)
-            subprocess.Popen(cmd, shell=True, cwd=cwd or None)
-        else:
-            raise TypeError(f"不支持的脚本类型: {ext}")
-    else:
-        if ext == '.sh':
-            cmd = ['sh', path]
-            if args:
-                cmd.append(args)
-            subprocess.Popen(cmd, cwd=cwd or None)
-        else:
-            raise TypeError(f"不支持的脚本类型: {ext}")
-
 def open_url(url, *args, **kwargs):
     webbrowser.open(url)
 
@@ -299,7 +278,6 @@ TYPES = {
     "命令行": cmdApp,
     "Python": runPython,
     "Java": runJava,
-    "脚本": runScript,
     "网址": open_url,
     "预设": None  # 预设类型由 runPreset 方法处理
 }
@@ -380,7 +358,6 @@ class EditTool(QDialog):
                 "命令行": ("选择可执行文件", "可执行文件 (*.exe);;所有文件 (*)"),
                 "Python": ("Python 脚本", "Python 文件 (*.py);;所有文件 (*)"),
                 "Java": ("JAR 文件", "JAR 文件 (*.jar);;所有文件 (*)"),
-                "脚本": ("选择脚本文件", "脚本文件 (*.bat *.cmd *.vbs *.ps1);;所有文件 (*)"),
             }
             title, filt = choices.get(t, ("选择文件", ""))
             path = getFilePath(self, title, filt, edit=self.path_edit)
@@ -389,7 +366,7 @@ class EditTool(QDialog):
 
         self.path_edit, self.browse_btn = filePathWidget(self, form_layout, "路径", "选择文件", "")
         self.path_edit.setPlaceholderText("选择文件或输入路径")
-        self._path_label = form_layout.labelForField(self.path_edit)
+        self._path_label = form_layout.itemAt(form_layout.rowCount() - 1, QFormLayout.ItemRole.LabelRole).widget()
         self.browse_btn.clicked.disconnect()
         self.browse_btn.clicked.connect(_on_browse)
         
@@ -1222,14 +1199,14 @@ class MainWindow(WindowMouse, QMainWindow):
         """显示工具右键菜单"""
         menu = QMenu(self)
 
-        launch_action = QAction("启动", self)
-        launch_action.triggered.connect(lambda: self.runItem(tool))
-        menu.addAction(launch_action)
-        
         open_location_action = QAction(tr("打开文件位置"), self)
         open_location_action.triggered.connect(lambda: self._open_tool_location(tool))
         menu.addAction(open_location_action)
-        
+
+        open_editor_action = QAction("编辑器打开", self)
+        open_editor_action.triggered.connect(lambda _, t=tool: self._openInEditor(t))
+        menu.addAction(open_editor_action)
+
         menu.addSeparator()
         
         edit_action = QAction(tr("编辑"), self)
@@ -1454,6 +1431,16 @@ class MainWindow(WindowMouse, QMainWindow):
             tool_path = convertPath(tool_path, "absolute")
         showFile(tool_path)
 
+    def _openInEditor(self, tool: dict):
+        """在编辑器中打开工具文件"""
+        tool_path = tool.get("path", "")
+        if not tool_path:
+            return
+        path_mode = getConfig().get("Launch.path_mode", "absolute")
+        if path_mode == "relative":
+            tool_path = convertPath(tool_path, "absolute")
+        self._open_editor(tool_path)
+
     def _delete_tool(self, index: int):
         """删除启动项"""
         tools = _get_group_tools(getConfig(), self._current_group)
@@ -1494,7 +1481,7 @@ class MainWindow(WindowMouse, QMainWindow):
             # 为避免信号阻塞，先隐藏再运行
             if getConfig().get("Launch.run_hide", False):
                 self.hide()
-            operation = "runas" if tool.get("run_as_admin") and tool_type in ("文件", "脚本") else "open"
+            operation = "runas" if tool.get("run_as_admin") and tool_type == "文件" else "open"
             if tool_type == "预设":
                 self.runPreset(tool)
             elif tool_type == "文件" and path and Path(path).suffix.lower() == '.exe':
@@ -1741,11 +1728,6 @@ class MainWindow(WindowMouse, QMainWindow):
         type_map = {
             ".py": "Python",
             ".jar": "Java",
-            ".bat": "脚本",
-            ".cmd": "脚本",
-            ".vbs": "脚本",
-            ".ps1": "脚本",
-            ".sh": "脚本",
         }
         tool_type = type_map.get(ext, "文件")
         

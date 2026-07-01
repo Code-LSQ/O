@@ -24,7 +24,7 @@ from PySide6.QtCore import QTimer
 from src.util import plugin_dir, logger, Singleton
 
 
-PLUGIN_EXTENSION = {'.py', '.pyd', '.so'}
+PLUGIN_EXTENSION = {".py", ".pyd", ".so"}
 
 class PluginBase(ABC):
     """
