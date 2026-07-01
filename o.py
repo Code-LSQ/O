@@ -13,6 +13,7 @@ from src.util import APP_NAME, ExceptSign, logger, getScreen
 AUTHOR = "Code-LSQ"
 VERSION = "0.5.0"
 
+
 def exceptionHook(exc_type, value, tb):
     exceptionInfo = (exc_type, value, tb)
     message = "".join(traceback.format_exception(*exceptionInfo)).rstrip()
@@ -25,6 +26,7 @@ def exceptionHook(exc_type, value, tb):
 
     if "__compiled__" not in globals():
         sys.__excepthook__(*exceptionInfo)
+
 
 def main():
 
@@ -47,6 +49,7 @@ def main():
     window.show()
 
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

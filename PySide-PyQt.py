@@ -21,21 +21,22 @@ INCLUDE_EXTENSION = {".py", ".md", ".toml", ".txt"}
 
 
 REPLACE_RULE_PySide_to_PyQt = [
-    (re.compile(r'\b(?!pyqt)Signal\b'), 'pyqtSignal'),
-    (re.compile(r'\b(?!pyqt)Slot\b'), 'pyqtSlot'),
-    (re.compile(r'\b(?!pyqt)Property\b'), 'pyqtProperty'),
-    (re.compile(r'\b(Q[A-Z][a-zA-Z0-9_]+)\.([A-Z][a-zA-Z]+)\.([a-zA-Z0-9_]+)\b'), r'\1.\3'),
+    (re.compile(r"\b(?!pyqt)Signal\b"), "pyqtSignal"),
+    (re.compile(r"\b(?!pyqt)Slot\b"), "pyqtSlot"),
+    (re.compile(r"\b(?!pyqt)Property\b"), "pyqtProperty"),
+    (re.compile(r"\b(Q[A-Z][a-zA-Z0-9_]+)\.([A-Z][a-zA-Z]+)\.([a-zA-Z0-9_]+)\b"), r"\1.\3"),
     # 负向前瞻 `(?!emit|...|)` 避免错误替换 Qt 的方法名
-    (re.compile(r'\bQt\.([A-Z][a-zA-Z]+)\.(?!emit|connect|disconnect|sender)([a-zA-Z0-9_]+)\b'), r'Qt.\2'),
-    (re.compile(r'PySide6'), 'PyQt6'),
+    (re.compile(r"\bQt\.([A-Z][a-zA-Z]+)\.(?!emit|connect|disconnect|sender)([a-zA-Z0-9_]+)\b"),r"Qt.\2",),
+    (re.compile(r"PySide6"), "PyQt6"),
 ]
 
 REPLACE_RULE_PyQt_to_PySide = [
-    (re.compile(r'\bpyqtSignal\b'), 'Signal'),
-    (re.compile(r'\bpyqtSlot\b'), 'Slot'),
-    (re.compile(r'\bpyqtProperty\b'), 'Property'),
-    (re.compile(r'PyQt6'), 'PySide6'),
+    (re.compile(r"\bpyqtSignal\b"), "Signal"),
+    (re.compile(r"\bpyqtSlot\b"), "Slot"),
+    (re.compile(r"\bpyqtProperty\b"), "Property"),
+    (re.compile(r"PyQt6"), "PySide6"),
 ]
+
 
 def convertFile(path: Path, flag):
     if flag == 1:
@@ -44,7 +45,7 @@ def convertFile(path: Path, flag):
         rule = REPLACE_RULE_PyQt_to_PySide
 
     try:
-        with open(path, 'r', encoding='utf-8', newline='') as file_in:
+        with open(path, "r", encoding="utf-8", newline="") as file_in:
             content = file_in.read()
     except UnicodeDecodeError:
         print(f"[skip] {path} is not UTF-8 text")
@@ -53,8 +54,9 @@ def convertFile(path: Path, flag):
     for pattern, replace in rule:
         content = pattern.sub(replace, content)
 
-    with open(path, 'w', encoding='utf-8', newline='') as file_out:
+    with open(path, "w", encoding="utf-8", newline="") as file_out:
         file_out.write(content)
+
 
 def convertDir(path: Path, flag):
     for current_root, dir_names, file_names in os.walk(path):
@@ -96,4 +98,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

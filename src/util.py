@@ -32,11 +32,11 @@ config_file = data_dir / "config.json"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 log_file = data_dir / "app.log"
-log_handler = RotatingFileHandler(log_file, maxBytes=1024*1024, backupCount=1, encoding='utf-8')
+log_handler = RotatingFileHandler(log_file, maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[log_handler, logging.StreamHandler()]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[log_handler, logging.StreamHandler()],
 )
 logger = logging.getLogger()
 
@@ -48,17 +48,35 @@ logo_ico = icon_dir / "Logo.ico"
 logo_png = icon_dir / "Logo.png"
 logo_icn = icon_dir / "Logo.icns"
 
-BINARY_EXTENSIONS = {'.exe', '.dll', '.so', '.dylib', '.bin', '.msi',
-    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.tiff', '.tif', '.psd', '.ai', '.mp3', '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.wav', '.flac', '.ogg', '.m4a', '.zip', '.jar', '.apk', '.cbz', '.hap', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz', '.zst', '.tgz', '.tbz2', '.txz', '.pyc', '.pyo', '.pyd', '.o', '.a', '.lib', '.obj', '.class', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.epub', '.mobi', '.ttf', '.otf', '.woff', '.woff2', '.eot', '.db', '.sqlite', '.sqlite3', '.mdb', '.iso', '.dmg', '.vhd', '.img',
+EXTENSION = {
+    "TXET": {".txt", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".xml", ".html", ".css", ".scss", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".rb", ".php", ".sql", ".gitignore", ".env"},
+    "Markdown": {".md", ".markdown", ".mkdn"},
+    "IMAGE": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif", ".psd", ".ai", ".heic", ".avif"},
+    "ZIP": {".zip", ".jar", ".apk", ".cbz", ".hap"},
+    "TAR": {".tar", ".tgz", ".tbz2", ".txz"},
+    "ARCHIVE": {".gz", ".bz2", ".xz", ".zst", ".7z", ".rar"},
+    "AUDIO": {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"},
+    "VIDEO": {".mp4", ".avi", ".mkv", ".mov", ".webm"},
+    "EXECUTE": {".exe", ".dll", ".so", ".dylib", ".bin", ".msi", ".wasm", ".pyc", ".pyd", ".o", ".a", ".lib", ".obj", ".class"},
+    "DOCUMENT": {".pdf", ".docx", ".pptx", ".xlsx", ".epub", ".mobi", ".odt", ".ods", ".odp"},
+    "FONT": {".ttf", ".otf", ".woff", ".woff2", ".ttc"},
+    "DATABASE": {".db", ".sqlite", ".sqlite3", ".accdb"},
+    "DISK": {".iso", ".dmg", ".vhd", ".img"},
 }
 
-EXTENSION = {
-    "TXET": {'.txt', '.md', '.markdown', '.py', '.js', '.ts', '.jsx', '.tsx', '.json', '.xml', '.html', '.css', '.scss', '.less', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.sh', '.bat', '.ps1', '.c', '.cpp', '.h', '.hpp', '.java', '.go', '.rs', '.rb', '.php', '.sql', '.gitignore', '.env'},
-    "Markdown": {'.md', '.markdown', '.mkdn'},
-    "IMAGE": {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.tiff', '.tif'},
-    "ZIP": {'.zip', '.jar', '.apk', '.cbz', '.hap'},
-    "TAR": {'.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.txz'}
-}
+BINARY_EXTENSIONS = (
+    EXTENSION["IMAGE"]
+    | EXTENSION["ZIP"]
+    | EXTENSION["TAR"]
+    | EXTENSION["ARCHIVE"]
+    | EXTENSION["AUDIO"]
+    | EXTENSION["VIDEO"]
+    | EXTENSION["EXECUTE"]
+    | EXTENSION["DOCUMENT"]
+    | EXTENSION["FONT"]
+    | EXTENSION["DATABASE"]
+    | EXTENSION["DISK"]
+)
 
 EXCLUDE_PATTERNS = ["*.pyc", "*/__pycache__/", "*/.git/"]
 
@@ -72,6 +90,7 @@ ENCODING_MAP = {
     "Shift-JIS": "shift_jis",
 }
 
+
 def encodingName(actual: str) -> str:
     """实际编码名 → 显示标签"""
     for label, name in ENCODING_MAP.items():
@@ -79,18 +98,19 @@ def encodingName(actual: str) -> str:
             return label
     return actual.upper()
 
+
 def service(services: list, action, timeout):
     for service in services:
         try:
             if sys.platform == "win32":
                 if action == "disable":
-                    cmd = ['sc', 'config', service, 'start=', 'demand']
+                    cmd = ["sc", "config", service, "start=", "demand"]
                 else:
-                    cmd = ['net', action, service]
+                    cmd = ["net", action, service]
             elif sys.platform == "linux":
-                cmd = ['systemctl', action, service]
+                cmd = ["systemctl", action, service]
             elif sys.platform == "darwin":
-                cmd = ['launchctl', action, service]
+                cmd = ["launchctl", action, service]
 
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if result.returncode == 0:
@@ -99,6 +119,7 @@ def service(services: list, action, timeout):
                 logger.error(f"{service} {action} 失败: {result.stderr.strip()}")
         except Exception:
             logger.exception("执行命令错误")
+
 
 class ExceptSignal(QObject):
     catchException = Signal(str)
@@ -120,10 +141,12 @@ def dropFile(event: QDropEvent, file=None, folder=None):
                 folder(path)
             event.acceptProposedAction()
 
+
 def isWin11() -> bool:
     if sys.platform == "win32":
         return sys.getwindowsversion().build >= 22000
     return False
+
 
 def isAdmin() -> bool:
     """检测当前进程是否具有管理员/root权限"""
@@ -134,6 +157,7 @@ def isAdmin() -> bool:
             return False
     elif sys.platform in ("linux", "darwin"):
         return os.geteuid() == 0
+
 
 def runAdmin() -> bool:
     """若当前非管理员，尝试提权并重启（Windows 使用 UAC）。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
@@ -162,16 +186,19 @@ def runAdmin() -> bool:
             logger.exception("提权失败")
             return False
 
+
 def restartApplication(parent=None):
     if not messageBox(parent, tr("重启"), tr("确定重启应用？") + "\n" + tr("未保存的更改将丢失")):
         return
     QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
 
+
 class Singleton:
     """单例基类（线程安全）"""
+
     _instance = None
     __lock = threading.Lock()
-    
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls.__lock:
@@ -179,13 +206,13 @@ class Singleton:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self, *args, **kwargs):
         if self._initialized:
             return
         self._initialized = True
         self._init_impl(*args, **kwargs)
-    
+
     def _init_impl(self, *args, **kwargs):
         pass
 
@@ -204,12 +231,17 @@ def showFile(path: str, parent=None):
     except Exception:
         logger.exception("打开资源管理器失败")
 
+
 def getDisk():
     disk = disk_usage("/")
-    logger.info(f"磁盘信息\n总空间: {disk.total / (1024**3):.2f} GB\n已使用: {disk.used / (1024**3):.2f} GB\n使用率: {disk.percent}%")
+    logger.info(
+        f"磁盘信息\n总空间: {disk.total / (1024**3):.2f} GB\n已使用: {disk.used / (1024**3):.2f} GB\n使用率: {disk.percent}%"
+    )
+
 
 def getNet():
     pass
+
 
 def getScreen(app: QApplication, logic=False):
     """获取屏幕逻辑分辨率、缩放和像素密度(DPI)，logic 为 True 输出逻辑分辨率，为 False 输出物理分辨率"""
@@ -230,6 +262,7 @@ def getScreen(app: QApplication, logic=False):
         logger.exception("获取屏幕信息失败")
     return 1920, 1200, 60, 1.0, 96.0
 
+
 def getDevice(app: QApplication):
     try:
         getDisk()
@@ -237,25 +270,27 @@ def getDevice(app: QApplication):
     except Exception:
         logger.exception("获取设备信息失败")
 
+
 def systemLanguage() -> str:
     """检测系统语言（简体中文返回"简体中文"，其他返回语言代码，同时也是文件名称）"""
     lang_code = QLocale.system().name()
-    if lang_code == 'zh_CN':
+    if lang_code == "zh_CN":
         return "简体中文"
-    if lang_code == 'en_GB':
-        lang_code = 'en_US'
+    if lang_code == "en_GB":
+        lang_code = "en_US"
     lang_file = lang_dir / f"{lang_code}.json"
     if lang_file.exists():
         return lang_code
     return "简体中文"
 
+
 class Translator(Singleton):
     """翻译，简体中文不做处理，其他语言加载 JSON 文件，通过字符串替换进行翻译"""
-    
+
     def _init_impl(self):
         self._translations = {}
         self.lang = "简体中文"
-    
+
     def loadTranslation(self, lang_code: str):
         """按需加载单个语言文件，简体中文不做处理"""
         if lang_code == "简体中文" or lang_code in self._translations:
@@ -263,24 +298,24 @@ class Translator(Singleton):
         file = lang_dir / f"{lang_code}.json"
         if file.exists():
             try:
-                with open(file, 'r', encoding='utf-8') as f:
+                with open(file, "r", encoding="utf-8") as f:
                     self._translations[lang_code] = json.load(f)
             except Exception:
                 logger.exception(f"加载语言文件失败 {file}")
-    
+
     def getLanguages(self) -> list:
         """扫描目录，从 .json 文件的"翻译"字段获取可用语言的列表"""
         languages = ["简体中文"]
         for file in sorted(lang_dir.glob("*.json")):
             try:
-                data = json.loads(file.read_text(encoding='utf-8'))
+                data = json.loads(file.read_text(encoding="utf-8"))
                 name = data.get("翻译")
                 if name and name not in languages:
                     languages.append(name)
             except Exception:
                 logger.exception(f"读取语言文件失败 {file}")
         return languages
-    
+
     def setLanguage(self, lang_code: str):
         """通过语言代码设置当前语言"""
         if not lang_code or lang_code == "简体中文":
@@ -288,7 +323,7 @@ class Translator(Singleton):
             return
         self.lang = lang_code
         self.loadTranslation(lang_code)
-    
+
     def tr(self, key: str) -> str:
         """翻译键值"""
         if self.lang == "简体中文":
@@ -297,7 +332,8 @@ class Translator(Singleton):
         if lang_dict and lang_dict.get(key):
             return lang_dict.get(key)
         return key if key else ""
-    
+
+
 def tr(key: str) -> str:
     """
     翻译函数，使用字符串替换
@@ -322,10 +358,12 @@ def tr(key: str) -> str:
 def getTimestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+
 def getAppPath():
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         return sys.executable
     return os.path.abspath(sys.argv[0]) if sys.argv else ""
+
 
 def deleteRegistry(key_handle, sub_key):
     """递归删除注册表键及其所有子键"""
@@ -348,12 +386,13 @@ def deleteRegistry(key_handle, sub_key):
     except OSError:
         logger.exception(f"删除注册表键失败: {sub_key}")
 
+
 def isMenuRegister() -> bool:
     if sys.platform != "win32":
         return False
     shell_keys = [
         rf"Software\Classes\*\shell\{APP_NAME}",
-        rf"Software\Classes\Directory\shell\{APP_NAME}"
+        rf"Software\Classes\Directory\shell\{APP_NAME}",
     ]
     for shell_key in shell_keys:
         try:
@@ -367,6 +406,7 @@ def isMenuRegister() -> bool:
     logger.info("右键菜单注册表键已存在，跳过写入")
     return True
 
+
 def setWindowsMenu(enabled: bool) -> bool:
     app_path = getAppPath()
     if not app_path:
@@ -374,13 +414,15 @@ def setWindowsMenu(enabled: bool) -> bool:
 
     shell_keys = [
         rf"Software\Classes\*\shell\{APP_NAME}",
-        rf"Software\Classes\Directory\shell\{APP_NAME}"
+        rf"Software\Classes\Directory\shell\{APP_NAME}",
     ]
 
     for shell_key in shell_keys:
         try:
             if enabled:
-                key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_SET_VALUE)
+                key = winreg.CreateKeyEx(
+                    winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_SET_VALUE
+                )
                 try:
                     winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"使用 {APP_NAME} 打开")
                     winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f'"{app_path}",0')
@@ -388,7 +430,7 @@ def setWindowsMenu(enabled: bool) -> bool:
                         winreg.HKEY_CURRENT_USER, shell_key + r"\command", 0, winreg.KEY_SET_VALUE
                     )
                     try:
-                        if getattr(sys, 'frozen', False):
+                        if getattr(sys, "frozen", False):
                             cmd = f'"{app_path}" "%1"'
                         else:
                             cmd = f'"{sys.executable}" "{app_path}" "%1"'
@@ -429,7 +471,7 @@ def monitor():
 def urlToPath(url: QUrl) -> str:
     """将 QUrl 转换为本地路径（处理 Windows file:///C:/... 格式）"""
     path = url.toLocalFile() or url.path()
-    if sys.platform == 'win32' and len(path) > 2 and path[0] == '/' and path[2] == ':':
+    if sys.platform == "win32" and len(path) > 2 and path[0] == "/" and path[2] == ":":
         path = path[1:]
     return os.path.normpath(path)
 
@@ -453,7 +495,9 @@ class FileDrop(QLabel):
     def _filter_files(self, files: list) -> list:
         if not self._file_filter:
             return files
-        return [f for f in files if any(f.lower().endswith(ext.lower()) for ext in self._file_filter)]
+        return [
+            f for f in files if any(f.lower().endswith(ext.lower()) for ext in self._file_filter)
+        ]
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -521,9 +565,9 @@ class RuntimeManager:
     def envTemp(self, current_path):
         """获取临时环境变量，将当前路径和配置中的临时路径加入PATH"""
         env = os.environ.copy()
-        
+
         path_list = [current_path]
-        
+
         if self.Python:
             python_dir = os.path.dirname(self.Python)
             if python_dir and os.path.isdir(python_dir):
@@ -531,48 +575,48 @@ class RuntimeManager:
             script_dir = os.path.join(python_dir, "Scripts")
             if os.path.isdir(script_dir):
                 path_list.append(script_dir)
-        
+
         if self.Java:
             java_dir = os.path.dirname(self.Java)
             if java_dir and os.path.isdir(java_dir):
                 path_list.append(java_dir)
-        
+
         for p in self.Temp_Path:
             if p and os.path.isdir(p):
                 path_list.append(p)
-        
+
         current_path_env = env.get("PATH", "")
         path_separator = ";" if sys.platform == "win32" else ":"
-        
+
         new_path = path_separator.join(path_list)
         if current_path_env:
             new_path += path_separator + current_path_env
-        
+
         env["PATH"] = new_path
-        
+
         return env
 
-
 env_manager = RuntimeManager()
+
 
 def openTerminal(path, config=None):
     """打开命令行并设置临时环境变量"""
     if not path:
         logger.warning(f"无效的路径: {path!r}")
         return False
-    
+
     path = os.path.abspath(path)
     if os.path.isfile(path):
         path = os.path.dirname(path)
-    
+
     if config:
         env_manager.loadConfig(config)
-    
+
     env = env_manager.envTemp(path)
-    
+
     try:
         if sys.platform == "win32":
-            subprocess.Popen(["cmd", '/k', 'cd', '/d', path], env=env, cwd=path)
+            subprocess.Popen(["cmd", "/k", "cd", "/d", path], env=env, cwd=path)
         elif sys.platform == "linux":
             subprocess.Popen(["xdg-terminal"], env=env, cwd=path, start_new_session=True)
         elif sys.platform == "darwin":
@@ -584,12 +628,12 @@ def openTerminal(path, config=None):
         return False
 
 
-def fileHash(path: str, algorithm = "md5") -> str:
+def fileHash(path: str, algorithm="md5") -> str:
     """计算文件哈希值，建议使用 md5 或 sha256 算法"""
     ha = hashlib.new(algorithm)
     try:
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(1024 * 1024), b''):
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 ha.update(chunk)
         return ha.hexdigest()
     except Exception:
@@ -648,15 +692,17 @@ def checksum(path: str, algorithm="md5", _visited=None) -> str:
     logger.warning(f"不支持的路径类型: {path}")
     return ""
 
+
 def imageBase64(path: str) -> tuple[str, str]:
     """读取图片文件，返回 (base64_data, mime_type)"""
-    ext = os.path.splitext(path)[1].lower().lstrip('.') or 'png'
-    if ext == 'jpg':
-        ext = 'jpeg'
+    ext = os.path.splitext(path)[1].lower().lstrip(".") or "png"
+    if ext == "jpg":
+        ext = "jpeg"
     mime = f"image/{ext}"
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         data = base64.b64encode(f.read()).decode()
     return data, mime
+
 
 def formatFileSize(size: int) -> str:
     """格式化文件大小"""
@@ -664,12 +710,13 @@ def formatFileSize(size: int) -> str:
         return f"{size} B"
     elif size < 1024 * 1024:
         return f"{size / 1024:.1f} KB"
-    elif size < 1024 ** 3:
+    elif size < 1024**3:
         return f"{size / (1024 ** 2):.1f} MB"
-    elif size < 1024 ** 4:
+    elif size < 1024**4:
         return f"{size / (1024 ** 3):.2f} GB"
     else:
         return f"{size / (1024 ** 4):.2f} TB"
+
 
 def lastModify(url):
     response = requests.get(url)
@@ -678,6 +725,7 @@ def lastModify(url):
         dt = parsedate_to_datetime(last_modified)
         return dt.timestamp()
     return 0
+
 
 def folderLastModified(path):
     """返回文件夹本身及其文件和子文件夹最新的最后修改时间，Unix 时间戳"""
@@ -704,6 +752,7 @@ def folderLastModified(path):
         raise RuntimeError(f"遍历目录失败: {e}")
     return int(last_mtime)
 
+
 def parseMtime(mtime) -> float:
     """将远程 ISO 时间字符串转为 Unix 时间戳"""
     if isinstance(mtime, (int, float)):
@@ -712,6 +761,7 @@ def parseMtime(mtime) -> float:
         return datetime.fromisoformat(str(mtime)).timestamp()
     except (ValueError, TypeError):
         return 0
+
 
 def convertPath(path: str, mode: str) -> str:
     """绝对路径与相对路径转换，不处理有环境变量的路径"""
@@ -726,6 +776,7 @@ def convertPath(path: str, mode: str) -> str:
         pass
     return path
 
+
 def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
     """封装 QFileDialog 返回文件路径，可以与 QLineEdit 配合设置文本，用 lambda 连接到 选择、浏览 按钮"""
     if mode == "file":
@@ -737,6 +788,7 @@ def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
         if edit:
             edit.setText(path)
         return path
+
 
 def filePathWidget(parent, form: QFormLayout, name, title="", filter="", mode="file"):
     """封装 QLabel + QLineEdit + '选择' QPushButton 并直接添加到 form
@@ -753,6 +805,7 @@ def filePathWidget(parent, form: QFormLayout, name, title="", filter="", mode="f
     form.addRow(name, hbox)
     return edit, btn
 
+
 def labelEdit(parent, name):
     """封装 QLabel + QLineEdit，水平布局，独立宽度，不按 QFormLayout 的方式对齐"""
     layout = QHBoxLayout()
@@ -766,6 +819,7 @@ def labelEdit(parent, name):
 
 class ClipboardMonitor(Singleton):
     """剪贴板监控器 - 使用 QClipboard 信号监听剪贴板变化"""
+
     def _init_impl(self):
         self._clipboard = QApplication.clipboard()
         self._last_content = ""
@@ -808,7 +862,7 @@ class ClipboardMonitor(Singleton):
 
 
 def inputDialog(parent, title, text="", default=""):
-    """封装 QDialog ，输入单一输入，替换 QInputDialog """
+    """封装 QDialog ，输入单一输入，替换 QInputDialog"""
     while True:
         dialog = QDialog(parent)
         dialog.setWindowTitle(title)
@@ -826,6 +880,7 @@ def inputDialog(parent, title, text="", default=""):
             continue
 
         return None
+
 
 def dictDialog(parent, title, name="名称", value="值", name_text="", value_text="", textedit=False):
     """封装 QDialog ，输入名称与值，需要字典时使用，返回元组 (name, value) 或 (None, None) ，因为元组对调用比较方便"""
@@ -848,7 +903,9 @@ def dictDialog(parent, title, name="名称", value="值", name_text="", value_te
 
         if dialogBox(vlayout, dialog):
             name_result = name_edit.text().strip()
-            value_result = value_edit.toPlainText().strip() if textedit else value_edit.text().strip()
+            value_result = (
+                value_edit.toPlainText().strip() if textedit else value_edit.text().strip()
+            )
             if not name_result:
                 messageBox(parent, "警告", f"{name}不能为空", 1)
                 name_text, value_text = name_result, value_result
@@ -856,7 +913,8 @@ def dictDialog(parent, title, name="名称", value="值", name_text="", value_te
             return name_result, value_result
         return None, None
 
-def dialogBox(layout: QLayout, dialog: QDialog, num: int=2, show=True):
+
+def dialogBox(layout: QLayout, dialog: QDialog, num: int = 2, show=True):
     """封装 QDialog 的按钮
     差异仅为 StandardButton.Ok 的文本为确定，.Cancel 的文本为取消
     统一使用 Ok、Cancel ，不使用 Yes、No"""
@@ -865,7 +923,9 @@ def dialogBox(layout: QLayout, dialog: QDialog, num: int=2, show=True):
         box.accepted.connect(dialog.accept)
         box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("确定"))
     elif num == 2:
-        box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         box.accepted.connect(dialog.accept)
         box.rejected.connect(dialog.reject)
         box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("确定"))
@@ -876,7 +936,8 @@ def dialogBox(layout: QLayout, dialog: QDialog, num: int=2, show=True):
     else:
         return box
 
-def messageBox(parent, title, text, num: int=2):
+
+def messageBox(parent, title, text, num: int = 2):
     """封装 QMessageBox
     差异仅为 StandardButton.Ok 的文本为确定，.Cancel 的文本为取消
     统一使用 Ok、Cancel ，不使用 Yes、No
@@ -895,12 +956,18 @@ def messageBox(parent, title, text, num: int=2):
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg_box.button(QMessageBox.StandardButton.Ok).setText(tr("确定"))
     if num == 2:
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        msg_box.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
         msg_box.button(QMessageBox.StandardButton.Ok).setText(tr("确定"))
         msg_box.button(QMessageBox.StandardButton.Cancel).setText(tr("取消"))
         return msg_box.exec() == QMessageBox.StandardButton.Ok
     if num == 3:
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+        msg_box.setStandardButtons(
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel
+        )
         msg_box.button(QMessageBox.StandardButton.Save).setText(tr("保存"))
         msg_box.button(QMessageBox.StandardButton.Discard).setText(tr("不保存"))
         msg_box.button(QMessageBox.StandardButton.Cancel).setText(tr("取消"))
@@ -949,7 +1016,7 @@ class ManagePair(QDialog):
         if isinstance(pairs, dict):
             items = pairs.items()
         elif isinstance(pairs, list):
-            items = [(p.get("name",""), p.get("value","")) for p in pairs if isinstance(p, dict)]
+            items = [(p.get("name", ""), p.get("value", "")) for p in pairs if isinstance(p, dict)]
         else:
             items = []
         for name, value in items:
@@ -1004,7 +1071,6 @@ class ManagePair(QDialog):
             self.pair_list.takeItem(row)
 
 
-
 # Windows 11 右键一级菜单
 # def register_context_menu():
 #     """注册一级菜单（需要 DLL + MSIX 在同目录）"""
@@ -1015,4 +1081,3 @@ class ManagePair(QDialog):
 #     """移除一级菜单"""
 #     dll = root / "OShellExt.dll"
 #     subprocess.run(["rundll32.exe", f"{dll},RemovePackage"], check=True)
-

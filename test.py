@@ -48,8 +48,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.util import logger
 
-
 # Mock 基础设施 — 统一工厂
+
 
 def _make_module(name, **attrs):
     """Create a module with given attributes"""
@@ -61,46 +61,50 @@ def _make_module(name, **attrs):
 
 class _MockSingleton:
     _instance = None
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
+
     def __init__(self, *args, **kwargs):
-        if getattr(self, '_initialized', False):
+        if getattr(self, "_initialized", False):
             return
         self._initialized = True
         self._init_impl(*args, **kwargs)
+
     def _init_impl(self, *args, **kwargs):
         pass
 
 
 _SHARED_UTIL_ATTRS = {
-    'Singleton': _MockSingleton,
-    'logger': MagicMock(),
-    'APP_NAME': 'O',
-    'IMAGE_EXTENSIONS': {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp'},
-    'TEXT_EXTENSIONS': {'.txt', '.md', '.py', '.js', '.json', '.html', '.css', '.xml'},
-    'MARKDOWN_EXTENSIONS': {'.md', '.markdown'},
-    'ZIP_EXTENSIONS': {'.zip', '.jar', '.apk'},
-    'TAR_EXTENSIONS': {'.tar', '.tar.gz', '.tgz'},
-    'ENCODING_MAP': {'UTF-8': 'utf-8', 'GBK': 'gb18030', 'Shift-JIS': 'shift_jis'},
-    'formatFileSize': MagicMock(return_value="1.0 KB"),
-    'folderLastModified': MagicMock(return_value=0),
-    'parseMtime': lambda x: x,
-    'getFilePath': MagicMock(),
-    'messageBox': MagicMock(),
-    'dialogBox': MagicMock(),
-    'data_dir': MagicMock(),
-    'plugin_dir': MagicMock()
+    "Singleton": _MockSingleton,
+    "logger": MagicMock(),
+    "APP_NAME": "O",
+    "IMAGE_EXTENSIONS": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp"},
+    "TEXT_EXTENSIONS": {".txt", ".md", ".py", ".js", ".json", ".html", ".css", ".xml"},
+    "MARKDOWN_EXTENSIONS": {".md", ".markdown"},
+    "ZIP_EXTENSIONS": {".zip", ".jar", ".apk"},
+    "TAR_EXTENSIONS": {".tar", ".tar.gz", ".tgz"},
+    "ENCODING_MAP": {"UTF-8": "utf-8", "GBK": "gb18030", "Shift-JIS": "shift_jis"},
+    "formatFileSize": MagicMock(return_value="1.0 KB"),
+    "folderLastModified": MagicMock(return_value=0),
+    "parseMtime": lambda x: x,
+    "getFilePath": MagicMock(),
+    "messageBox": MagicMock(),
+    "dialogBox": MagicMock(),
+    "data_dir": MagicMock(),
+    "plugin_dir": MagicMock(),
 }
 
 
 def _make_qt_core():
     """Create Qt mock modules (PySide6 / QtCore / QtGui / QtWidgets)"""
     return {
-        'PySide6': MagicMock(),
-        'PySide6.QtCore': _make_module('PySide6.QtCore',
+        "PySide6": MagicMock(),
+        "PySide6.QtCore": _make_module(
+            "PySide6.QtCore",
             QThread=MagicMock,
             Signal=MagicMock,
             QObject=MagicMock,
@@ -111,37 +115,54 @@ def _make_qt_core():
             Slot=MagicMock,
             QUrl=MagicMock,
         ),
-        'PySide6.QtGui': MagicMock(),
-        'PySide6.QtWidgets': MagicMock(),
+        "PySide6.QtGui": MagicMock(),
+        "PySide6.QtWidgets": MagicMock(),
     }
 
 
 def _make_util():
     """Create src.util mock module"""
-    return {'src.util': _make_module('src.util', **_SHARED_UTIL_ATTRS)}
+    return {"src.util": _make_module("src.util", **_SHARED_UTIL_ATTRS)}
 
 
 def _make_file():
     """Create src.file mock module"""
-    return {'src.file': _make_module('src.file',
-        FileSelect=MagicMock(),
-        format_file_size=MagicMock(return_value="1.0 KB"),
-        fileTree=MagicMock(return_value=[]),
-        filter_files=MagicMock(return_value=[]),
-    )}
+    return {
+        "src.file": _make_module(
+            "src.file",
+            FileSelect=MagicMock(),
+            format_file_size=MagicMock(return_value="1.0 KB"),
+            fileTree=MagicMock(return_value=[]),
+            filter_files=MagicMock(return_value=[]),
+        )
+    }
 
 
 def _make_config():
     """Create src.config mock module"""
-    return {'src.config': _make_module('src.config',
-        getConfig=MagicMock(return_value={}),
-    )}
+    return {
+        "src.config": _make_module(
+            "src.config",
+            getConfig=MagicMock(return_value={}),
+        )
+    }
 
 
-def applyMock(*, qt=True, psutil=False, pynput=False,
-                 keyboard=False, mouse=False, requests_mod=False,
-                 markdown=False, util=False, real_logger_util=False,
-                 file_mod=False, config=False, real_plugin=False):
+def applyMock(
+    *,
+    qt=True,
+    psutil=False,
+    pynput=False,
+    keyboard=False,
+    mouse=False,
+    requests_mod=False,
+    markdown=False,
+    util=False,
+    real_logger_util=False,
+    file_mod=False,
+    config=False,
+    real_plugin=False,
+):
     """按需组装 mock 环境，每个 setUp() 中调用
 
     返回 patcher 列表，调用方需在 tearDown() 中对每个 patcher 执行 stop()。
@@ -149,68 +170,70 @@ def applyMock(*, qt=True, psutil=False, pynput=False,
     patchers = []
 
     if qt:
-        p = patch.dict('sys.modules', _make_qt_core())
+        p = patch.dict("sys.modules", _make_qt_core())
         p.start()
         patchers.append(p)
 
     if psutil:
-        p = patch.dict('sys.modules', {'psutil': MagicMock()})
+        p = patch.dict("sys.modules", {"psutil": MagicMock()})
         p.start()
         patchers.append(p)
 
     if pynput:
-        p = patch.dict('sys.modules', {'pynput': MagicMock()})
+        p = patch.dict("sys.modules", {"pynput": MagicMock()})
         p.start()
         patchers.append(p)
 
     if keyboard:
-        p = patch.dict('sys.modules', {'pynput.keyboard': MagicMock()})
+        p = patch.dict("sys.modules", {"pynput.keyboard": MagicMock()})
         p.start()
         patchers.append(p)
 
     if mouse:
-        p = patch.dict('sys.modules', {'pynput.mouse': MagicMock()})
+        p = patch.dict("sys.modules", {"pynput.mouse": MagicMock()})
         p.start()
         patchers.append(p)
 
     if requests_mod:
-        p = patch.dict('sys.modules', {'requests': MagicMock()})
+        p = patch.dict("sys.modules", {"requests": MagicMock()})
         p.start()
         patchers.append(p)
 
     if markdown:
-        p = patch.dict('sys.modules', {'markdown': MagicMock()})
+        p = patch.dict("sys.modules", {"markdown": MagicMock()})
         p.start()
         patchers.append(p)
 
     if util:
         if real_logger_util:
             import importlib
-            real_util = importlib.import_module('src.util')
+
+            real_util = importlib.import_module("src.util")
             attrs = dict(_SHARED_UTIL_ATTRS)
-            attrs['logger'] = real_util.logger
-            attrs['getTimestamp'] = MagicMock(return_value='2025-01-01 00:00:00')
-            p = patch.dict('sys.modules', {'src.util': _make_module('src.util', **attrs)})
+            attrs["logger"] = real_util.logger
+            attrs["getTimestamp"] = MagicMock(return_value="2025-01-01 00:00:00")
+            p = patch.dict("sys.modules", {"src.util": _make_module("src.util", **attrs)})
         else:
-            p = patch.dict('sys.modules', _make_util())
+            p = patch.dict("sys.modules", _make_util())
         p.start()
         patchers.append(p)
 
     if file_mod:
-        p = patch.dict('sys.modules', _make_file())
+        p = patch.dict("sys.modules", _make_file())
         p.start()
         patchers.append(p)
 
     if config:
-        p = patch.dict('sys.modules', _make_config())
+        p = patch.dict("sys.modules", _make_config())
         p.start()
         patchers.append(p)
 
     if real_plugin:
-        if 'src.plugin' in sys.modules:
-            del sys.modules['src.plugin']
+        if "src.plugin" in sys.modules:
+            del sys.modules["src.plugin"]
         import src.plugin
-        p = patch.dict('sys.modules', {'src.plugin': src.plugin})
+
+        p = patch.dict("sys.modules", {"src.plugin": src.plugin})
         p.start()
         patchers.append(p)
 
@@ -218,6 +241,7 @@ def applyMock(*, qt=True, psutil=False, pynput=False,
 
 
 # Group: util (12 tests)
+
 
 class TestEncodingMap(unittest.TestCase):
     def setUp(self):
@@ -228,13 +252,13 @@ class TestEncodingMap(unittest.TestCase):
             p.stop()
 
     def test_encoding_map_contains_common(self):
-        encodings = sys.modules['src.util'].ENCODING_MAP
+        encodings = sys.modules["src.util"].ENCODING_MAP
         self.assertIn("UTF-8", encodings)
         self.assertIn("GBK", encodings)
         self.assertEqual(encodings["UTF-8"], "utf-8")
 
     def test_encoding_map_values_are_strings(self):
-        for key, val in sys.modules['src.util'].ENCODING_MAP.items():
+        for key, val in sys.modules["src.util"].ENCODING_MAP.items():
             self.assertIsInstance(key, str)
             self.assertIsInstance(val, str)
 
@@ -248,24 +272,24 @@ class TestFileExtensions(unittest.TestCase):
             p.stop()
 
     def test_image_extensions_contain_common(self):
-        exts = sys.modules['src.util'].IMAGE_EXTENSIONS
-        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+        exts = sys.modules["src.util"].IMAGE_EXTENSIONS
+        for ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
             self.assertIn(ext, exts)
 
     def test_text_extensions_contain_common(self):
-        exts = sys.modules['src.util'].TEXT_EXTENSIONS
-        for ext in ['.txt', '.md', '.py', '.json']:
+        exts = sys.modules["src.util"].TEXT_EXTENSIONS
+        for ext in [".txt", ".md", ".py", ".json"]:
             self.assertIn(ext, exts)
 
     def test_markdown_extensions(self):
-        exts = sys.modules['src.util'].MARKDOWN_EXTENSIONS
-        self.assertIn('.md', exts)
-        self.assertIn('.markdown', exts)
+        exts = sys.modules["src.util"].MARKDOWN_EXTENSIONS
+        self.assertIn(".md", exts)
+        self.assertIn(".markdown", exts)
 
     def test_zip_extensions(self):
-        exts = sys.modules['src.util'].ZIP_EXTENSIONS
-        self.assertIn('.zip', exts)
-        self.assertIn('.apk', exts)
+        exts = sys.modules["src.util"].ZIP_EXTENSIONS
+        self.assertIn(".zip", exts)
+        self.assertIn(".apk", exts)
 
 
 class TestConstants(unittest.TestCase):
@@ -277,15 +301,17 @@ class TestConstants(unittest.TestCase):
             p.stop()
 
     def test_app_name(self):
-        self.assertEqual(sys.modules['src.util'].APP_NAME, "O")
+        self.assertEqual(sys.modules["src.util"].APP_NAME, "O")
 
 
 # Group: plugin (48 tests)
+
 
 class _PluginTestBase(unittest.TestCase):
     def setUp(self):
         self._patchers = applyMock(qt=True, util=True, psutil=True, pynput=True, real_plugin=True)
         from src.plugin import PluginManager, PluginBase
+
         self.PluginBase = PluginBase
         self.PluginManager = PluginManager
 
@@ -349,6 +375,7 @@ class TestPluginBase(_PluginTestBase):
         class TestPlugin(self.PluginBase):
             name = "MyPlugin"
             description = "A test plugin"
+
         plugin = TestPlugin()
         self.assertEqual(plugin.name, "MyPlugin")
         self.assertEqual(plugin.description, "A test plugin")
@@ -359,22 +386,29 @@ class TestCreateCustomPlugin(_PluginTestBase):
     def test_plugin_with_custom_getAction(self):
         class MenuPlugin(self.PluginBase):
             name = "MenuPlugin"
+
             def getAction(self):
                 return "menu_action"
+
         plugin = MenuPlugin()
         self.assertEqual(plugin.getAction(), "menu_action")
 
     def test_plugin_lifecycle_methods(self):
         calls = []
+
         class LifecyclePlugin(self.PluginBase):
             name = "LifecyclePlugin"
+
             def __init__(self, main_window=None):
                 super().__init__(main_window)
                 self.initialized = False
+
             def initialize(self):
                 calls.append("initialize")
+
             def cleanup(self):
                 calls.append("cleanup")
+
         plugin = LifecyclePlugin()
         plugin.initialize()
         plugin.cleanup()
@@ -390,6 +424,7 @@ class TestPluginManagerBasic(_PluginTestBase):
 
     def test_singleton_through_getPluginManager(self):
         from src.plugin import getPluginManager
+
         pm1 = getPluginManager()
         pm2 = getPluginManager()
         self.assertIs(pm1, pm2)
@@ -400,8 +435,8 @@ class TestPluginManagerBasic(_PluginTestBase):
 
     def test_initial_attributes_exist(self):
         pm = self.PluginManager()
-        self.assertTrue(hasattr(pm, 'enabled_plugins'))
-        self.assertTrue(hasattr(pm, 'plugin_dir'))
+        self.assertTrue(hasattr(pm, "enabled_plugins"))
+        self.assertTrue(hasattr(pm, "plugin_dir"))
 
     def test_main_window_settable(self):
         mw = MagicMock()
@@ -422,7 +457,7 @@ class _PluginWithTempDirBase(_PluginTestBase):
 
     def _create_plugin_file(self, name, content):
         path = os.path.join(self.temp_plugin_dir, name)
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         return path
 
@@ -440,21 +475,27 @@ class TestPluginManagerWithTempDir(_PluginWithTempDirBase):
         self.assertEqual(plugins, [])
 
     def test_scan_valid_plugin_file(self):
-        self._create_plugin_file("my_plugin.py", """
+        self._create_plugin_file(
+            "my_plugin.py",
+            """
 from src.plugin import PluginBase
 
 class MyPlugin(PluginBase):
     name = "MyPlugin"
     description = "Test"
-""")
+""",
+        )
         plugins = self.pm.scanPlugins()
         self.assertIn("my_plugin", plugins)
 
     def test_scan_plugin_missing_base_class(self):
-        self._create_plugin_file("bad.py", """
+        self._create_plugin_file(
+            "bad.py",
+            """
 class NotAPlugin:
     pass
-""")
+""",
+        )
         result = self.pm.scanPlugins()
         self.assertIn("bad", result)
         self.assertFalse(self.pm.enablePlugin("bad"))
@@ -463,15 +504,19 @@ class NotAPlugin:
         result = self.pm.enablePlugin("nonexistent")
         self.assertFalse(result)
 
+
 class TestPluginManagerEnableDisable(_PluginWithTempDirBase):
 
     def test_enable_disable_cycle(self):
-        self._create_plugin_file("cycle_plugin.py", """
+        self._create_plugin_file(
+            "cycle_plugin.py",
+            """
 from src.plugin import PluginBase
 
 class CyclePlugin(PluginBase):
     name = "CyclePlugin"
-""")
+""",
+        )
         self.pm.scanPlugins()
         result = self.pm.enablePlugin("cycle_plugin")
         self.assertTrue(result)
@@ -482,12 +527,15 @@ class CyclePlugin(PluginBase):
         self.assertNotIn("cycle_plugin", self.pm.plugins)
 
     def test_enable_twice_returns_true(self):
-        self._create_plugin_file("dup.py", """
+        self._create_plugin_file(
+            "dup.py",
+            """
 from src.plugin import PluginBase
 
 class DupPlugin(PluginBase):
     name = "DupPlugin"
-""")
+""",
+        )
         self.pm.scanPlugins()
         self.assertTrue(self.pm.enablePlugin("dup"))
         self.assertTrue(self.pm.enablePlugin("dup"))
@@ -496,24 +544,30 @@ class DupPlugin(PluginBase):
         self.pm.disablePlugin("not_enabled")
 
     def test_get_all_plugins(self):
-        self._create_plugin_file("p1.py", """
+        self._create_plugin_file(
+            "p1.py",
+            """
 from src.plugin import PluginBase
 
 class P1(PluginBase):
     name = "Plugin1"
-""")
+""",
+        )
         self.pm.scanPlugins()
         self.pm.enablePlugin("p1")
         all_p = self.pm.getAllPlugin()
         self.assertIn("p1", all_p)
 
     def test_get_enabled_plugins(self):
-        self._create_plugin_file("en.py", """
+        self._create_plugin_file(
+            "en.py",
+            """
 from src.plugin import PluginBase
 
 class En(PluginBase):
     name = "EnabledPlugin"
-""")
+""",
+        )
         self.pm.scanPlugins()
         self.pm.enablePlugin("en")
         self.assertTrue(self.pm.isPluginEnabled("en"))
@@ -532,35 +586,45 @@ class TestPluginManagerConfig(_PluginWithTempDirBase):
     def _make_config(self, data=None):
         config = MagicMock()
         config_data = data or {}
+
         def get_side_effect(key, default=None):
             return config_data.get(key, default)
+
         config.get.side_effect = get_side_effect
+
         def set_side_effect(key, value):
             config_data[key] = value
+
         config.set.side_effect = set_side_effect
         return config, config_data
 
     def test_init_config_loads_enabled_plugins(self):
         config, _ = self._make_config({"Plugin": {"p1": {"enabled": True}}})
-        self._create_plugin_file("p1.py", """
+        self._create_plugin_file(
+            "p1.py",
+            """
 from src.plugin import PluginBase
 
 class P1(PluginBase):
     name = "P1"
     description = "Test plugin"
-""")
+""",
+        )
         self.pm.initConfig(config)
         self.assertTrue(self.pm.isPluginEnabled("p1"))
         self.assertIn("p1", self.pm.plugins)
 
     def test_init_config_default_enabled(self):
         config, _ = self._make_config({"Plugin": {}})
-        self._create_plugin_file("p1.py", """
+        self._create_plugin_file(
+            "p1.py",
+            """
 from src.plugin import PluginBase
 
 class P1(PluginBase):
     name = "P1"
-""")
+""",
+        )
         self.pm.initConfig(config)
         self.assertTrue(self.pm.isPluginEnabled("p1"))
 
@@ -578,12 +642,14 @@ class P1(PluginBase):
 
 # Group: ai (61 tests)
 
+
 class TestResolveImageUrls(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         from src.core.AI import resolve_image_urls
+
         self.resolve_image_urls = resolve_image_urls
 
     def tearDown(self):
@@ -596,35 +662,37 @@ class TestResolveImageUrls(unittest.TestCase):
         self.assertEqual(result, messages)
 
     def test_non_file_url_not_touched(self):
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}}
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}}
+                ],
+            }
+        ]
         original = json.loads(json.dumps(messages))
         self.resolve_image_urls(messages)
         self.assertEqual(messages, original)
 
     def test_file_url_no_real_file_logs_error(self):
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "url": "file:///nonexistent/img.png"}
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "url": "file:///nonexistent/img.png"}],
+            }
+        ]
         self.resolve_image_urls(messages)
         part = messages[0]["content"][0]
         self.assertEqual(part["type"], "text")
         self.assertIn("图片加载失败", part["text"])
 
     def test_different_url_key_handling(self):
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "url": "file:///nonexistent/img.png"}
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "url": "file:///nonexistent/img.png"}],
+            }
+        ]
         self.resolve_image_urls(messages)
         part = messages[0]["content"][0]
         self.assertEqual(part["type"], "text")
@@ -642,10 +710,11 @@ class TestResolveImageUrls(unittest.TestCase):
 
 class TestAIClientBuildPromptContent(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         from src.core.AI import getAIClient
+
         self.getAIClient = getAIClient
 
     def tearDown(self):
@@ -659,9 +728,7 @@ class TestAIClientBuildPromptContent(unittest.TestCase):
 
     def test_without_placeholder_appends(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content(
-            "You are a translator.", "hello world"
-        )
+        result = client._build_prompt_content("You are a translator.", "hello world")
         self.assertEqual(result, "You are a translator.\n\nhello world")
 
     def test_empty_prompt(self):
@@ -676,18 +743,17 @@ class TestAIClientBuildPromptContent(unittest.TestCase):
 
     def test_multiple_placeholders(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content(
-            "{request} and {request}", "text"
-        )
+        result = client._build_prompt_content("{request} and {request}", "text")
         self.assertEqual(result, "text and text")
 
 
 class TestAIClientExtractUserMessage(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         from src.core.AI import getAIClient
+
         self.getAIClient = getAIClient
 
     def tearDown(self):
@@ -704,20 +770,19 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
         client = self.getAIClient(config={})
         messages = [
             {"role": "assistant", "content": "response"},
-            {"role": "user", "content": "final question"}
+            {"role": "user", "content": "final question"},
         ]
         result = client._extract_user_message(messages)
         self.assertEqual(result, "final question")
 
     def test_multipart_content(self):
         client = self.getAIClient(config={})
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "part1"},
-                {"type": "text", "text": "part2"}
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "part1"}, {"type": "text", "text": "part2"}],
+            }
+        ]
         result = client._extract_user_message(messages)
         self.assertEqual(result, "part1\npart2")
 
@@ -734,14 +799,16 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
 
     def test_mixed_content_types_in_multipart(self):
         client = self.getAIClient(config={})
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "text part"},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
-                {"type": "text", "text": "more text"}
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "text part"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
+                    {"type": "text", "text": "more text"},
+                ],
+            }
+        ]
         result = client._extract_user_message(messages)
         self.assertIn("text part", result)
         self.assertIn("more text", result)
@@ -750,10 +817,11 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
 
 class TestLoadBalancing(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                       keyboard=True, mouse=True,
-                                       config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         from src.core.AI import getAIClient
+
         self.getAIClient = getAIClient
         client = self.getAIClient(config={})
         client.__class__._lb_failures = {}
@@ -761,6 +829,7 @@ class TestLoadBalancing(unittest.TestCase):
 
     def tearDown(self):
         from src.core.AI import getAIClient
+
         client = getAIClient(config={})
         client.__class__._lb_failures = {}
         client.__class__._lb_disabled = {}
@@ -783,9 +852,7 @@ class TestLoadBalancing(unittest.TestCase):
         config = {
             "load_balance": {
                 "enabled": True,
-                "profiles": {
-                    "DeepSeek": {"priority": 1, "weight": 1}
-                }
+                "profiles": {"DeepSeek": {"priority": 1, "weight": 1}},
             }
         }
         client = self.getAIClient(config=config)
@@ -796,10 +863,7 @@ class TestLoadBalancing(unittest.TestCase):
         config = {
             "load_balance": {
                 "enabled": True,
-                "profiles": {
-                    "A": {"priority": 1, "weight": 1},
-                    "B": {"priority": 1, "weight": 1}
-                }
+                "profiles": {"A": {"priority": 1, "weight": 1}, "B": {"priority": 1, "weight": 1}},
             }
         }
         client = self.getAIClient(config=config)
@@ -815,8 +879,8 @@ class TestLoadBalancing(unittest.TestCase):
                 "enabled": True,
                 "profiles": {
                     "Primary": {"priority": 1, "weight": 1},
-                    "Secondary": {"priority": 2, "weight": 1}
-                }
+                    "Secondary": {"priority": 2, "weight": 1},
+                },
             }
         }
         client = self.getAIClient(config=config)
@@ -831,8 +895,8 @@ class TestLoadBalancing(unittest.TestCase):
                 "enabled": True,
                 "profiles": {
                     "Disabled": {"priority": 0, "weight": 1},
-                    "Active": {"priority": 1, "weight": 1}
-                }
+                    "Active": {"priority": 1, "weight": 1},
+                },
             }
         }
         client = self.getAIClient(config=config)
@@ -871,8 +935,8 @@ class TestLoadBalancing(unittest.TestCase):
                 "enabled": True,
                 "profiles": {
                     "Bad": {"priority": 1, "weight": 1},
-                    "Good": {"priority": 1, "weight": 1}
-                }
+                    "Good": {"priority": 1, "weight": 1},
+                },
             }
         }
         client = self.getAIClient(config=config)
@@ -883,12 +947,7 @@ class TestLoadBalancing(unittest.TestCase):
 
     def test_lb_all_disabled_returns_none(self):
         config = {
-            "load_balance": {
-                "enabled": True,
-                "profiles": {
-                    "A": {"priority": 1, "weight": 1}
-                }
-            }
+            "load_balance": {"enabled": True, "profiles": {"A": {"priority": 1, "weight": 1}}}
         }
         client = self.getAIClient(config=config)
         client.__class__._lb_disabled = {"A": True}
@@ -898,10 +957,11 @@ class TestLoadBalancing(unittest.TestCase):
 
 class TestAdaptersBuildChatRequest(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         from src.core.AI import OpenAIAdapter, ClaudeAdapter, OllamaAdapter, GeminiAdapter, AIError
+
         self.OpenAIAdapter = OpenAIAdapter
         self.ClaudeAdapter = ClaudeAdapter
         self.OllamaAdapter = OllamaAdapter
@@ -913,7 +973,9 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
             p.stop()
 
     def test_openai_adapter_build_request(self):
-        adapter = self.OpenAIAdapter(config={}, api_key="test-key", api_url="https://api.openai.com")
+        adapter = self.OpenAIAdapter(
+            config={}, api_key="test-key", api_url="https://api.openai.com"
+        )
         messages = [{"role": "user", "content": "hello"}]
         request = adapter.build_chat_request("gpt-4", messages, 0.7, 2000)
         self.assertEqual(request["model"], "gpt-4")
@@ -935,9 +997,7 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
     def test_openai_adapter_parse_response(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.openai.com")
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello, world!"}}]
-        }
+        mock_response.json.return_value = {"choices": [{"message": {"content": "Hello, world!"}}]}
         result = adapter.parse_chat_response(mock_response)
         self.assertEqual(result, "Hello, world!")
 
@@ -967,10 +1027,12 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(url, "https://api.deepseek.com/models")
 
     def test_claude_adapter_build_request(self):
-        adapter = self.ClaudeAdapter(config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com")
+        adapter = self.ClaudeAdapter(
+            config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com"
+        )
         messages = [
             {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "hello"}
+            {"role": "user", "content": "hello"},
         ]
         request = adapter.build_chat_request("claude-3-opus", messages, 0.5, 1000)
         self.assertEqual(request["model"], "claude-3-opus")
@@ -979,7 +1041,9 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(request["messages"][0]["role"], "user")
 
     def test_claude_adapter_headers(self):
-        adapter = self.ClaudeAdapter(config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com")
+        adapter = self.ClaudeAdapter(
+            config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com"
+        )
         headers = adapter.get_headers("sk-ant-test")
         self.assertEqual(headers["x-api-key"], "sk-ant-test")
         self.assertEqual(headers["Content-Type"], "application/json")
@@ -993,9 +1057,7 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
     def test_claude_adapter_parse_response(self):
         adapter = self.ClaudeAdapter(config={}, api_key="key", api_url="https://api.anthropic.com")
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "content": [{"text": "Claude response"}]
-        }
+        mock_response.json.return_value = {"content": [{"text": "Claude response"}]}
         result = adapter.parse_chat_response(mock_response)
         self.assertEqual(result, "Claude response")
 
@@ -1035,9 +1097,7 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
     def test_ollama_adapter_parse_response(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": "Ollama reply"}
-        }
+        mock_response.json.return_value = {"message": {"content": "Ollama reply"}}
         result = adapter.parse_chat_response(mock_response)
         self.assertEqual(result, "Ollama reply")
 
@@ -1047,7 +1107,9 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(url, "http://127.0.0.1:11434/api/tags")
 
     def test_gemini_adapter_build_request(self):
-        adapter = self.GeminiAdapter(config={}, api_key="gemini-key", api_url="https://generativelanguage.googleapis.com")
+        adapter = self.GeminiAdapter(
+            config={}, api_key="gemini-key", api_url="https://generativelanguage.googleapis.com"
+        )
         messages = [{"role": "user", "content": "hello"}]
         request = adapter.build_chat_request("gemini-pro", messages, 0.7, 2000)
         self.assertIn("contents", request)
@@ -1057,13 +1119,17 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(request["generationConfig"]["maxOutputTokens"], 2000)
 
     def test_gemini_adapter_role_mapping(self):
-        adapter = self.GeminiAdapter(config={}, api_key="key", api_url="https://generativelanguage.googleapis.com")
+        adapter = self.GeminiAdapter(
+            config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
+        )
         messages = [{"role": "assistant", "content": "response"}]
         request = adapter.build_chat_request("gemini-pro", messages, 0.7, 2000)
         self.assertEqual(request["contents"][0]["role"], "model")
 
     def test_gemini_adapter_parse_response(self):
-        adapter = self.GeminiAdapter(config={}, api_key="key", api_url="https://generativelanguage.googleapis.com")
+        adapter = self.GeminiAdapter(
+            config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
+        )
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "candidates": [{"content": {"parts": [{"text": "Gemini response"}]}}]
@@ -1072,14 +1138,18 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(result, "Gemini response")
 
     def test_gemini_adapter_empty_candidates(self):
-        adapter = self.GeminiAdapter(config={}, api_key="key", api_url="https://generativelanguage.googleapis.com")
+        adapter = self.GeminiAdapter(
+            config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
+        )
         mock_response = MagicMock()
         mock_response.json.return_value = {"candidates": []}
         with self.assertRaises(self.AIError):
             adapter.parse_chat_response(mock_response)
 
     def test_gemini_adapter_parse_usage(self):
-        adapter = self.GeminiAdapter(config={}, api_key="key", api_url="https://generativelanguage.googleapis.com")
+        adapter = self.GeminiAdapter(
+            config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
+        )
         data = {"usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 10}}
         in_t, out_t = adapter.parse_usage(data)
         self.assertEqual(in_t, 5)
@@ -1088,10 +1158,18 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
 
 class TestAdapterMap(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
-        from src.core.AI import AI_ADAPTER, get_adapter_endpoint, OpenAIAdapter, ClaudeAdapter, OllamaAdapter, GeminiAdapter
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
+        from src.core.AI import (
+            AI_ADAPTER,
+            get_adapter_endpoint,
+            OpenAIAdapter,
+            ClaudeAdapter,
+            OllamaAdapter,
+            GeminiAdapter,
+        )
+
         self.AI_ADAPTER = AI_ADAPTER
         self.get_adapter_endpoint = get_adapter_endpoint
         self.OpenAIAdapter = OpenAIAdapter
@@ -1129,11 +1207,12 @@ class TestAdapterMap(unittest.TestCase):
 
 class TestAIClientBuildFileMessage(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+        )
         self.test_dir = tempfile.mkdtemp()
         from src.core.AI import getAIClient
+
         self.getAIClient = getAIClient
 
     def tearDown(self):
@@ -1143,7 +1222,7 @@ class TestAIClientBuildFileMessage(unittest.TestCase):
 
     def _make_file(self, name, content=b"test"):
         path = os.path.join(self.test_dir, name)
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(content)
         return path
 
@@ -1170,10 +1249,12 @@ class TestAIClientBuildFileMessage(unittest.TestCase):
 
 # Group: sync (20 tests)
 
+
 class TestSyncModeConstants(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                      requests_mod=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        )
 
     def tearDown(self):
         for p in self._patchers:
@@ -1181,14 +1262,18 @@ class TestSyncModeConstants(unittest.TestCase):
 
     def test_mode_constants(self):
         from plugin.OpenList import MODE_SYNC, MODE_BACKUP
+
         self.assertEqual(MODE_SYNC, "sync")
         self.assertEqual(MODE_BACKUP, "backup")
 
     def test_task_status_constants(self):
         from plugin.OpenList import (
-            TASK_STATUS_RUNNING, TASK_STATUS_SUCCESS,
-            TASK_STATUS_FAILED, TASK_STATUS_ABORTED
+            TASK_STATUS_RUNNING,
+            TASK_STATUS_SUCCESS,
+            TASK_STATUS_FAILED,
+            TASK_STATUS_ABORTED,
         )
+
         self.assertEqual(TASK_STATUS_RUNNING, "running")
         self.assertEqual(TASK_STATUS_SUCCESS, "success")
         self.assertEqual(TASK_STATUS_FAILED, "failed")
@@ -1197,8 +1282,9 @@ class TestSyncModeConstants(unittest.TestCase):
 
 class TestTaskConfig(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                      requests_mod=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        )
 
     def tearDown(self):
         for p in self._patchers:
@@ -1206,6 +1292,7 @@ class TestTaskConfig(unittest.TestCase):
 
     def test_default_values(self):
         from plugin.OpenList import TaskConfig
+
         cfg = TaskConfig()
         self.assertEqual(cfg.name, "")
         self.assertEqual(cfg.src_path, "")
@@ -1218,6 +1305,7 @@ class TestTaskConfig(unittest.TestCase):
 
     def test_to_dict_roundtrip(self):
         from plugin.OpenList import TaskConfig
+
         cfg = TaskConfig(
             name="test_task",
             src_path="/local/path",
@@ -1226,7 +1314,7 @@ class TestTaskConfig(unittest.TestCase):
             mode="sync",
             confirm_before_sync=True,
             tar_folders="/data/tar",
-            tree_folders="/data/tree"
+            tree_folders="/data/tree",
         )
         d = cfg.to_dict()
         self.assertEqual(d["name"], "test_task")
@@ -1239,6 +1327,7 @@ class TestTaskConfig(unittest.TestCase):
 
     def test_from_dict_missing_keys(self):
         from plugin.OpenList import TaskConfig
+
         cfg = TaskConfig.from_dict({"name": "minimal"})
         self.assertEqual(cfg.name, "minimal")
         self.assertEqual(cfg.mode, "backup")
@@ -1246,14 +1335,16 @@ class TestTaskConfig(unittest.TestCase):
 
     def test_backup_mode_default(self):
         from plugin.OpenList import TaskConfig
+
         cfg = TaskConfig.from_dict({"name": "backup_task"})
         self.assertEqual(cfg.mode, "backup")
 
 
 class TestSyncDiffAlgorithm(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                       requests_mod=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        )
         self.local_dir = tempfile.mkdtemp()
         self.remote_dir = tempfile.mkdtemp()
 
@@ -1266,7 +1357,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
     def _touch(self, folder, rel_path, content=b""):
         full = os.path.join(folder, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, 'wb') as f:
+        with open(full, "wb") as f:
             f.write(content)
         return rel_path
 
@@ -1284,6 +1375,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
     def _make_worker(self, mode="sync"):
         """创建 SyncWorker 实例用于测试"""
         from plugin.OpenList import SyncWorker, TaskConfig, MODE_SYNC, MODE_BACKUP
+
         mode_map = {"sync": MODE_SYNC, "backup": MODE_BACKUP}
         task = TaskConfig(mode=mode_map.get(mode, MODE_SYNC))
         worker = SyncWorker(MagicMock(), task)
@@ -1363,8 +1455,9 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
 
 class TestExcludeRules(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                      requests_mod=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        )
 
     def tearDown(self):
         for p in self._patchers:
@@ -1376,11 +1469,17 @@ class TestExcludeRules(unittest.TestCase):
         should_keep = ["script.py", "data.txt"]
 
         for path in should_exclude:
-            matched = any(fnmatch.fnmatch(path, rule) or fnmatch.fnmatch(os.path.basename(path), rule) for rule in rules)
+            matched = any(
+                fnmatch.fnmatch(path, rule) or fnmatch.fnmatch(os.path.basename(path), rule)
+                for rule in rules
+            )
             self.assertTrue(matched, f"{path} should be excluded")
 
         for path in should_keep:
-            matched = any(fnmatch.fnmatch(path, rule) or fnmatch.fnmatch(os.path.basename(path), rule) for rule in rules)
+            matched = any(
+                fnmatch.fnmatch(path, rule) or fnmatch.fnmatch(os.path.basename(path), rule)
+                for rule in rules
+            )
             self.assertFalse(matched, f"{path} should not be excluded")
 
     def test_exclude_git_folder(self):
@@ -1396,8 +1495,9 @@ class TestExcludeRules(unittest.TestCase):
 
 class TestTarPackaging(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True,
-                                      requests_mod=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        )
         self.test_dir = tempfile.mkdtemp()
         self.tar_path = os.path.join(self.test_dir, "test.tar")
 
@@ -1409,31 +1509,31 @@ class TestTarPackaging(unittest.TestCase):
     def _touch(self, rel, content=b""):
         path = os.path.join(self.test_dir, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(content)
 
     def test_create_tar_with_files(self):
         self._touch("file1.txt", b"content1")
         self._touch("file2.txt", b"content2")
 
-        with tarfile.open(self.tar_path, 'w') as tar:
+        with tarfile.open(self.tar_path, "w") as tar:
             tar.add(os.path.join(self.test_dir, "file1.txt"), arcname="file1.txt")
             tar.add(os.path.join(self.test_dir, "file2.txt"), arcname="file2.txt")
 
         self.assertTrue(os.path.exists(self.tar_path))
         self.assertGreater(os.path.getsize(self.tar_path), 0)
 
-        with tarfile.open(self.tar_path, 'r') as tar:
+        with tarfile.open(self.tar_path, "r") as tar:
             names = tar.getnames()
         self.assertIn("file1.txt", names)
         self.assertIn("file2.txt", names)
 
     def test_tar_preserves_content(self):
         self._touch("data.bin", b"\x00\x01\x02\x03")
-        with tarfile.open(self.tar_path, 'w') as tar:
+        with tarfile.open(self.tar_path, "w") as tar:
             tar.add(os.path.join(self.test_dir, "data.bin"), arcname="data.bin")
 
-        with tarfile.open(self.tar_path, 'r') as tar:
+        with tarfile.open(self.tar_path, "r") as tar:
             f = tar.extractfile("data.bin")
             content = f.read()
         self.assertEqual(content, b"\x00\x01\x02\x03")
@@ -1441,13 +1541,14 @@ class TestTarPackaging(unittest.TestCase):
 
 # Group: perf (性能测试)
 
+
 class TestLazyInitPerformance(unittest.TestCase):
     """启动性能测试"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      markdown=True, util=True,
-                                      real_logger_util=True)
+        self._patchers = applyMock(
+            qt=True, psutil=True, pynput=True, markdown=True, util=True, real_logger_util=True
+        )
 
     def tearDown(self):
         for p in self._patchers:
@@ -1457,6 +1558,7 @@ class TestLazyInitPerformance(unittest.TestCase):
         """测试 time.perf_counter 基本可用性"""
         start = time.perf_counter()
         import time as tm
+
         tm.sleep(0.01)
         elapsed = time.perf_counter() - start
         logger.info("time.perf_counter 基准测试: %.4f 秒 (预期 ~0.01)", elapsed)
@@ -1468,9 +1570,9 @@ class TestSyncPerformance(unittest.TestCase):
     """同步算法性能测试 (基于文件系统 walk + diff)"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      markdown=True, util=True,
-                                      real_logger_util=True)
+        self._patchers = applyMock(
+            qt=True, psutil=True, pynput=True, markdown=True, util=True, real_logger_util=True
+        )
         self.local_dir = tempfile.mkdtemp()
         self.remote_dir = tempfile.mkdtemp()
 
@@ -1483,7 +1585,7 @@ class TestSyncPerformance(unittest.TestCase):
     def _touch(self, folder, rel_path, content=b""):
         full = os.path.join(folder, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, 'wb') as f:
+        with open(full, "wb") as f:
             f.write(content)
 
     def _tree(self, folder):
@@ -1508,12 +1610,15 @@ class TestSyncPerformance(unittest.TestCase):
         to_delete = remote - local
         elapsed = time.perf_counter() - start
 
-        logger.info("100 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
-                          elapsed, len(to_upload), len(to_delete))
+        logger.info(
+            "100 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
+            elapsed,
+            len(to_upload),
+            len(to_delete),
+        )
         self.assertEqual(len(to_upload), 20)
         self.assertEqual(len(to_delete), 0)
-        self.assertLess(elapsed, 2.0,
-                        f"diff 耗时 {elapsed:.4f} 秒，超过阈值 2.0 秒")
+        self.assertLess(elapsed, 2.0, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 2.0 秒")
 
     def test_diff_1000_files(self):
         """测试 1000 个文件的同步 diff 耗时"""
@@ -1529,12 +1634,16 @@ class TestSyncPerformance(unittest.TestCase):
         to_delete = remote - local
         elapsed = time.perf_counter() - start
 
-        logger.info("1000 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
-                          elapsed, len(to_upload), len(to_delete))
+        logger.info(
+            "1000 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
+            elapsed,
+            len(to_upload),
+            len(to_delete),
+        )
         self.assertEqual(len(to_upload), 200)
         self.assertEqual(len(to_delete), 0)
-        self.assertLess(elapsed, 5.0,
-                        f"diff 耗时 {elapsed:.4f} 秒，超过阈值 5.0 秒")
+        self.assertLess(elapsed, 5.0, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 5.0 秒")
+
 
 # Group: exception (异常测试)
 
@@ -1546,7 +1655,7 @@ _PROFILE_CONFIG_WITH_KEY = {
                 "api_key": "test_key_123",
                 "api_url": "https://api.openai.com/v1",
             }
-        }
+        },
     }
 }
 
@@ -1557,7 +1666,7 @@ _PROFILE_CONFIG_NO_KEY = {
             "default": {
                 "api_url": "https://api.openai.com/v1",
             }
-        }
+        },
     }
 }
 
@@ -1566,10 +1675,18 @@ class TestApiKeyErrors(unittest.TestCase):
     """API Key 异常测试"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      util=True, config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True,
+            psutil=True,
+            pynput=True,
+            keyboard=True,
+            mouse=True,
+            util=True,
+            config=True,
+            file_mod=True,
+        )
         from src.core.AI import OpenAIAdapter, AIError
+
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
@@ -1577,7 +1694,7 @@ class TestApiKeyErrors(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_openai_401_error(self, mock_post):
         """测试 OpenAI API 返回 401 时抛出 AIError"""
         mock_resp = MagicMock()
@@ -1590,7 +1707,7 @@ class TestApiKeyErrors(unittest.TestCase):
             adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
         self.assertIn("401", str(ctx.exception))
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_openai_403_error(self, mock_post):
         """测试 OpenAI API 返回 403 时抛出 AIError"""
         mock_resp = MagicMock()
@@ -1626,10 +1743,18 @@ class TestNetworkErrors(unittest.TestCase):
     """网络异常测试"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      util=True, config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True,
+            psutil=True,
+            pynput=True,
+            keyboard=True,
+            mouse=True,
+            util=True,
+            config=True,
+            file_mod=True,
+        )
         from src.core.AI import OpenAIAdapter, AIError
+
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
@@ -1637,7 +1762,7 @@ class TestNetworkErrors(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_timeout_error(self, mock_post):
         """测试网络超时抛 AIError"""
         mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
@@ -1647,7 +1772,7 @@ class TestNetworkErrors(unittest.TestCase):
             adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
         self.assertIn("超时", str(ctx.exception))
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_connection_error(self, mock_post):
         """测试网络断开抛 AIError"""
         mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
@@ -1662,11 +1787,19 @@ class TestPluginErrors(unittest.TestCase):
     """插件异常测试 (使用真实 src.plugin 模块)"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      util=True, config=True, file_mod=True,
-                                      real_plugin=True)
+        self._patchers = applyMock(
+            qt=True,
+            psutil=True,
+            pynput=True,
+            keyboard=True,
+            mouse=True,
+            util=True,
+            config=True,
+            file_mod=True,
+            real_plugin=True,
+        )
         from src.plugin import PluginManager
+
         self.PluginManager = PluginManager
 
     def tearDown(self):
@@ -1707,10 +1840,18 @@ class TestModelErrors(unittest.TestCase):
     """AI 模型异常返回测试"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      util=True, config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True,
+            psutil=True,
+            pynput=True,
+            keyboard=True,
+            mouse=True,
+            util=True,
+            config=True,
+            file_mod=True,
+        )
         from src.core.AI import OpenAIAdapter, AIError
+
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
@@ -1718,7 +1859,7 @@ class TestModelErrors(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_empty_response_text(self, mock_post):
         """测试 AI 返回空文本"""
         mock_resp = MagicMock()
@@ -1730,7 +1871,7 @@ class TestModelErrors(unittest.TestCase):
         text, _, _ = adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
         self.assertEqual(text, "")
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_malformed_json_response(self, mock_post):
         """测试 API 返回非 JSON 数据"""
         mock_resp = MagicMock()
@@ -1743,7 +1884,7 @@ class TestModelErrors(unittest.TestCase):
             adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
         self.assertIn("格式错误", str(ctx.exception))
 
-    @patch('requests.Session.post')
+    @patch("requests.Session.post")
     def test_missing_choices_key(self, mock_post):
         """测试 API 返回缺少 choices 字段"""
         mock_resp = MagicMock()
@@ -1760,10 +1901,18 @@ class TestConfigErrors(unittest.TestCase):
     """配置异常测试"""
 
     def setUp(self):
-        self._patchers = applyMock(qt=True, psutil=True, pynput=True,
-                                      keyboard=True, mouse=True,
-                                      util=True, config=True, file_mod=True)
+        self._patchers = applyMock(
+            qt=True,
+            psutil=True,
+            pynput=True,
+            keyboard=True,
+            mouse=True,
+            util=True,
+            config=True,
+            file_mod=True,
+        )
         from src.core.AI import OpenAIAdapter
+
         self.OpenAIAdapter = OpenAIAdapter
 
     def tearDown(self):
@@ -1781,16 +1930,15 @@ class TestConfigErrors(unittest.TestCase):
         self.assertIsNotNone(adapter)
 
 
-
 # CLI + 测试编排
 
 
 _GROUP_REGISTRY = {}
 
+
 def _register(group_name, test_classes, description=""):
     loader = unittest.TestLoader()
-    count = sum(loader.loadTestsFromTestCase(cls).countTestCases()
-                for cls in test_classes)
+    count = sum(loader.loadTestsFromTestCase(cls).countTestCases() for cls in test_classes)
     _GROUP_REGISTRY[group_name] = {
         "classes": test_classes,
         "description": description,
@@ -1800,48 +1948,91 @@ def _register(group_name, test_classes, description=""):
 
 
 # Register all test groups
-_register('util', [
-    TestEncodingMap, TestFileExtensions, TestConstants,
-], "工具函数 (format_size, 编码, 扩展名)")
+_register(
+    "util",
+    [
+        TestEncodingMap,
+        TestFileExtensions,
+        TestConstants,
+    ],
+    "工具函数 (format_size, 编码, 扩展名)",
+)
 
-_register('plugin', [
-    TestPluginBase, TestCreateCustomPlugin, TestPluginManagerBasic,
-    TestPluginManagerWithTempDir, TestPluginManagerEnableDisable,
-    TestGetPluginModulePaths, TestPluginManagerConfig], "插件系统 (PluginBase, PluginManager)")
+_register(
+    "plugin",
+    [
+        TestPluginBase,
+        TestCreateCustomPlugin,
+        TestPluginManagerBasic,
+        TestPluginManagerWithTempDir,
+        TestPluginManagerEnableDisable,
+        TestGetPluginModulePaths,
+        TestPluginManagerConfig,
+    ],
+    "插件系统 (PluginBase, PluginManager)",
+)
 
-_register('ai', [
-    TestResolveImageUrls, TestAIClientBuildPromptContent,
-    TestAIClientExtractUserMessage, TestLoadBalancing,
-    TestAdaptersBuildChatRequest, TestAdapterMap,
-    TestAIClientBuildFileMessage
-], "AI 适配器 (OpenAI, Claude, Ollama, Gemini)")
+_register(
+    "ai",
+    [
+        TestResolveImageUrls,
+        TestAIClientBuildPromptContent,
+        TestAIClientExtractUserMessage,
+        TestLoadBalancing,
+        TestAdaptersBuildChatRequest,
+        TestAdapterMap,
+        TestAIClientBuildFileMessage,
+    ],
+    "AI 适配器 (OpenAI, Claude, Ollama, Gemini)",
+)
 
-_register('sync', [
-    TestSyncModeConstants, TestTaskConfig, TestSyncDiffAlgorithm,
-    TestExcludeRules, TestTarPackaging,
-], "同步算法 (OpenList 插件)")
+_register(
+    "sync",
+    [
+        TestSyncModeConstants,
+        TestTaskConfig,
+        TestSyncDiffAlgorithm,
+        TestExcludeRules,
+        TestTarPackaging,
+    ],
+    "同步算法 (OpenList 插件)",
+)
 
-_register('perf', [
-    TestLazyInitPerformance, TestSyncPerformance
-], "性能测试 (启动时间, 文件读取, MD5, 同步, 内存)")
+_register(
+    "perf",
+    [TestLazyInitPerformance, TestSyncPerformance],
+    "性能测试 (启动时间, 文件读取, MD5, 同步, 内存)",
+)
 
-_register('exception', [
-    TestApiKeyErrors, TestNetworkErrors, TestPluginErrors, TestModelErrors, TestConfigErrors,
-], "异常测试 (API Key, 网络, 插件, 文件, 模型, 配置)")
+_register(
+    "exception",
+    [
+        TestApiKeyErrors,
+        TestNetworkErrors,
+        TestPluginErrors,
+        TestModelErrors,
+        TestConfigErrors,
+    ],
+    "异常测试 (API Key, 网络, 插件, 文件, 模型, 配置)",
+)
 
 
 # 内存调试工具 (用于 --launch / -m)
+
 
 class _MemState:
     started = False
     prev_snapshot = None
     count = 0
 
+
 _MEM = _MemState()
+
 
 def _mem_init():
     """初始化 tracemalloc 追踪"""
     import tracemalloc
+
     tracemalloc.start()
     _MEM.started = True
     _MEM.prev_snapshot = None
@@ -1854,19 +2045,26 @@ def _mem_take_snapshot():
     if not _MEM.started:
         return
     import tracemalloc
+
     current = tracemalloc.take_snapshot()
     _MEM.count += 1
 
-    stats = current.statistics('lineno')
+    stats = current.statistics("lineno")
     total_size = sum(stat.size for stat in stats)
     total_count = sum(stat.count for stat in stats)
 
     if total_size < 1024:
-        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size:.0f}B / {total_count} 对象 TOP20 ===")
+        logger.info(
+            f"=== 内存快照 #{_MEM.count} 总量 {total_size:.0f}B / {total_count} 对象 TOP20 ==="
+        )
     elif total_size < 1024 * 1024:
-        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024:.0f}KB / {total_count} 对象 TOP20 ===")
+        logger.info(
+            f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024:.0f}KB / {total_count} 对象 TOP20 ==="
+        )
     else:
-        logger.info(f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024/1024:.1f}MB / {total_count} 对象 TOP20 ===")
+        logger.info(
+            f"=== 内存快照 #{_MEM.count} 总量 {total_size/1024/1024:.1f}MB / {total_count} 对象 TOP20 ==="
+        )
     for i, stat in enumerate(stats[:20]):
         logger.info(f"  #{i+1} {stat}")
 
@@ -1874,13 +2072,16 @@ def _mem_take_snapshot():
 def _count_qt_objects(widget, max_depth=20):
     """递归统计 QObject 数量和类型"""
     from collections import Counter
+
     counter = Counter()
+
     def walk(obj, depth=0):
         if depth > max_depth:
             return
         counter[type(obj).__name__] += 1
         for child in obj.children():
             walk(child, depth + 1)
+
     walk(widget)
     return counter
 
@@ -1899,16 +2100,19 @@ def _patch_mainwindow_for_debug():
     """给 MainWindow.__init__ 打补丁，注入内存追踪和 Qt 对象计数定时器"""
     from src.main import MainWindow
     from PySide6.QtCore import QTimer
+
     original_init = MainWindow.__init__
 
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self._mem_toggle = False
         timer = QTimer(self)
-        timer.timeout.connect(lambda: (
-            _mem_take_snapshot() if self._mem_toggle else _log_qt_objects(self),
-            setattr(self, '_mem_toggle', not self._mem_toggle)
-        ))
+        timer.timeout.connect(
+            lambda: (
+                _mem_take_snapshot() if self._mem_toggle else _log_qt_objects(self),
+                setattr(self, "_mem_toggle", not self._mem_toggle),
+            )
+        )
         timer.start(5000)
 
     MainWindow.__init__ = patched_init
@@ -1921,16 +2125,17 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter,
     )
     for name, info in _GROUP_REGISTRY.items():
-        parser.add_argument(f'--{name}', action='store_true',
-                            help=f'{info["description"]} ({info["count"]} 个测试)')
-    parser.add_argument('--list', action='store_true', help='列出所有测试组')
-    parser.add_argument('--launch', action='store_true', help='启动程序本体')
-    parser.add_argument('-m', '--me', action='store_true', help='启动程序本体并启用内存追踪')
+        parser.add_argument(
+            f"--{name}", action="store_true", help=f'{info["description"]} ({info["count"]} 个测试)'
+        )
+    parser.add_argument("--list", action="store_true", help="列出所有测试组")
+    parser.add_argument("--launch", action="store_true", help="启动程序本体")
+    parser.add_argument("-m", "--me", action="store_true", help="启动程序本体并启用内存追踪")
 
     args = parser.parse_args()
 
     if args.launch or args.me:
-        test_flags = {'--launch', '-m'}
+        test_flags = {"--launch", "-m"}
         sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a not in test_flags]
 
         if args.me:
@@ -1949,7 +2154,7 @@ def main():
         print("-" * 50)
         for name, info in sorted(_GROUP_REGISTRY.items()):
             print(f"{name:<12} {info['count']:<8} {info['description']}")
-        total = sum(info['count'] for info in _GROUP_REGISTRY.values())
+        total = sum(info["count"] for info in _GROUP_REGISTRY.values())
         print(f"\n总计: {total} 个测试")
         return
 
@@ -1973,6 +2178,7 @@ def main():
     )
     result = runner.run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
+
 
 if __name__ == "__main__":
     main()
