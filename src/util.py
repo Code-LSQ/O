@@ -738,28 +738,30 @@ def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
             edit.setText(path)
         return path
 
-def filePathWidget(parent, name, title="", filter="", mode="file"):
-    """封装 QLabel + QLineEdit + '选择' QPushButton 以及 getFilePath
-    返回 (QFormLayout, QLineEdit, QPushButton)"""
-    form = QFormLayout()
+def filePathWidget(parent, form: QFormLayout, name, title="", filter="", mode="file"):
+    """封装 QLabel + QLineEdit + '选择' QPushButton 并直接添加到 form
+    返回 (QLineEdit, QPushButton)"""
     hbox = QHBoxLayout()
     edit = QLineEdit()
     hbox.addWidget(edit)
 
     btn = QPushButton("选择")
-    btn.setFixedWidth(60)
+    btn.setFixedWidth(50)
     btn.clicked.connect(lambda: getFilePath(parent, title, filter, mode, edit))
     hbox.addWidget(btn)
 
     form.addRow(name, hbox)
-    return form, edit, btn
+    return edit, btn
 
 def labelEdit(parent, name):
-    """封装 QLabel + QLineEdit"""
-    form = QFormLayout()
+    """封装 QLabel + QLineEdit，水平布局，独立宽度，不按 QFormLayout 的方式对齐"""
+    layout = QHBoxLayout()
+    label = QLabel(name)
     edit = QLineEdit()
-    form.addRow(name, edit)
-    return form, edit
+    layout.addWidget(label)
+    layout.addWidget(edit)
+    layout.setStretch(1, 1)
+    return layout, edit
 
 
 class ClipboardMonitor(Singleton):

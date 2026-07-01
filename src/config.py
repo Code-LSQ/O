@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, theme_dir, lang_dir, dialogBox, messageBox
+from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 from src.system import setAutoStart
 
@@ -298,6 +298,7 @@ class SettingsDialog(QDialog):
         """选项设置"""
         tab = QWidget()
         layout = QFormLayout(tab)
+        layout.setLabelAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.language_combo = QComboBox()
         self.language_combo.addItem("简体中文", "简体中文")
@@ -461,26 +462,12 @@ class SettingsDialog(QDialog):
         layout.addRow(ip_layout)
 
         # Python 环境
-        python_layout = QHBoxLayout()
-        self.python_path_edit = QLineEdit()
+        self.python_path_edit, self.python_browse_btn = filePathWidget(self, layout, "Python", "Python", "Python (*.exe);;所有文件 (*)")
         self.python_path_edit.setText(self.config.get("Launch.Runtime.Python", ""))
-        python_layout.addWidget(self.python_path_edit)
-
-        self.python_browse_btn = QPushButton("浏览")
-        self.python_browse_btn.clicked.connect(lambda: getFilePath(self, "Python", "Python (*.exe);;所有文件 (*)", edit=self.python_path_edit))
-        python_layout.addWidget(self.python_browse_btn)
-        layout.addRow("Python", python_layout)
 
         # Java 环境
-        java_layout = QHBoxLayout()
-        self.java_path_edit = QLineEdit()
+        self.java_path_edit, self.java_browse_btn = filePathWidget(self, layout, "Java", "Java", "Java (*.exe);;所有文件 (*)")
         self.java_path_edit.setText(self.config.get("Launch.Runtime.Java", ""))
-        java_layout.addWidget(self.java_path_edit)
-
-        self.java_browse_btn = QPushButton("浏览")
-        self.java_browse_btn.clicked.connect(lambda: getFilePath(self, "Java", "Java (*.exe);;所有文件 (*)", edit=self.java_path_edit))
-        java_layout.addWidget(self.java_browse_btn)
-        layout.addRow("Java", java_layout)
 
         # 环境变量
         layout.addRow(QLabel("环境变量"))

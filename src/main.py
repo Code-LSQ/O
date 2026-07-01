@@ -32,13 +32,16 @@ from src.system import SYSTEM_ACT, getFileIcon
 
 def setApp(app: QApplication):
     config = getConfig()
-    app.setFont(QFont(config.get("font_family"), config.get("font_size")))
+    font = QFont(config.get("font_family"), config.get("font_size"))
     if sys.platform == "win32":
-        app.setWindowIcon(QIcon(str(logo_ico)))
+        font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+        icon = QIcon(str(logo_ico))
     elif sys.platform == "linux":
-        app.setWindowIcon(QIcon(str(logo_png)))
+        icon = QIcon(str(logo_png))
     elif sys.platform == "darwin":
-        app.setWindowIcon(QIcon(str(logo_icn)))
+        icon = QIcon(str(logo_icn))
+    app.setFont(font)
+    app.setWindowIcon(icon)
 
 class SystemTray:
     """系统托盘"""
@@ -370,22 +373,28 @@ class EditTool(QDialog):
         form_layout.addRow("类型", self.type_combo)
         
         # 路径/URL
-        path_layout = QHBoxLayout()
-        self.path_edit = QLineEdit()
+        def _on_browse():
+            t = self.type_combo.currentText()
+            choices = {
+                "文件": ("选择文件", ""),
+                "命令行": ("选择可执行文件", "可执行文件 (*.exe);;所有文件 (*)"),
+                "Python": ("Python 脚本", "Python 文件 (*.py);;所有文件 (*)"),
+                "Java": ("JAR 文件", "JAR 文件 (*.jar);;所有文件 (*)"),
+                "脚本": ("选择脚本文件", "脚本文件 (*.bat *.cmd *.vbs *.ps1);;所有文件 (*)"),
+            }
+            title, filt = choices.get(t, ("选择文件", ""))
+            path = getFilePath(self, title, filt, edit=self.path_edit)
+            if path and not self.name_edit.text():
+                self.name_edit.setText(Path(path).stem)
+
+        self.path_edit, self.browse_btn = filePathWidget(self, form_layout, "路径", "选择文件", "")
         self.path_edit.setPlaceholderText("选择文件或输入路径")
-        path_layout.addWidget(self.path_edit)
-        
-        self.browse_btn = QPushButton("浏览")
-        self.browse_btn.clicked.connect(self._browse_path)
-        self.browse_btn.setFixedWidth(80)
-        path_layout.addWidget(self.browse_btn)
-        
-        self.path_label = QLabel("路径")
-        form_layout.addRow(self.path_label, path_layout)
+        self._path_label = form_layout.labelForField(self.path_edit)
+        self.browse_btn.clicked.disconnect()
+        self.browse_btn.clicked.connect(_on_browse)
         
         # 工作目录
-        cwd_layout, self.cwd_edit, self.cwd_browse_btn = filePathWidget(self, "工作目录", "", "", "dir")
-        form_layout.addRow(cwd_layout)
+        self.cwd_edit, self.cwd_browse_btn = filePathWidget(self, form_layout, "工作目录", "", "", "dir")
         
         # 参数
         self.args_edit = QLineEdit()
@@ -421,8 +430,9 @@ class EditTool(QDialog):
         form_layout.addRow("快捷键", hotkey_layout)
         
         # 图标
-        icon_layout, self.icon_edit, _ = filePathWidget(self, "图标", "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)")
-        form_layout.addRow(icon_layout)
+        self.icon_edit, _ = filePathWidget(self, form_layout, "图标", "选择图标", "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;所有文件 (*)")
+
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignCenter)
         
         layout.addLayout(form_layout)
         
@@ -474,38 +484,21 @@ class EditTool(QDialog):
         self.process_edit.setVisible(is_file)
         
         if tool_type == "网址":
-            self.path_label.setText("URL")
+            self._path_label.setText("URL")
             self.path_edit.setPlaceholderText("输入网址")
             self.browse_btn.setVisible(False)
             self.cwd_edit.setEnabled(False)
             self.cwd_browse_btn.setEnabled(False)
         elif tool_type == "预设":
-            self.path_label.setText("路径")
+            self._path_label.setText("路径")
             self.browse_btn.setVisible(False)
             self.cwd_edit.setEnabled(False)
             self.cwd_browse_btn.setEnabled(False)
         else:
-            self.path_label.setText("路径")
+            self._path_label.setText("路径")
             self.browse_btn.setVisible(True)
             self.cwd_edit.setEnabled(True)
             self.cwd_browse_btn.setEnabled(True)
-    
-    def _browse_path(self):
-        tool_type = self.type_combo.currentText()
-        if tool_type == "预设":
-            return
-
-        choices = {
-            "文件": ("选择文件", ""),
-            "命令行": ("选择可执行文件", "可执行文件 (*.exe);;所有文件 (*)"),
-            "Python": ("Python 脚本", "Python 文件 (*.py);;所有文件 (*)"),
-            "Java": ("JAR 文件", "JAR 文件 (*.jar);;所有文件 (*)"),
-            "脚本": ("选择脚本文件", "脚本文件 (*.bat *.cmd *.vbs *.ps1);;所有文件 (*)"),
-        }
-        title, filter = choices.get(tool_type, ("选择文件", ""))
-        path = getFilePath(self, title, filter, edit=self.path_edit)
-        if path and not self.name_edit.text():
-            self.name_edit.setText(Path(path).stem)
     
     def get_data(self) -> dict:
         """获取工具数据"""
@@ -1072,13 +1065,24 @@ class MainWindow(WindowMouse, QMainWindow):
             if item and item.widget():
                 if item.widget().geometry().contains(drop_pos):
                     target_index = i
+                    # 落在右半侧 → 插入到该控件之后
+                    if drop_pos.x() > item.widget().geometry().center().x():
+                        target_index = i + 1
                     break
         
+        if target_index == -1 and self.tools_layout.count() > 0:
+            # 拖到空白区域，追加到最后
+            tools_widget_rect = self.tools_widget.rect()
+            if tools_widget_rect.contains(drop_pos):
+                target_index = self.tools_layout.count()
+        
         if target_index >= 0 and target_index != source_index:
-            # 交换工具位置
             tools = _get_group_tools(getConfig(), self._current_group)
-            if 0 <= source_index < len(tools) and 0 <= target_index < len(tools):
-                tools[source_index], tools[target_index] = tools[target_index], tools[source_index]
+            if 0 <= source_index < len(tools) and 0 <= target_index <= len(tools):
+                item = tools.pop(source_index)
+                if source_index < target_index:
+                    target_index -= 1
+                tools.insert(target_index, item)
                 tools_dict = getConfig().get("Launch.tools", {})
                 tools_dict[self._current_group] = tools
                 getConfig().set("Launch.tools", tools_dict)

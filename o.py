@@ -31,9 +31,8 @@ def main():
     sys.excepthook = exceptionHook
     logger.info(f"V{VERSION} 版本程序启动")
 
-    # 解决 Qt6 中文锯齿，静默字体数据库调试日志
-    os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=freetype"
-    os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"
+    # os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=freetype"   # 解决 Qt6 中文锯齿，已改为在 setApp 中使用 PreferNoHinting 策略解决
+    # os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"   # 静默 Qt 字体数据库调试日志
 
     # 设置程序属性
     app = QApplication()
