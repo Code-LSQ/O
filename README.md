@@ -38,6 +38,12 @@ Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 文件同步
 
 
+### Windows 设置
+
+你可能需要的 Windows 路径
+控制面板  C:\Windows\System32\control.exe
+
+
 ### 功能
 
 #### AI

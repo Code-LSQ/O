@@ -11,6 +11,24 @@ from PySide6.QtCore import Qt, QDir
 from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr
 from src.file import ArchiveItemModel
 
+
+# class ViewMode():
+#     考虑编辑器上方增加模式按钮
+#     TEXT = 0
+#     Markdown = 1
+#     HEX = 2
+#     IMAGE = 3
+#     GALLERY = 4
+#     PDF = 5
+
+# def setViewMode(self, mode: ViewMode):
+#     self.text_edit.setVisible(mode in (ViewMode.TEXT, ViewMode.HEX))
+#     self.image_scroll.setVisible(mode == ViewMode.IMAGE)
+#     self._gallery_widget.setVisible(mode == ViewMode.GALLERY)
+#     self._pagination_bar.setVisible(mode == ViewMode.TEXT and self._is_truncated)
+#     self.is_image = (mode == ViewMode.IMAGE)
+
+
 class FolderPanelManager:
     """文件夹面板管理器 - 管理文件夹树视图面板"""
     

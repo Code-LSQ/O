@@ -12,7 +12,6 @@ if sys.platform == "win32":
     from ctypes import windll
 from pathlib import Path
 from datetime import datetime
-from enum import Enum, auto
 from email.utils import parsedate_to_datetime
 from logging.handlers import RotatingFileHandler
 
@@ -778,7 +777,7 @@ def convertPath(path: str, mode: str) -> str:
 
 
 def getFilePath(parent: QWidget, title="", filter="", mode="file", edit=None):
-    """封装 QFileDialog 返回文件路径，可以与 QLineEdit 配合设置文本，用 lambda 连接到 选择、浏览 按钮"""
+    """封装 QFileDialog 返回文件路径，可以与 QLineEdit 配合设置文本，用 lambda 连接到 选择 按钮"""
     if mode == "file":
         path, _ = QFileDialog.getOpenFileName(parent, title, "", filter)
     else:

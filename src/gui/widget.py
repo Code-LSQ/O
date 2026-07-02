@@ -5,9 +5,9 @@ import hashlib
 import webbrowser
 from urllib import parse
 
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QMenu, QPushButton, QDialog, QScrollArea, QLabel
-from PySide6.QtCore import Qt, Signal, QRect, QThread, QByteArray, QTimer
-from PySide6.QtGui import QPainter, QColor, QTextCursor, QTextCharFormat, QAction, QKeySequence, QPixmap, QTextDocument, QImage, QPalette, qGray
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QMenu, QScrollArea, QLabel
+from PySide6.QtCore import Qt, Signal, QRect, QByteArray, QTimer, QSize, QBuffer
+from PySide6.QtGui import QPainter, QColor, QTextCursor, QTextCharFormat, QAction, QKeySequence, QPixmap, QTextDocument, QImage, QImageReader, QPalette, qGray
 
 from src.util import logger, EXTENSION, inputDialog, tr
 from src.config import getConfig, DEFAULT_CONFIG
@@ -805,6 +805,17 @@ class ImageLabel(QLabel):
         self._archive_comic_layout = None
         self._archive_comic_container = None
         self._archive_comic_base_width = 800
+        # 懒加载图库属性
+        self._gallery_items = []
+        self._gallery_item_count = 0
+        self._gallery_window_size = 2
+        self._gallery_loaded = set()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        self._gallery_label_tops = []
+        self._gallery_total_height = 0
+        self._gallery_scroll_value = 0
+        self._gallery_scrollbar = None
     
     def set_file_path(self, path: str, scroll_area=None):
         """设置当前文件路径"""
@@ -844,14 +855,14 @@ class ImageLabel(QLabel):
         """自定义右键菜单"""
         menu = QMenu(self)
         
-        action_comic_view = QAction(tr("漫画视图"), self)
+        action_comic_view = QAction(tr("图库模式"), self)
         action_comic_view.triggered.connect(self._toggle_comic_view)
         menu.addAction(action_comic_view)
         
         menu.exec(event.globalPos())
     
     def _toggle_comic_view(self):
-        """切换漫画视图"""
+        """切换图库模式"""
         if self._comic_view_enabled:
             self._exit_comic_view()
         elif self._archive_comic:
@@ -865,28 +876,49 @@ class ImageLabel(QLabel):
         self._archive_images_data = images_data
     
     def _enter_archive_comic_view(self):
-        """进入压缩包漫画视图"""
-        logger.info(f"=== _enter_archive_comic_view, images_data count={len(self._archive_images_data)}")
-        
+        """进入压缩包图库模式 - 懒加载"""
         if not self._archive_images_data:
-            logger.warning("=== no archive images data!")
             return
         
-        self._comic_view_enabled = True
-        
         scroll_area = getattr(self, '_scroll_area_ref', None) or self.parent()
-        logger.info(f"=== scroll_area={scroll_area}, type={type(scroll_area)}")
         if not scroll_area or not isinstance(scroll_area, QScrollArea):
-            logger.warning(f"=== scroll_area not QScrollArea!")
             return
         
         avail_width = scroll_area.viewport().width() - 20
         if avail_width <= 0:
             avail_width = 800
         
+        self._comic_view_enabled = True
         self._comic_base_width = avail_width
         self._zoom_factor = 1.0
         
+        # 预计算所有图片高度
+        self._gallery_items = self._archive_images_data
+        self._gallery_item_count = len(self._archive_images_data)
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_name, img_data in self._archive_images_data:
+            try:
+                byte_array = QByteArray(img_data)
+                buffer = QBuffer(byte_array)
+                reader = QImageReader(buffer)
+                size = reader.size()
+                buffer.close()
+                if not size.isValid():
+                    size = QSize(800, 600)
+            except Exception:
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calc_scaled_height(size))
+        
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        
+        # 创建占位标签
         container = QWidget()
         container.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(container)
@@ -894,45 +926,29 @@ class ImageLabel(QLabel):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        total_height = 0
-        loaded_count = 0
-        for img_name, img_data in self._archive_images_data:
-            try:
-                image = QImage.fromData(img_data)
-                if image.isNull():
-                    logger.warning(f"=== 图片解码失败: {img_name}")
-                    continue
-                pixmap = QPixmap.fromImage(image)
-
-                loaded_count += 1
-
-                label = QLabel()
-                label.setPixmap(pixmap)
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-                layout.addWidget(label)
-                total_height += pixmap.height()
-            except Exception:
-                logger.exception(f"加载图片失败 {img_name}")
-                continue
+        for i, (img_name, _) in enumerate(self._archive_images_data):
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumHeight(self._gallery_image_heights[i])
+            label.mousePressEvent = lambda e, p=img_name: self.comicClick(p)
+            layout.addWidget(label)
         
-        container.setMinimumHeight(total_height)
+        container.setMinimumHeight(self._gallery_total_height)
         
-        logger.info(f"=== comic: {total_height}px, {loaded_count}/{len(self._archive_images_data)} images loaded")
-        
-        self._comic_view_enabled = True
         self._comic_container = container
         self._comic_layout = layout
         self._archive_comic_layout = layout
         self._archive_comic_container = container
         self._archive_comic_base_width = self._comic_base_width
         
-        scroll_area = getattr(self, '_scroll_area_ref', None) or self.parent()
         if scroll_area and isinstance(scroll_area, QScrollArea):
             QTimer.singleShot(0, lambda: self._setup_comic_container(container))
-        else:
-            container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            container.customContextMenuRequested.connect(self._show_comic_context_menu)
+        
+        # 安装滚动监听实现懒加载
+        self._gallery_scrollbar = scroll_area.verticalScrollBar()
+        self._gallery_scrollbar.valueChanged.connect(self._on_gallery_scroll)
+        
+        QTimer.singleShot(0, self._gallery_update_window)
     
     def _setup_comic_container(self, container):
         scroll_area = getattr(self, '_scroll_area_ref', None) or self.parent()
@@ -944,7 +960,7 @@ class ImageLabel(QLabel):
         container.customContextMenuRequested.connect(self._show_comic_context_menu)
     
     def _enter_comic_view(self):
-        """进入漫画视图模式"""
+        """进入图库模式 - 懒加载，只加载当前窗口周围图片"""
         if not self._current_file_path or not os.path.exists(self._current_file_path):
             return
         
@@ -956,8 +972,6 @@ class ImageLabel(QLabel):
         if not image_files:
             return
         
-        self._comic_view_enabled = True
-        
         scroll_area = getattr(self, '_scroll_area_ref', None) or self.parent()
         if not scroll_area or not isinstance(scroll_area, QScrollArea):
             return
@@ -966,33 +980,46 @@ class ImageLabel(QLabel):
         if avail_width <= 0:
             avail_width = 800
         
+        self._comic_view_enabled = True
         self._comic_base_width = avail_width
         self._zoom_factor = 1.0
         
+        # 预计算所有图片高度（只读头部，不解码像素）
+        self._gallery_items = image_files
+        self._gallery_item_count = len(image_files)
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_path in image_files:
+            reader = QImageReader(img_path)
+            size = reader.size()
+            if not size.isValid():
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calc_scaled_height(size))
+        
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        
+        # 创建占位标签
         self._comic_container = QWidget()
         self._comic_container.setStyleSheet("background-color: white;")
         self._comic_layout = QVBoxLayout(self._comic_container)
         self._comic_layout.setSpacing(0)
         self._comic_layout.setContentsMargins(0, 0, 0, 0)
         self._comic_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        for img_path in image_files:
-            try:
-                image = QImage(img_path)
-                if image.isNull():
-                    continue
-                pixmap = QPixmap.fromImage(image)
-
-                label = QLabel()
-                label.setPixmap(pixmap)
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.mousePressEvent = lambda e, p=img_path: self.comicClick(p)
-
-                self._comic_layout.addWidget(label)
-            except Exception:
-                logger.exception(f"加载图片失败 {img_path}")
-                continue
         
+        for i, img_path in enumerate(image_files):
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumHeight(self._gallery_image_heights[i])
+            label.mousePressEvent = lambda e, p=img_path: self.comicClick(p)
+            self._comic_layout.addWidget(label)
+        
+        self._comic_container.setMinimumHeight(self._gallery_total_height)
         self._comic_container.setCursor(Qt.CursorShape.ArrowCursor)
         scroll_area.setCursor(Qt.CursorShape.ArrowCursor)
         scroll_area.takeWidget()
@@ -1002,12 +1029,18 @@ class ImageLabel(QLabel):
         self._comic_container.customContextMenuRequested.connect(lambda pos: self._show_comic_context_menu(pos))
         
         scroll_area.viewport().installEventFilter(self)
+        
+        # 安装滚动监听实现懒加载
+        self._gallery_scrollbar = scroll_area.verticalScrollBar()
+        self._gallery_scrollbar.valueChanged.connect(self._on_gallery_scroll)
+        
+        QTimer.singleShot(0, self._gallery_update_window)
     
     def _show_comic_context_menu(self, pos):
-        """漫画视图右键菜单"""
+        """图库模式右键菜单"""
         menu = QMenu(self._comic_container)
         
-        action_comic_view = QAction(tr("漫画视图"), self)
+        action_comic_view = QAction(tr("图库模式"), self)
         action_comic_view.triggered.connect(self._toggle_comic_view)
         menu.addAction(action_comic_view)
         
@@ -1015,7 +1048,7 @@ class ImageLabel(QLabel):
         menu.exec(global_pos)
     
     def _handle_comic_wheel(self, event):
-        """漫画视图滚轮缩放"""
+        """图库模式滚轮缩放"""
         modifiers = event.modifiers()
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
@@ -1033,7 +1066,7 @@ class ImageLabel(QLabel):
         return False
     
     def _comic_refresh(self):
-        """刷新漫画视图显示"""
+        """刷新图库显示"""
         if not self._comic_view_enabled:
             return
         
@@ -1043,7 +1076,7 @@ class ImageLabel(QLabel):
             self._comic_folder_refresh()
     
     def _archive_comic_refresh(self):
-        """刷新压缩包漫画视图"""
+        """缩放后刷新压缩包图库"""
         if not self._archive_comic or not self._archive_comic_container:
             return
 
@@ -1055,43 +1088,45 @@ class ImageLabel(QLabel):
         if base_width <= 0:
             base_width = 800
 
-        while layout.count() > 0:
-            item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # 清除已加载图片
+        for idx in list(self._gallery_loaded):
+            self._gallery_unload_image(idx)
+        self._gallery_current_center = -1
 
-        total_height = 0
+        # 重新计算高度
+        self._gallery_image_heights = []
         for img_name, img_data in self._archive_images_data:
             try:
-                image = QImage.fromData(img_data)
-                if image.isNull():
-                    continue
-                pixmap = QPixmap.fromImage(image)
-
-                width = int(base_width * self._zoom_factor)
-                if pixmap.width() > width:
-                    scaled = pixmap.scaled(
-                        width,
-                        int(pixmap.height() * width / pixmap.width()),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                else:
-                    scaled = pixmap
-
-                label = QLabel()
-                label.setPixmap(scaled)
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-                layout.addWidget(label)
-                total_height += scaled.height()
+                byte_array = QByteArray(img_data)
+                buffer = QBuffer(byte_array)
+                reader = QImageReader(buffer)
+                size = reader.size()
+                buffer.close()
+                if not size.isValid():
+                    size = QSize(800, 600)
             except Exception:
-                logger.exception(f"刷新图片失败 {img_name}")
-                continue
-        
-        self._archive_comic_container.setMinimumHeight(total_height)
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calc_scaled_height(size))
+
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+
+        # 更新占位标签高度
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if widget and i < len(self._gallery_image_heights):
+                widget.setMinimumHeight(self._gallery_image_heights[i])
+
+        self._archive_comic_container.setMinimumHeight(self._gallery_total_height)
+
+        self._gallery_update_window()
 
     def _comic_folder_refresh(self):
+        """缩放后刷新文件夹图库"""
         if not self._current_file_path or not os.path.exists(self._current_file_path):
             return
 
@@ -1103,48 +1138,65 @@ class ImageLabel(QLabel):
         if not image_files:
             return
 
-        while self._comic_layout.count() > 0:
-            item = self._comic_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
         base_width = getattr(self, '_comic_base_width', 800)
         if base_width <= 0:
             base_width = 800
 
+        # 清除已加载图片
+        for idx in list(self._gallery_loaded):
+            self._gallery_unload_image(idx)
+        self._gallery_current_center = -1
+
+        # 重新计算高度
+        self._gallery_image_heights = []
         for img_path in image_files:
-            try:
-                image = QImage(img_path)
-                if image.isNull():
-                    continue
-                pixmap = QPixmap.fromImage(image)
+            reader = QImageReader(img_path)
+            size = reader.size()
+            if not size.isValid():
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calc_scaled_height(size))
 
-                width = int(base_width * self._zoom_factor)
-                if pixmap.width() > width:
-                    scaled = pixmap.scaled(
-                        width,
-                        int(pixmap.height() * width / pixmap.width()),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                else:
-                    scaled = pixmap
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
 
-                label = QLabel()
-                label.setPixmap(scaled)
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.mousePressEvent = lambda e, p=img_path: self.comicClick(p)
+        # 更新占位标签高度
+        for i in range(self._comic_layout.count()):
+            widget = self._comic_layout.itemAt(i).widget()
+            if widget and i < len(self._gallery_image_heights):
+                widget.setMinimumHeight(self._gallery_image_heights[i])
 
-                self._comic_layout.addWidget(label)
-            except Exception:
-                logger.exception(f"加载图片失败 {img_path}")
-                continue
+        self._comic_container.setMinimumHeight(self._gallery_total_height)
+
+        self._gallery_update_window()
     
     def _exit_comic_view(self):
-        """退出漫画视图"""
+        """退出图库模式"""
         self._comic_view_enabled = False
         self._archive_comic = False
         
+        # 断开滚动监听
+        if self._gallery_scrollbar:
+            try:
+                self._gallery_scrollbar.valueChanged.disconnect(self._on_gallery_scroll)
+            except (TypeError, RuntimeError):
+                pass
+            self._gallery_scrollbar = None
+        
+        # 清理懒加载状态
+        self._gallery_items = []
+        self._gallery_item_count = 0
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights.clear()
+        self._gallery_label_tops.clear()
+        self._gallery_total_height = 0
+        self._gallery_scroll_value = 0
+        
+        # 清理现有小部件
         if self._comic_layout:
             while self._comic_layout.count() > 0:
                 item = self._comic_layout.takeAt(0)
@@ -1169,8 +1221,106 @@ class ImageLabel(QLabel):
         
         self.setCursor(Qt.CursorShape.ArrowCursor)
     
+    def _calc_scaled_height(self, img_size):
+        """计算图片缩放后的显示高度"""
+        if img_size.width() <= 0:
+            return 100
+        base_width = getattr(self, '_comic_base_width', 800)
+        scale = base_width * self._zoom_factor / img_size.width()
+        return max(1, int(img_size.height() * scale))
+
+    def _gallery_load_image(self, idx: int):
+        """懒加载指定索引的图片"""
+        try:
+            label = self._comic_layout.itemAt(idx).widget()
+            if not label:
+                return
+            item = self._gallery_items[idx]
+
+            if isinstance(item, str):
+                image = QImage(item)
+            else:
+                image = QImage.fromData(item[1])
+
+            if image.isNull():
+                return
+
+            pixmap = QPixmap.fromImage(image)
+            base_width = getattr(self, '_comic_base_width', 800)
+            width = int(base_width * self._zoom_factor)
+            if pixmap.width() > width:
+                scaled = pixmap.scaled(
+                    width,
+                    int(pixmap.height() * width / pixmap.width()),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+            else:
+                scaled = pixmap
+
+            label.setPixmap(scaled)
+            self._gallery_loaded.add(idx)
+        except Exception:
+            logger.exception(f"懒加载图片失败 index={idx}")
+
+    def _gallery_unload_image(self, idx: int):
+        """卸载指定索引的图片（释放内存）"""
+        try:
+            label = self._comic_layout.itemAt(idx).widget()
+            if label:
+                label.clear()
+            self._gallery_loaded.discard(idx)
+        except Exception:
+            logger.exception(f"卸载图片失败 index={idx}")
+
+    def _gallery_update_window(self):
+        """根据当前滚动位置更新加载窗口"""
+        if not self._comic_view_enabled or self._gallery_item_count == 0:
+            return
+
+        scrollbar = self._gallery_scrollbar
+        if not scrollbar:
+            return
+
+        scroll_value = scrollbar.value()
+        viewport_height = scrollbar.parent().height() if scrollbar.parent() else 600
+        center_y = scroll_value + viewport_height // 2
+
+        # 二分查找中心图片索引
+        tops = self._gallery_label_tops
+        lo, hi = 0, len(tops)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if tops[mid] <= center_y:
+                lo = mid + 1
+            else:
+                hi = mid
+        center_idx = max(0, lo - 1)
+
+        if center_idx == self._gallery_current_center and self._gallery_loaded:
+            return
+        self._gallery_current_center = center_idx
+
+        window_start = max(0, center_idx - self._gallery_window_size)
+        window_end = min(self._gallery_item_count - 1, center_idx + self._gallery_window_size)
+
+        # 卸载窗口外的图片
+        for idx in list(self._gallery_loaded):
+            if idx < window_start or idx > window_end:
+                self._gallery_unload_image(idx)
+
+        # 加载窗口内的图片
+        for idx in range(window_start, window_end + 1):
+            if idx not in self._gallery_loaded:
+                self._gallery_load_image(idx)
+
+    def _on_gallery_scroll(self, value):
+        """滚动时更新懒加载窗口"""
+        self._gallery_scroll_value = value
+        self._gallery_update_window()
+
     def comicClick(self, img_path: str):
-        """漫画视图中点击图片，无行为，防止崩溃"""
+        """图库模式中点击图片，无行为，防止崩溃"""
         pass
     
     def _get_folder_images(self, folder: str) -> list:

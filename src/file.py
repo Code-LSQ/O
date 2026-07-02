@@ -656,7 +656,7 @@ class _ArchiveFileHandler(FileHandler):
 
     def open(self, file_path: str, main):
         self._create_editor(file_path)
-        main.statusBar().showMessage(f"已打开: {os.path.abspath(file_path)} (右键进入漫画视图)", 3000)
+        main.statusBar().showMessage(f"已打开: {os.path.abspath(file_path)} (右键进入图库模式)", 3000)
 
 
 class _PdfFileHandler(FileHandler):

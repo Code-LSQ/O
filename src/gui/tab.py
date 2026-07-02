@@ -19,22 +19,6 @@ from src.util import logger, EXTENSION, messageBox
 _LINE_ENDING_RE = re.compile(r'\r\n|\r')
 
 
-# class ViewMode(Enum):
-#     TEXT = auto()
-#     Markdown = 
-#     HEX = auto()
-#     IMAGE = auto()
-#     COMIC = auto()
-#     PDF = 
-
-# def setViewMode(self, mode: ViewMode):
-#     self.text_edit.setVisible(mode in (ViewMode.TEXT, ViewMode.HEX))
-#     self.image_scroll.setVisible(mode == ViewMode.IMAGE)
-#     self._gallery_widget.setVisible(mode == ViewMode.COMIC)
-#     self._pagination_bar.setVisible(mode == ViewMode.TEXT and self._is_truncated)
-#     self.is_image = (mode == ViewMode.IMAGE)
-
-
 class EditorTab(QWidget):
     """编辑器标签页：管理文件状态、视图模式（文本/图片/PDF/Markdown）、编码、高亮器"""
 
@@ -1089,7 +1073,7 @@ class EditorTab(QWidget):
     def _show_image_menu(self, pos, widget):
         """显示图片右键菜单"""
         menu = QMenu(self)
-        action = QAction("漫画视图", menu)
+        action = QAction("图库模式", menu)
         if self._archive_type:
             action.triggered.connect(self._enter_archive_gallery)
         else:
@@ -1104,11 +1088,11 @@ class EditorTab(QWidget):
         self._show_image_menu(pos, self.image_scroll)
     
     def _enter_folder_comic_view(self):
-        """进入普通文件夹漫画视图"""
+        """进入普通文件夹图库模式"""
         self.image_label._enter_comic_view()
     
     def _enter_archive_gallery(self):
-        """进入压缩包漫画视图"""
+        """进入压缩包图库模式"""
         logger.info(f"=== _enter_archive_gallery called, archive_type={self._archive_type}")
         
         if not self._zip_image_paths and self._archive_type == 'zip':
