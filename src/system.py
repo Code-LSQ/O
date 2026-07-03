@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.util import logger, getAppPath, APP_NAME, icon_dir
+from src.util import logger, getAppPath, APP_NAME, icon_dir, Interpret
 
 if sys.platform == "win32":
     import winreg
@@ -34,6 +34,7 @@ if sys.platform == "win32":
         }
     
     def setAutoStart(enabled: bool) -> bool:
+        key = None
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -46,7 +47,11 @@ if sys.platform == "win32":
                 if not app_path:
                     logger.error("开机自启失败：无法获取程序路径")
                     return False
-                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, f'"{app_path}"')
+                if Interpret:
+                    app_path = f'"{sys.executable}" "{app_path}"'
+                else:
+                    app_path = f'"{app_path}"'
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, app_path)
                 logger.info("开机自启已启用")
             else:
                 try:
@@ -54,11 +59,13 @@ if sys.platform == "win32":
                     logger.info("开机自启已禁用")
                 except FileNotFoundError:
                     pass
-            winreg.CloseKey(key)
             return True
         except Exception:
             logger.exception("设置开机自启失败")
             return False
+        finally:
+            if key:
+                winreg.CloseKey(key)
 
     class GUID(Structure):
         _fields_ = [
@@ -136,7 +143,7 @@ if sys.platform == "win32":
         windll.user32.ReleaseDC(0, screen_dc)
         return icon
 
-    def _getIconFromImageList(index: int, size: int) -> QIcon:
+    def _getIconFromList(index: int, size: int) -> QIcon:
         """从系统图片列表中获取指定索引的高分辨率图标"""
         ppv = c_void_p()
         SHGetImageList = windll.shell32.SHGetImageList
@@ -171,7 +178,7 @@ if sys.platform == "win32":
         if file_path.startswith("shell:::"):
             if file_path == "shell:::{645FF040-5081-101B-9F08-00AA002F954E}":
                 return QIcon(str(icon_dir / "Recycle.png"))
-            return getCLSIDIcon(file_path, size)
+            return getCLSIDIcon(file_path, size * 4)
         if file_path == "Terminal":
             file_path = "C:\\Windows\\System32\\cmd.exe"
         if not os.path.exists(file_path):
@@ -182,7 +189,7 @@ if sys.platform == "win32":
                 file_path, 0, byref(shinfo), sizeof(shinfo), SHGFI_SYSICONINDEX
             )
             if result != 0:
-                return _getIconFromImageList(shinfo.iIcon, size)
+                return _getIconFromList(shinfo.iIcon, size * 2)
         return QFileIconProvider().icon(QFileInfo(file_path))
 
     @lru_cache(maxsize=256)
@@ -210,7 +217,7 @@ if sys.platform == "win32":
             result = _SHGetInfo(pidl, 0, byref(shinfo), sizeof(shinfo), SHGFI_PIDL | SHGFI_SYSICONINDEX)
             if result == 0:
                 return QIcon()
-            icon = _getIconFromImageList(shinfo.iIcon, size)
+            icon = _getIconFromList(shinfo.iIcon, size)
         finally:
             ILFree = windll.shell32.ILFree
             ILFree.argtypes = [c_void_p]

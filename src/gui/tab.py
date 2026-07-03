@@ -9,11 +9,10 @@ from PySide6.QtCore import Qt, Signal, QEvent, QObject
 from PySide6.QtGui import QFont, QPixmap, QTextCursor, QTextDocument, QAction, QImage
 
 from src.file import FileOperation, pdfView, readEncoding
-from src.util import urlToPath
+from src.util import logger, EXTENSION, messageBox, urlToPath
 from src.core.syntax import create_highlighter
 from src.core.md import render_for_view
 from src.core.timer import LRUCache
-from src.util import logger, EXTENSION, messageBox
 
 
 _LINE_ENDING_RE = re.compile(r'\r\n|\r')
@@ -31,6 +30,7 @@ class EditorTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.file_path = None
         self.is_modified = False
         self.encoding = 'utf-8'
@@ -363,6 +363,9 @@ class EditorTab(QWidget):
         self.text_edit.show()
         self._is_zip_gallery = False
         
+        self._zip_image_paths = []
+        self._tar_image_paths = []
+        self._archive_type = None
         self._comic_images_data.clear()
         
         for i in reversed(range(self._gallery_layout.count())):

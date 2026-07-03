@@ -1219,6 +1219,8 @@ class ImageLabel(QLabel):
             self._archive_comic_container = None
             self._archive_comic_layout = None
         
+        self._archive_images_data = []
+        self._pixmap = None
         self.setCursor(Qt.CursorShape.ArrowCursor)
     
     def _calc_scaled_height(self, img_size):

@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, monitor, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog
+from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor
 from src.file import FileControl, FileOperation, ArchiveItemModel
 from src.core.md import extract_toc
 from src.gui.find_re import FindReplaceDialog
@@ -73,15 +73,9 @@ class EditorWindow(WindowMouse, QMainWindow):
         """窗口状态变化事件 - 最小化时暂停定时器"""
         if event.type() == event.Type.WindowStateChange:
             if self.windowState() & Qt.WindowState.WindowMinimized:
-                if hasattr(self, '_update_timer') and self._update_timer.isActive():
-                    self._update_timer.stop()
-                    self._update_timer_was_active = True
-                else:
-                    self._update_timer_was_active = False
+                self._usage_timer_was_active = self._usage_monitor.pause()
             else:
-                if hasattr(self, '_update_timer') and getattr(self, '_update_timer_was_active', False):
-                    self._update_timer.start(1000)
-                    self._update_timer_was_active = False
+                self._usage_monitor.resume(getattr(self, '_usage_timer_was_active', False))
         super().changeEvent(event)
     
     def _on_toolbar_double_click(self, event):
@@ -105,17 +99,13 @@ class EditorWindow(WindowMouse, QMainWindow):
         # CPU / 内存 显示标签
         self.cpu_label = QLabel(self)
         self.cpu_label.setObjectName("cpu_label")
-        self.cpu_label.setVisible(self.config.get("usage", True))
 
         self._menu_controller.buildMenuBar(self._toolbar)
         
         layout.addWidget(self._toolbar)
         
-        # 更新CPU/内存显示
-        self._update_timer = QTimer(self)
-        self._update_timer.timeout.connect(self._update_usage)
-        self._update_timer.start(2000)
-        self._update_usage()
+        self._usage_monitor = UsageMonitor(self, self.cpu_label, self.config)
+        self._usage_monitor.sync()
 
         # 水平布局用于放置文件夹面板和编辑器
         content_layout = QHBoxLayout()
@@ -227,12 +217,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         """点击父文件夹标签时切换到上级目录"""
         self._folder_panel_manager._on_header_clicked(event)
 
-    def _update_usage(self):
-        """更新CPU和内存显示"""
-        usage = monitor()
-        if usage:
-            self.cpu_label.setText(usage)
-    
     def open_folder_dialog(self):
         """打开文件夹对话框"""
         folder = getFilePath(self, tr("选择文件夹"), mode="dir")
@@ -496,10 +480,20 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.tab_widget.removeTab(index)
         if hasattr(editor, '_exit_pdf_view'):
             editor._exit_pdf_view()
+        if hasattr(editor, '_exit_gallery'):
+            editor._exit_gallery()
         if hasattr(editor, '_markdown_cache'):
             editor._markdown_cache.clear()
         if hasattr(editor, 'highlighter') and editor.highlighter:
             editor.highlighter.deleteLater()
+        editor._zip_image_paths = []
+        editor._tar_image_paths = []
+        editor._archive_current_image = None
+        editor._is_viewing_archive_image = False
+        editor._is_zip_gallery = False
+        editor._archive_type = None
+        if hasattr(editor, 'image_label') and hasattr(editor.image_label, '_comic_view_enabled') and editor.image_label._comic_view_enabled:
+            editor.image_label._exit_comic_view()
         editor.deleteLater()
         
         self._toc_panel.hide_panel()
@@ -820,6 +814,8 @@ class EditorWindow(WindowMouse, QMainWindow):
         
         if "Edit.shortcuts" in settings:
             self._menu_controller._apply_shortcuts(settings["Edit.shortcuts"])
+        
+        self._usage_monitor.sync()
         
         self.statusBar().showMessage(tr("设置已保存"), 2000)
 

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, monitor, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file
+from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor
 from src.config import SettingsDialog, getConfig
 from src.gui.mouse import WindowMouse
 from src.gui.control import WindowControl, PluginControl
@@ -23,12 +23,6 @@ from src.system import SYSTEM_ACT, getFileIcon
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
-
-# 附属服务/进程管理，预期行为
-# 针对文件类型的 .exe 程序，若设置附属服务或附属进程，在启动时，先检查附属服务状态，如果不是手动启用，设置其为手动启用，然后开启附属服务，然后设置一个定时器，十秒检查一次主进程状态，在用户结束主进程后，结束其附属进程和关闭附属服务。适用于 百度网盘、WPS的流氓进程，还有 VMware 这种关闭后有好几个服务在运行的。
-# 用 | 分隔，有空格要用 "" 包裹，有白名单，免得误操作给系统搞崩溃了。需要管理员权限 
-# 服务: VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Service"
-# 进程: YunDetectService.exe
 
 def setApp(app: QApplication):
     config = getConfig()
@@ -139,14 +133,24 @@ class SystemTray:
 class ServiceProcess:
     """监控主进程退出后自动清理附属进程和服务"""
 
+    _active_pids: set = set()
+
     def __init__(self, process_names: list, service_names: list):
         self.process_names = process_names
         self.service_names = service_names
         self.monitored_pids: set = set()
+        self._initial_pids: set = set()
         self._timer = None
+        self._cleaned_up = False
 
     def startMonitor(self, pids: set):
         """开始监控指定 PID"""
+        dupes = pids & ServiceProcess._active_pids
+        if dupes:
+            logger.warning(f"PID {dupes} 已在监控中，跳过")
+            return
+        ServiceProcess._active_pids |= pids
+        self._initial_pids = pids.copy()
         self.monitored_pids = pids.copy()
         self._timer = TimerManager().create_timer()
         self._timer.setInterval(10000)
@@ -167,27 +171,49 @@ class ServiceProcess:
         if not alive:
             logger.info("主进程已退出，开始清理")
             self._cleanup()
+        else:
+            logger.debug(f"监控中，进程仍存活: {alive}")
 
     def _cleanup(self):
         """清理附属进程和服务"""
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+
         if self._timer:
             self._timer.stop()
             self._timer.deleteLater()
             self._timer = None
 
-        safe_names = filterList(self.process_names, PROCESS_LIST, "进程")
-        for name in safe_names:
+        ServiceProcess._active_pids.difference_update(self._initial_pids)
+
+        target_names = [n.strip().strip('"').lower() for n in self.process_names]
+        targets = {}
+        try:
             for p in process_iter(['pid', 'name']):
                 try:
-                    if p.info['name'] and p.info['name'].lower() == name.lower():
-                        Process(p.info['pid']).terminate()
-                        logger.info(f"已终止进程: {name} (PID {p.info['pid']})")
+                    if p.info['name'] and p.info['name'].lower() in target_names:
+                        targets.setdefault(p.info['name'].lower(), []).append(p.info['pid'])
+                except (NoSuchProcess, AccessDenied):
+                    pass
+        except Exception:
+            logger.exception("遍历进程时出错")
+
+        for name, pids in targets.items():
+            for pid in pids:
+                try:
+                    proc = Process(pid)
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except Exception:
+                        proc.kill()
+                    logger.info(f"已终止进程: {name} (PID {pid})")
                 except (NoSuchProcess, AccessDenied):
                     pass
 
-        safe_services = filterList(self.service_names, SERVICE_LIST, "服务")
-        service(safe_services, "stop", 10)
-        logger.info("附属清理完成")
+        service(self.service_names, "stop", 10)
+        logger.info(f"附属清理完成: 进程={self.process_names}, 服务={self.service_names}")
 
 # 系统关键进程名单（小写），禁止终止
 PROCESS_LIST = {
@@ -559,13 +585,12 @@ def argsPlaceholder(args: str) -> str:
             args = args.replace(placeholder, value)
     return args
 
-def _get_groups(config) -> list:
-    tools = config.get("Launch.tools", {})
+def _get_groups(tools: dict) -> list:
     return list(tools.keys()) if tools else []
 
 
-def _get_group_tools(config, group: str) -> list:
-    return config.get(f"Launch.tools.{group}", [])
+def _get_group_tools(tools: dict, group: str) -> list:
+    return tools.get(group, [])
 
 class MainWindow(WindowMouse, QMainWindow):
     """启动器主窗口"""
@@ -576,6 +601,9 @@ class MainWindow(WindowMouse, QMainWindow):
         self.app = app
         self._editor_window = None
         self.config = getConfig()
+        self._tools = getConfig().get("Launch.tools", {})
+        self._path_mode = getConfig().get("Launch.path_mode", "absolute")
+        self._on_top = getConfig().get("Launch.on_top", False)
         self.setStatusBar(None)
         self.system_tray = SystemTray(self, self.app)
         Translator().setLanguage(self.config.get("language", "简体中文"))
@@ -583,6 +611,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self._fallback_size = (600, 400)
         self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
+        self._tools_initialized = False
         self.setAcceptDrops(True)
         self._setup_ui()
         self.applyTheme()
@@ -596,10 +625,23 @@ class MainWindow(WindowMouse, QMainWindow):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self.refreshTool)
 
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.timeout.connect(self._on_hover_timeout)
+
         QTimer.singleShot(0, self._lazy_init)
 
         if self.app:
             self.app.aboutToQuit.connect(lambda: getConfig().save())
+
+    def _sync_tools(self):
+        """同步 _tools 到配置"""
+        getConfig().set("Launch.tools", self._tools)
+
+    def _save_tools(self):
+        """同步 _tools 到配置并保存"""
+        self._sync_tools()
+        getConfig().save()
 
     def _open_editor(self, file_path=None):
         """打开/激活编辑器窗口"""
@@ -703,7 +745,7 @@ class MainWindow(WindowMouse, QMainWindow):
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
         
         # 根据配置设置置顶
-        if getConfig().get("Launch.on_top", False):
+        if self._on_top:
             flags |= Qt.WindowType.WindowStaysOnTopHint
         
         self.setWindowFlags(flags)
@@ -779,8 +821,9 @@ class MainWindow(WindowMouse, QMainWindow):
 
         self.cpu_label = QLabel(self)
         self.cpu_label.setObjectName("cpu_label")
-        self.cpu_label.setVisible(self.config.get("usage", True))
         title_layout.addWidget(self.cpu_label)
+        self._usage_monitor = UsageMonitor(title_bar, self.cpu_label, self.config)
+        self._usage_monitor.sync()
 
         self.settings_btn = QPushButton("设置")
         self.settings_btn.setObjectName("settings_btn")
@@ -799,17 +842,6 @@ class MainWindow(WindowMouse, QMainWindow):
         
         # 标题栏双击最大化
         title_bar.mouseDoubleClickEvent = self._title_double_click
-
-        self._update_timer = QTimer(title_bar)
-        self._update_timer.timeout.connect(self._update_usage)
-        self._update_timer.start(2000)
-        self._update_usage()
-
-    def _update_usage(self):
-        """更新CPU和内存显示"""
-        usage = monitor()
-        if usage:
-            self.cpu_label.setText(usage)
 
     def _title_double_click(self, event):
         """标题栏双击"""
@@ -855,9 +887,8 @@ class MainWindow(WindowMouse, QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
         
-        groups = _get_groups(getConfig())
+        groups = _get_groups(self._tools)
         
-        self._hover_timers = {}
         hover_enabled = getConfig().get("Launch.hover_switch", False)
         
         for group in groups:
@@ -884,17 +915,17 @@ class MainWindow(WindowMouse, QMainWindow):
             if event.type() == QEvent.Type.HoverEnter:
                 group = obj.text()
                 if group != self._current_group:
-                    timer = QTimer(self)
-                    timer.setSingleShot(True)
-                    timer.timeout.connect(lambda g=group: self.switchGroup(g))
-                    timer.start(500)
-                    self._hover_timers[obj] = timer
+                    self._hover_timer.stop()
+                    self._hover_target = group
+                    self._hover_timer.start(500)
             elif event.type() == QEvent.Type.HoverLeave:
-                if obj in self._hover_timers:
-                    self._hover_timers[obj].stop()
-                    self._hover_timers[obj].deleteLater()
-                    del self._hover_timers[obj]
+                self._hover_timer.stop()
         return super().eventFilter(obj, event)
+
+    def _on_hover_timeout(self):
+        """悬停定时器触发时切换分组"""
+        if self._hover_target:
+            self.switchGroup(self._hover_target)
     
     def _show_group_frame_menu(self, pos):
         child = self.group_frame.childAt(pos)
@@ -918,61 +949,56 @@ class MainWindow(WindowMouse, QMainWindow):
         """添加分组"""
         name = inputDialog(self, "新建", "分组名称")
         if name:
-            groups = _get_groups(getConfig())
+            groups = _get_groups(self._tools)
             if name.strip() in groups:
                 messageBox(self, "警告", "分组名称已存在", 1)
                 return
-            tools = getConfig().get("Launch.tools", {})
-            tools[name.strip()] = []
-            getConfig().set("Launch.tools", tools)
-            getConfig().save()
+            self._tools[name.strip()] = []
+            self._save_tools()
             self.refreshGroup()
     
     def _rename_group(self, group: str):
         """重命名分组"""
         name = inputDialog(self, "重命名分组", "新名称", default=group)
         if name and name != group:
-            groups = _get_groups(getConfig())
+            groups = _get_groups(self._tools)
             if name.strip() in groups:
                 messageBox(self, "警告", "分组名称已存在", 1)
                 return
             
-            tools = getConfig().get("Launch.tools", {})
-            tools[name.strip()] = tools.pop(group)
-            getConfig().set("Launch.tools", tools)
+            self._tools[name.strip()] = self._tools.pop(group)
             
             if self._current_group == group:
                 self._current_group = name.strip()
                 getConfig().set("Launch.active_group", name.strip())
             
-            getConfig().save()
+            self._save_tools()
             self.refreshGroup()
             self.refreshTool()
     
     def _delete_group(self, group: str):
         """删除分组"""
         if messageBox(self, "确认删除", f"确定要删除分组 \"{group}\" 吗？\n该分组下的启动项将被删除。"):
-            tools = getConfig().get("Launch.tools", {})
-            del tools[group]
-            getConfig().set("Launch.tools", tools)
+            del self._tools[group]
             
             if self._current_group == group:
-                groups = _get_groups(getConfig())
+                groups = _get_groups(self._tools)
                 self._current_group = groups[0] if groups else ""
                 getConfig().set("Launch.active_group", self._current_group)
             
-            getConfig().save()
+            self._save_tools()
             self.refreshGroup()
             self.refreshTool()
     
     def _move_group(self, group: str, direction: int):
         """移动分组"""
-        groups = _get_groups(getConfig())
+        groups = _get_groups(self._tools)
         idx = groups.index(group)
         new_idx = idx + direction
         if 0 <= new_idx < len(groups):
             groups[idx], groups[new_idx] = groups[new_idx], groups[idx]
-            getConfig().set("Launch.tools", {g: getConfig().get("Launch.tools", {}).get(g, []) for g in groups})
+            self._tools = {g: self._tools.get(g, []) for g in groups}
+            self._sync_tools()
             self.refreshGroup()
     
     def switchGroup(self, group: str):
@@ -1054,16 +1080,14 @@ class MainWindow(WindowMouse, QMainWindow):
                 target_index = self.tools_layout.count()
         
         if target_index >= 0 and target_index != source_index:
-            tools = _get_group_tools(getConfig(), self._current_group)
+            tools = _get_group_tools(self._tools, self._current_group)
             if 0 <= source_index < len(tools) and 0 <= target_index <= len(tools):
                 item = tools.pop(source_index)
                 if source_index < target_index:
                     target_index -= 1
                 tools.insert(target_index, item)
-                tools_dict = getConfig().get("Launch.tools", {})
-                tools_dict[self._current_group] = tools
-                getConfig().set("Launch.tools", tools_dict)
-                getConfig().save()
+                self._tools[self._current_group] = tools
+                self._save_tools()
                 self.refreshTool()
         
         event.acceptProposedAction()
@@ -1075,7 +1099,7 @@ class MainWindow(WindowMouse, QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
 
-        tools = _get_group_tools(getConfig(), self._current_group) or []
+        tools = _get_group_tools(self._tools, self._current_group) or []
         if not tools:
             return
 
@@ -1122,13 +1146,14 @@ class MainWindow(WindowMouse, QMainWindow):
         btn.setToolTip("\n".join(tip_parts))
         
         # 获取绝对路径用于图标
-        path_mode = getConfig().get("Launch.path_mode", "absolute")
+        path_mode = self._path_mode
         path = os.path.expandvars(path)
         if path_mode == "relative":
             path = convertPath(path, "absolute")
 
         # 设置图标
         icon = QIcon()
+        icon_size = getConfig().get("Launch.icon", 32)
         if icon_path:
             icon_check_path = convertPath(icon_path, "absolute") if path_mode == "relative" else icon_path
             if os.path.isfile(icon_check_path):
@@ -1139,11 +1164,10 @@ class MainWindow(WindowMouse, QMainWindow):
                     icon = QIcon(icon_check_path)
         elif path:
             try:
-                icon = getFileIcon(path, getConfig().get("Launch.icon", 32) * 4)
+                icon = getFileIcon(path, icon_size)
             except Exception:
                 logger.exception("获取图标失败")
         btn.setIcon(icon)
-        icon_size = getConfig().get("Launch.icon", 32)
         btn.setIconSize(QSize(icon_size, icon_size))
 
         # 根据按钮宽度，在空格或英文与其他字符交界处自动换行
@@ -1218,7 +1242,7 @@ class MainWindow(WindowMouse, QMainWindow):
         menu.addAction(copy_action)
 
         move_menu = menu.addMenu("移动到")
-        groups = _get_groups(getConfig())
+        groups = _get_groups(self._tools)
         for g in groups:
             if g == self._current_group:
                 continue
@@ -1366,10 +1390,8 @@ class MainWindow(WindowMouse, QMainWindow):
             "icon": ""
         }
         tool_data = {k: v for k, v in tool_data.items() if v}
-        tools = getConfig().get("Launch.tools", {})
-        tools.setdefault(self._current_group, []).append(tool_data)
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
+        self._tools.setdefault(self._current_group, []).append(tool_data)
+        self._save_tools()
         self.refreshTool()
     
     def _add_tool(self):
@@ -1380,7 +1402,7 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _edit_tool(self, index: int):
         """编辑启动项"""
-        tools = _get_group_tools(getConfig(), self._current_group)
+        tools = _get_group_tools(self._tools, self._current_group)
         if 0 <= index < len(tools):
             tool = tools[index]
             dialog = EditTool(tool, parent=self)
@@ -1389,10 +1411,8 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _on_edit_tool_updated(self, dialog, index):
         tool_data = dialog.get_data()
-        tools = getConfig().get("Launch.tools", {})
-        tools[self._current_group][index] = tool_data
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
+        self._tools[self._current_group][index] = tool_data
+        self._save_tools()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()
@@ -1402,19 +1422,15 @@ class MainWindow(WindowMouse, QMainWindow):
         new_tool = copy.deepcopy(tool)
         new_tool["name"] = f"{new_tool['name']}_副本"
         new_tool = {k: v for k, v in new_tool.items() if v}
-        tools = getConfig().get("Launch.tools", {})
-        tools.setdefault(self._current_group, []).append(new_tool)
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
+        self._tools.setdefault(self._current_group, []).append(new_tool)
+        self._save_tools()
         self.refreshTool()
 
     def _move_tool_to_group(self, tool: dict, index: int, target_group: str):
         """将工具移动到目标分组"""
-        tools = getConfig().get("Launch.tools", {})
-        tools[self._current_group].pop(index)
-        tools.setdefault(target_group, []).append(tool)
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
+        self._tools[self._current_group].pop(index)
+        self._tools.setdefault(target_group, []).append(tool)
+        self._save_tools()
         self.refreshTool()
         self.refreshGroup()
     
@@ -1427,7 +1443,7 @@ class MainWindow(WindowMouse, QMainWindow):
         tool_path = tool.get("path", "")
         if not tool_path:
             return
-        if getConfig().get("Launch.path_mode", "absolute") == "relative":
+        if self._path_mode == "relative":
             tool_path = convertPath(tool_path, "absolute")
         showFile(tool_path)
 
@@ -1436,21 +1452,19 @@ class MainWindow(WindowMouse, QMainWindow):
         tool_path = tool.get("path", "")
         if not tool_path:
             return
-        path_mode = getConfig().get("Launch.path_mode", "absolute")
+        path_mode = self._path_mode
         if path_mode == "relative":
             tool_path = convertPath(tool_path, "absolute")
         self._open_editor(tool_path)
-
+    
     def _delete_tool(self, index: int):
         """删除启动项"""
-        tools = _get_group_tools(getConfig(), self._current_group)
+        tools = _get_group_tools(self._tools, self._current_group)
         if 0 <= index < len(tools):
             tool = tools[index]
             if messageBox(self, "确认删除", f"确定要删除 \"{tool.get('name', '')}\" 吗？"):
-                tools = getConfig().get("Launch.tools", {})
-                tools[self._current_group].pop(index)
-                getConfig().set("Launch.tools", tools)
-                getConfig().save()
+                self._tools[self._current_group].pop(index)
+                self._save_tools()
                 self.refreshTool()
                 self.registerHotkeys()
     
@@ -1458,9 +1472,9 @@ class MainWindow(WindowMouse, QMainWindow):
         """启动工具"""
         args_raw = tool.get("args", "")
 
-        if "{Select}" in args_raw and not GlobalHotkeyListener._placeholders.get("Select"):
-            copy_selection()
-            QTimer.singleShot(300, lambda t=tool: self._finish_capture_and_run(t))
+        if "{Select}" in args_raw:
+            self.hide()
+            QTimer.singleShot(500, lambda t=tool: self._run_with_selection(t))
             return
 
         tool_type = tool.get("type", "文件")
@@ -1472,7 +1486,7 @@ class MainWindow(WindowMouse, QMainWindow):
             messageBox(self, "警告", "路径为空", 1)
             return
 
-        path_mode = getConfig().get("Launch.path_mode", "absolute")
+        path_mode = self._path_mode
         if path_mode == "relative":
             path = convertPath(path, "absolute")
             cwd = convertPath(cwd, "absolute")
@@ -1597,6 +1611,7 @@ class MainWindow(WindowMouse, QMainWindow):
                 pass
 
         openFile(path, cwd, args)
+        logger.info(f"主程序已启动: {tool.get('name', '')} ({path})")
 
         QTimer.singleShot(3000, lambda: self._startMonitor(path, before_pids, services, process_names))
         logger.info(f"启动服务管理模式: {tool.get('name', '')}, 服务={services}, 进程={process_names}")
@@ -1617,6 +1632,7 @@ class MainWindow(WindowMouse, QMainWindow):
             logger.warning(f"未检测到新启动的进程: {basename}")
             return
 
+        logger.info(f"检测到 {len(new_pids)} 个新进程: {new_pids}")
         mgr = ServiceProcess(process_names, services)
         mgr.startMonitor(new_pids)
     
@@ -1630,6 +1646,9 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _on_settings_dialog_accepted(self):
         listener = GlobalHotkeyListener()
+        self._path_mode = getConfig().get("Launch.path_mode", "absolute")
+        self._on_top = getConfig().get("Launch.on_top", False)
+        self._tools = getConfig().get("Launch.tools", {})
         hotkey_str = getConfig().get("Launch.hotkey", "Ctrl+L")
         mouse_side_enabled = getConfig().get("Launch.mouse_side", False)
         double_ctrl_enabled = getConfig().get("Launch.double_ctrl", False)
@@ -1650,7 +1669,7 @@ class MainWindow(WindowMouse, QMainWindow):
     def _update_on_top(self):
         """更新窗口置顶状态"""
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
-        if getConfig().get("Launch.on_top", False):
+        if self._on_top:
             flags |= Qt.WindowType.WindowStaysOnTopHint
         
         self.setWindowFlags(flags)
@@ -1748,10 +1767,8 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _edit_accepted(self, dialog):
         final_data = dialog.get_data()
-        tools = getConfig().get("Launch.tools", {})
-        tools.setdefault(self._current_group, []).append(final_data)
-        getConfig().set("Launch.tools", tools)
-        getConfig().save()
+        self._tools.setdefault(self._current_group, []).append(final_data)
+        self._save_tools()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()
@@ -1787,6 +1804,8 @@ class MainWindow(WindowMouse, QMainWindow):
             self.show()
             self.raise_()
             self.activateWindow()
+            if sys.platform == "win32":
+                windll.user32.SetForegroundWindow(int(self.winId()))
 
     def keyPressEvent(self, event):
         """键盘事件"""
@@ -1795,22 +1814,51 @@ class MainWindow(WindowMouse, QMainWindow):
         else:
             super().keyPressEvent(event)
     
+    def hideEvent(self, event):
+        """窗口隐藏事件（托盘隐藏时暂停资源占用监视）"""
+        super().hideEvent(event)
+        if hasattr(self, '_usage_monitor'):
+            self._usage_timer_was_active = self._usage_monitor.pause()
+
     def showEvent(self, event):
         """窗口显示事件"""
         super().showEvent(event)
-        self.refreshTool()
+        if hasattr(self, '_usage_monitor'):
+            self._usage_monitor.resume(getattr(self, '_usage_timer_was_active', False))
+        if not self._tools_initialized:
+            self.refreshTool()
+            self._tools_initialized = True
     
-    def _finish_capture_and_run(self, tool):
-        """捕获选中文本后执行工具"""
-        GlobalHotkeyListener._placeholders["Select"] = QApplication.clipboard().text() or ""
-        self.runItem(tool)
+    def _run_with_selection(self, tool):
+        """隐藏后捕获选中文本替换 {Select} 再执行工具"""
+        clipboard = QApplication.clipboard()
+        grabbed = False
+
+        def grab():
+            nonlocal grabbed
+            if grabbed:
+                return
+            grabbed = True
+            try:
+                clipboard.dataChanged.disconnect(grab)
+            except (TypeError, RuntimeError):
+                pass
+            text = clipboard.text() or ""
+            GlobalHotkeyListener._placeholders["Select"] = text
+            t = dict(tool)
+            t["args"] = tool.get("args", "").replace("{Select}", text)
+            self.runItem(t)
+
+        clipboard.dataChanged.connect(grab)
+        copy_selection()
+        QTimer.singleShot(500, grab)
     
     def registerHotkeys(self):
         """注册所有工具快捷键"""
         listener = GlobalHotkeyListener()
         listener.clear_tool_hotkeys()
         
-        all_tools = [t for g in getConfig().get("Launch.tools", {}).values() for t in g]
+        all_tools = [t for g in self._tools.values() for t in g]
         for tool in all_tools:
             hotkey = tool.get("hotkey", "")
             if hotkey:

@@ -186,14 +186,14 @@ class GlobalHotkeyListener(Singleton):
                 self._vk_pressed.discard(vk)
 
         try:
+            self._keyboard_listener = keyboard.Listener(
+                on_press=on_key_press,
+                on_release=on_key_release,
+                suppress=False,
+                win32_event_filter=keyboard_win32_filter
+            )
+            self._keyboard_listener.start()
             if hotkey_config or self._tool_hotkeys or double_ctrl_enabled:
-                self._keyboard_listener = keyboard.Listener(
-                    on_press=on_key_press,
-                    on_release=on_key_release,
-                    suppress=False,
-                    win32_event_filter=keyboard_win32_filter
-                )
-                self._keyboard_listener.start()
                 logger.info(f"全局快捷键监听已启动: {hotkey_str}")
             
             if mouse_side_enabled:

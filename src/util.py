@@ -16,7 +16,7 @@ from email.utils import parsedate_to_datetime
 from logging.handlers import RotatingFileHandler
 
 import requests
-from psutil import Process, cpu_count, disk_usage
+from psutil import Process, cpu_count, disk_usage, net_if_stats, net_if_addrs, net_io_counters
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QPushButton, QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFileDialog, QLayout
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
 from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer
@@ -46,6 +46,12 @@ theme_dir = root / "src" / "theme"
 logo_ico = icon_dir / "Logo.ico"
 logo_png = icon_dir / "Logo.png"
 logo_icn = icon_dir / "Logo.icns"
+
+if getattr(sys, "frozen", False) or "__compiled__" in globals():
+    Interpret = False
+else:
+    Interpret = True
+
 
 EXTENSION = {
     "TXET": {".txt", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".xml", ".html", ".css", ".scss", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".rb", ".php", ".sql", ".gitignore", ".env"},
@@ -178,18 +184,15 @@ def runAdmin() -> bool:
 
     elif sys.platform in ("linux", "darwin"):
         try:
-            cmd = ["sudo", sys.executable] + sys.argv
+            if Interpret:
+                cmd = ["sudo", sys.executable] + sys.argv
+            else:
+                cmd = ["sudo", sys.executable] + sys.argv[1:]
             subprocess.run(cmd, check=True)
             sys.exit(0)
         except Exception:
             logger.exception("提权失败")
             return False
-
-
-def restartApplication(parent=None):
-    if not messageBox(parent, tr("重启"), tr("确定重启应用？") + "\n" + tr("未保存的更改将丢失")):
-        return
-    QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
 
 
 class Singleton:
@@ -239,6 +242,9 @@ def getDisk():
 
 
 def getNet():
+    stats = net_if_stats()
+    addr = net_if_addrs()
+    counter = net_io_counters()
     pass
 
 
@@ -359,9 +365,19 @@ def getTimestamp() -> str:
 
 
 def getAppPath():
-    if getattr(sys, "frozen", False):
-        return sys.executable
-    return os.path.abspath(sys.argv[0]) if sys.argv else ""
+    # 开发时返回 o.py 文件路径，打包后返回二进制可执行文件路径
+    if Interpret:
+        return os.path.abspath(sys.argv[0]) if sys.argv else ""
+    return sys.executable
+
+
+def restartApplication(parent=None):
+    if not messageBox(parent, tr("重启"), tr("确定重启应用？") + "\n" + tr("未保存的更改将丢失")):
+        return
+    if Interpret:
+        QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
+    else:
+        QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv[1:]))
 
 
 def deleteRegistry(key_handle, sub_key):
@@ -429,10 +445,10 @@ def setWindowsMenu(enabled: bool) -> bool:
                         winreg.HKEY_CURRENT_USER, shell_key + r"\command", 0, winreg.KEY_SET_VALUE
                     )
                     try:
-                        if getattr(sys, "frozen", False):
-                            cmd = f'"{app_path}" "%1"'
-                        else:
+                        if Interpret:
                             cmd = f'"{sys.executable}" "{app_path}" "%1"'
+                        else:
+                            cmd = f'"{app_path}" "%1"'
                         winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd)
                     finally:
                         winreg.CloseKey(cmd_key)
@@ -465,6 +481,61 @@ def monitor():
     except Exception:
         logger.exception("获取资源占用异常")
         return False
+
+
+class UsageMonitor:
+    """资源占用监视器，封装定时器与标签更新"""
+
+    def __init__(self, parent, label, config, interval=3000):
+        self._parent = parent
+        self._label = label
+        self._config = config
+        self._interval = interval
+        self._timer = None
+        self._active = False
+
+    def start(self):
+        """启动定时器"""
+        if self._timer:
+            return
+        self._timer = QTimer(self._parent)
+        self._timer.timeout.connect(self._update)
+        self._timer.start(self._interval)
+        self._update()
+        self._active = True
+
+    def stop(self):
+        """停止定时器"""
+        if self._timer:
+            self._timer.stop()
+            self._timer.deleteLater()
+            self._timer = None
+        self._active = False
+
+    def pause(self):
+        """暂停（最小化时调用），返回是否之前是活跃的"""
+        was_active = self._active
+        self.stop()
+        return was_active
+
+    def resume(self, was_active):
+        """恢复（从最小化恢复时调用）"""
+        if was_active:
+            self.start()
+
+    def sync(self):
+        """根据当前配置同步定时器和标签可见性"""
+        enabled = self._config.get("usage", True)
+        self._label.setVisible(enabled)
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
+    def _update(self):
+        usage = monitor()
+        if usage:
+            self._label.setText(usage)
 
 
 def urlToPath(url: QUrl) -> str:

@@ -6,9 +6,9 @@ from functools import partial
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMenu, QFileSystemModel, QTreeView
 from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt, QDir
+from PySide6.QtCore import Qt, QDir, QModelIndex
 
-from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr
+from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr, formatFileSize
 from src.file import ArchiveItemModel
 
 
@@ -27,6 +27,20 @@ from src.file import ArchiveItemModel
 #     self._gallery_widget.setVisible(mode == ViewMode.GALLERY)
 #     self._pagination_bar.setVisible(mode == ViewMode.TEXT and self._is_truncated)
 #     self.is_image = (mode == ViewMode.IMAGE)
+
+
+class FileSystemModel(QFileSystemModel):
+    """文件系统模型 - 只暴露名称和大小列，大小显示为 KB/MB"""
+    def columnCount(self, parent=QModelIndex()):
+        return 2
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
+            path = self.filePath(index)
+            if os.path.isfile(path):
+                return formatFileSize(os.path.getsize(path))
+            return ""
+        return super().data(index, role)
 
 
 class FolderPanelManager:
@@ -68,7 +82,7 @@ class FolderPanelManager:
         self.header.hide()
         layout.addWidget(self.header)
         
-        self.model = QFileSystemModel()
+        self.model = FileSystemModel()
         self.model.setRootPath('')
         self.model.setNameFilters(['*'])
         self.model.setNameFilterDisables(False)
@@ -83,9 +97,6 @@ class FolderPanelManager:
         self.tree.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.tree.setItemsExpandable(True)
         self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
-        # 隐藏类型和修改时间
-        for i in range(2, self.model.columnCount()):
-            self.tree.hideColumn(i)
         
         self.tree.doubleClicked.connect(self._on_tree_double_clicked)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -344,6 +355,7 @@ class FolderPanelManager:
             root_index = self.model.index(folder_path)
             if self.tree.model() is not self.model:
                 self.tree.setModel(self.model)
+                self.tree.setHeaderHidden(True)
             self.tree.setRootIndex(root_index)
             
             parent_path = os.path.dirname(folder_path)
