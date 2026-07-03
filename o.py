@@ -8,10 +8,9 @@ from PySide6.QtWidgets import QApplication
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # 兼容嵌入版 Python
 
 from src.main import MainWindow, setApp
-from src.util import APP_NAME, ExceptSign, logger, getScreen
+from src.util import APP_NAME, VERSION, ExceptSign, logger, getScreen
 
 AUTHOR = "Code-LSQ"
-VERSION = "0.5.0"
 
 
 def exceptionHook(exc_type, value, tb):

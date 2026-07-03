@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from src.util import APP_NAME, root, data_dir, logger
+from src.util import APP_NAME, VERSION, root, data_dir, logger, arch
 
 # GitHub API 对未认证的匿名请求存在频率限制，每小时检查一次更新足够了
 

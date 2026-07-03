@@ -813,7 +813,7 @@ class SettingsDialog(QDialog):
             setWindowsMenu(new_context_menu)
 
         if hasattr(self, '_launcher_config') and isinstance(self._launcher_config, dict):
-            launch = dict(self._launcher_config)
+            launch = dict(self.config.get("Launch", {}))
             hotkey_text = self.launcher_hotkey_edit.text().strip()
             launch["hotkey"] = hotkey_text
 
@@ -828,7 +828,7 @@ class SettingsDialog(QDialog):
             path_mode_text = self.launcher_path_mode_combo.currentText()
             launch["path_mode"] = "absolute" if path_mode_text == "绝对路径" else "relative"
 
-            old_path_mode = self._launcher_config.get("path_mode", "absolute")
+            old_path_mode = launch.get("path_mode", "absolute")
             if old_path_mode != launch["path_mode"]:
                 launch["tools"] = self.convertToolPath(launch["path_mode"], launch.get("tools", {}))
 

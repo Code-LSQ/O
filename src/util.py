@@ -19,9 +19,10 @@ import requests
 from psutil import Process, cpu_count, disk_usage, net_if_stats, net_if_addrs, net_io_counters
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QPushButton, QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFileDialog, QLayout
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
-from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer
+from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo
 
 APP_NAME = "O"
+VERSION = "0.5.0"
 
 root = Path(__file__).resolve().parent.parent
 plugin_dir = root / "plugin"
@@ -51,6 +52,13 @@ if getattr(sys, "frozen", False) or "__compiled__" in globals():
     Interpret = False
 else:
     Interpret = True
+
+
+arch = QSysInfo.currentCpuArchitecture()
+if arch in ("x86_64", "amd64"):
+    arch = "x64"
+elif arch in ("arm64", "aarch64"):
+    arch = "arm64"
 
 
 EXTENSION = {
@@ -626,6 +634,7 @@ class RuntimeManager:
         self.Temp_Path = []
         self.Env_Vars = {}
         self._managed_keys = set()
+        self._injected_paths = []
 
     def loadConfig(self, config):
         """从配置加载环境变量"""
@@ -656,7 +665,8 @@ class RuntimeManager:
                 os.environ[key] = val
                 self._managed_keys.add(key)
 
-        # 注入 PATH
+        path_separator = ";" if sys.platform == "win32" else ":"
+
         path_list = []
         if self.Python:
             python_dir = os.path.dirname(self.Python)
@@ -675,13 +685,22 @@ class RuntimeManager:
             if p and os.path.isdir(p):
                 path_list.append(p)
 
+        # 注入 PATH：移除旧注入路径，再追加新路径（去重）
+        parts = os.environ.get("PATH", "").split(path_separator)
+        if self._injected_paths:
+            removed = {os.path.normpath(p).lower() for p in self._injected_paths}
+            parts = [p for p in parts if p and os.path.normpath(p).lower() not in removed]
         if path_list:
-            current_path = os.environ.get("PATH", "")
-            path_separator = ";" if sys.platform == "win32" else ":"
-            new_path = path_separator.join(path_list)
-            if current_path:
-                new_path += path_separator + current_path
-            os.environ["PATH"] = new_path
+            seen = {os.path.normpath(p).lower() for p in parts if p}
+            to_add = [p for p in path_list if os.path.normpath(p).lower() not in seen]
+            if to_add:
+                parts = to_add + parts
+            self._injected_paths = path_list
+        else:
+            self._injected_paths = []
+        os.environ["PATH"] = path_separator.join(parts)
+
+        logger.info(f"环境变量注入完成，PATH 长度: {len(os.environ.get('PATH', ''))}")
 
 env = RuntimeManager()
 
