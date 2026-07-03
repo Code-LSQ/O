@@ -2096,7 +2096,7 @@ def _log_qt_objects(widget):
         logger.info(f"  {name}: {count}")
 
 
-def _patch_mainwindow_for_debug():
+def _patchMainWindow():
     """给 MainWindow.__init__ 打补丁，注入内存追踪和 Qt 对象计数定时器"""
     from src.main import MainWindow
     from PySide6.QtCore import QTimer
@@ -2144,7 +2144,7 @@ def main():
         from o import main as launch_app
 
         if args.me:
-            _patch_mainwindow_for_debug()
+            _patchMainWindow()
 
         launch_app()
         return

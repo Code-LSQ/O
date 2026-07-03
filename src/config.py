@@ -470,15 +470,13 @@ class SettingsDialog(QDialog):
         self.java_path_edit.setText(self.config.get("Launch.Runtime.Java", ""))
 
         # 环境变量
-        layout.addRow(QLabel("环境变量"))
         self.temp_paths_edit = QTextEdit()
-        self.temp_paths_edit.setPlaceholderText("每行一个文件夹")
+        self.temp_paths_edit.setPlaceholderText("KEY=VALUE 或文件夹路径，每行一个")
         self.temp_paths_edit.setStyleSheet("background: #dddddd")
-        env_config = self.config.get("Launch.Runtime", {})
-        Temp_Path = env_config.get("Temp_Path", [])
+        Temp_Path = self.config.get("Launch.Runtime.Temp_Path", [])
         self.temp_paths_edit.setPlainText("\n".join(Temp_Path))
         self.temp_paths_edit.setMinimumHeight(80)
-        layout.addRow("", self.temp_paths_edit)
+        layout.addRow("环境变量", self.temp_paths_edit)
 
         self._launcher_config = launcher_config
         return tab
@@ -843,10 +841,20 @@ class SettingsDialog(QDialog):
             launch["icon"] = self.icon_spin.value()
             launch["padding"] = self.padding_spin.value()
 
+            lines = []
+            for line in self.temp_paths_edit.toPlainText().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    lines.append(line)
+                else:
+                    lines.append(os.path.normpath(line))
+
             launch["Runtime"] = {
                 "Python": os.path.normpath(self.python_path_edit.text()) if self.python_path_edit.text() else "",
                 "Java": os.path.normpath(self.java_path_edit.text()) if self.java_path_edit.text() else "",
-                "Temp_Path": [os.path.normpath(p.strip()) for p in self.temp_paths_edit.toPlainText().splitlines() if p.strip()]
+                "Temp_Path": lines,
             }
 
             self.config.set("Launch", launch)

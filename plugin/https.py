@@ -412,7 +412,7 @@ class HTTPTool:
                             size = "" if is_dir else f"{os.path.getsize(full_path) / 1024:.1f} KB"
                             items.append({"name": item, "is_dir": is_dir, "size": size})
                         except Exception as e:
-                            logger.debug(f"获取文件信息失败 {item}: {e}")
+                            logger.info(f"获取文件信息失败 {item}: {e}")
                             continue
                 except Exception:
                     logger.exception("读取目录失败")
@@ -618,7 +618,7 @@ class HTTPTool:
                 except Exception as e:
                     if shutdown_event.is_set():
                         break
-                    logger.debug(f"处理请求时出错: {e}")
+                    logger.info(f"处理请求时出错: {e}")
 
             if self.server:
                 self.server.server_close()

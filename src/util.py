@@ -397,7 +397,7 @@ def deleteRegistry(key_handle, sub_key):
         winreg.CloseKey(sub_handle)
     try:
         winreg.DeleteKey(key_handle, sub_key)
-        logger.debug(f"已删除注册表键: {sub_key}")
+        logger.info(f"已删除注册表键: {sub_key}")
     except OSError:
         logger.exception(f"删除注册表键失败: {sub_key}")
 
@@ -414,7 +414,7 @@ def isMenuRegister() -> bool:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_READ)
             winreg.CloseKey(key)
         except FileNotFoundError:
-            logger.debug(f"右键菜单注册表键缺失: {shell_key}")
+            logger.info(f"右键菜单注册表键缺失: {shell_key}")
             return False
         except Exception:
             return False
@@ -624,20 +624,40 @@ class RuntimeManager:
         self.Python = ""
         self.Java = ""
         self.Temp_Path = []
+        self.Env_Vars = {}
+        self._managed_keys = set()
 
     def loadConfig(self, config):
         """从配置加载环境变量"""
         env_config = config.get("Launch.Runtime", {})
         self.Python = env_config.get("Python", "")
         self.Java = env_config.get("Java", "")
-        self.Temp_Path = env_config.get("Temp_Path", [])
+        self.Env_Vars = {}
+        self.Temp_Path = []
+        for item in env_config.get("Temp_Path", []):
+            if "=" in item:
+                key, _, val = item.partition("=")
+                k, v = key.strip(), val.strip()
+                if k and v:
+                    self.Env_Vars[k] = v
+            else:
+                self.Temp_Path.append(item)
 
-    def envTemp(self, current_path):
-        """获取临时环境变量，将当前路径和配置中的临时路径加入PATH"""
-        env = os.environ.copy()
+    def inject(self):
+        """全局注入运行时环境变量到 os.environ"""
+        # 先清理上次注入的 key
+        for key in self._managed_keys:
+            os.environ.pop(key, None)
 
-        path_list = [current_path]
+        self._managed_keys = set()
 
+        for key, val in self.Env_Vars.items():
+            if val:
+                os.environ[key] = val
+                self._managed_keys.add(key)
+
+        # 注入 PATH
+        path_list = []
         if self.Python:
             python_dir = os.path.dirname(self.Python)
             if python_dir and os.path.isdir(python_dir):
@@ -655,22 +675,19 @@ class RuntimeManager:
             if p and os.path.isdir(p):
                 path_list.append(p)
 
-        current_path_env = env.get("PATH", "")
-        path_separator = ";" if sys.platform == "win32" else ":"
+        if path_list:
+            current_path = os.environ.get("PATH", "")
+            path_separator = ";" if sys.platform == "win32" else ":"
+            new_path = path_separator.join(path_list)
+            if current_path:
+                new_path += path_separator + current_path
+            os.environ["PATH"] = new_path
 
-        new_path = path_separator.join(path_list)
-        if current_path_env:
-            new_path += path_separator + current_path_env
-
-        env["PATH"] = new_path
-
-        return env
-
-env_manager = RuntimeManager()
+env = RuntimeManager()
 
 
-def openTerminal(path, config=None):
-    """打开命令行并设置临时环境变量"""
+def openTerminal(path):
+    """打开命令行"""
     if not path:
         logger.warning(f"无效的路径: {path!r}")
         return False
@@ -679,18 +696,13 @@ def openTerminal(path, config=None):
     if os.path.isfile(path):
         path = os.path.dirname(path)
 
-    if config:
-        env_manager.loadConfig(config)
-
-    env = env_manager.envTemp(path)
-
     try:
         if sys.platform == "win32":
-            subprocess.Popen(["cmd", "/k", "cd", "/d", path], env=env, cwd=path)
+            subprocess.Popen(["cmd", "/k", "cd", "/d", path], cwd=path)
         elif sys.platform == "linux":
-            subprocess.Popen(["xdg-terminal"], env=env, cwd=path, start_new_session=True)
+            subprocess.Popen(["xdg-terminal"], cwd=path, start_new_session=True)
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-a", "Terminal", path], env=env, cwd=path)
+            subprocess.Popen(["open", "-a", "Terminal", path], cwd=path)
         logger.info(f"已打开命令行: {path}")
         return True
     except Exception:
@@ -750,7 +762,7 @@ def checksum(path: str, algorithm="md5", _visited=None) -> str:
             else:
                 child_hash = ""
                 t = "?"
-                logger.debug(f"跳过非常规文件: {child}")
+                logger.info(f"跳过非常规文件: {child}")
 
             entries.append((name, t, child_hash))
 

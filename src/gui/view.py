@@ -299,7 +299,7 @@ class FolderPanelManager:
             if not isinstance(path, str) or not path:
                 logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
                 return
-            if openTerminal(path, config=self.config):
+            if openTerminal(path):
                 self.parent.statusBar().showMessage(tr("已打开命令行") + f": {os.path.normpath(path)}", 2000)
         except Exception:
             logger.exception("打开命令行失败")

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor
+from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env
 from src.config import SettingsDialog, getConfig
 from src.gui.mouse import WindowMouse
 from src.gui.control import WindowControl, PluginControl
@@ -36,6 +36,8 @@ def setApp(app: QApplication):
         icon = QIcon(str(logo_icn))
     app.setFont(font)
     app.setWindowIcon(icon)
+    env.loadConfig(getConfig())
+    env.inject()
 
 class SystemTray:
     """系统托盘"""
@@ -172,7 +174,7 @@ class ServiceProcess:
             logger.info("主进程已退出，开始清理")
             self._cleanup()
         else:
-            logger.debug(f"监控中，进程仍存活: {alive}")
+            logger.info(f"监控中，进程仍存活: {alive}")
 
     def _cleanup(self):
         """清理附属进程和服务"""
@@ -267,9 +269,9 @@ def openFile(path: str, cwd=None, args=None, operation="open"):
 # 命令行应用，工作目录为空时，打开软件所在目录。不为空时，打开cmd并跳转到工作目录。
 def cmdApp(path: str, cwd=None, *args, **kwargs):
     if cwd:
-        openTerminal(cwd, config=getConfig())
+        openTerminal(cwd)
     else:
-        openTerminal(Path(path).resolve().parent, config=getConfig())
+        openTerminal(Path(path).resolve().parent)
 
 def runPython(path: str, cwd, args, operation):
     run_path = getConfig().get("Launch.Runtime.Python", "")
@@ -611,6 +613,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self._fallback_size = (600, 400)
         self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
+        self._service_processes = []
         self._tools_initialized = False
         self.setAcceptDrops(True)
         self._setup_ui()
@@ -632,7 +635,13 @@ class MainWindow(WindowMouse, QMainWindow):
         QTimer.singleShot(0, self._lazy_init)
 
         if self.app:
-            self.app.aboutToQuit.connect(lambda: getConfig().save())
+            self.app.aboutToQuit.connect(self._on_about_to_quit)
+
+    def _on_about_to_quit(self):
+        """应用退出时保底清理所有附属服务"""
+        getConfig().save()
+        for sp in self._service_processes:
+            sp._cleanup()
 
     def _sync_tools(self):
         """同步 _tools 到配置"""
@@ -828,7 +837,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self.settings_btn = QPushButton("设置")
         self.settings_btn.setObjectName("settings_btn")
         self.settings_btn.setFixedSize(70, 32)
-        self.settings_btn.clicked.connect(self._show_settings_dialog)
+        self.settings_btn.clicked.connect(self._configDialog)
         title_layout.addWidget(self.settings_btn)
         
         self.window_control.createWindowButton(title_layout)
@@ -1129,13 +1138,15 @@ class MainWindow(WindowMouse, QMainWindow):
     def _create_tool_button(self, tool: dict, index: int) -> DragToolButton:
         """创建工具按钮"""
         name = tool.get("name", "未命名")
-        tool_type = tool.get("type", "文件")
         icon_path = tool.get("icon", "")
         path = tool.get("path", "") or tool.get("url", "")
         note = tool.get("note", "")
         
         btn = DragToolButton()
         btn.setObjectName("tool_btn")
+        font = btn.font()
+        font.setPointSizeF(max(1.0, font.pointSizeF() - 0.5))
+        btn.setFont(font)
         
         # 设置提示
         tip_parts = [name]
@@ -1524,7 +1535,7 @@ class MainWindow(WindowMouse, QMainWindow):
         
         if path == "Terminal":
             cwd = tool.get("cwd", "")
-            openTerminal(cwd if cwd else os.path.expanduser("~"), config=getConfig())
+            openTerminal(cwd if cwd else os.path.expanduser("~"))
             return
         
         func_act = {
@@ -1635,16 +1646,19 @@ class MainWindow(WindowMouse, QMainWindow):
         logger.info(f"检测到 {len(new_pids)} 个新进程: {new_pids}")
         mgr = ServiceProcess(process_names, services)
         mgr.startMonitor(new_pids)
+        self._service_processes.append(mgr)
     
-    def _show_settings_dialog(self):
+    def _configDialog(self):
         """显示设置对话框"""
         app_config = getConfig()
         dialog = SettingsDialog(app_config, self)
-        dialog.settings_changed.connect(self._on_settings_dialog_accepted)
+        dialog.settings_changed.connect(self._configAccept)
         dialog.restart_required.connect(lambda: restartApplication(self))
         dialog.exec()
     
-    def _on_settings_dialog_accepted(self):
+    def _configAccept(self):
+        env.loadConfig(getConfig())
+        env.inject()
         listener = GlobalHotkeyListener()
         self._path_mode = getConfig().get("Launch.path_mode", "absolute")
         self._on_top = getConfig().get("Launch.on_top", False)
