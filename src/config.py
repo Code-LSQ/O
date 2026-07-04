@@ -81,6 +81,7 @@ DEFAULT_CONFIG = {
             "GitHub": "https://github.com/search?q={query}"
         }
     },
+    "extra_plugin": "",
     "Plugin": {}
 }
 
@@ -99,10 +100,10 @@ class ConfigManager(Singleton):
         self._load()
 
     @staticmethod
-    def _deep_update(base: dict, update: dict) -> dict:
+    def _deepUpdate(base: dict, update: dict) -> dict:
         for key, value in update.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                ConfigManager._deep_update(base[key], value)
+                ConfigManager._deepUpdate(base[key], value)
             else:
                 base[key] = value
         return base
@@ -114,7 +115,7 @@ class ConfigManager(Singleton):
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     loaded_config = json.load(f)
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
-                self.config = self._deep_update(self.config, loaded_config)
+                self.config = self._deepUpdate(self.config, loaded_config)
                 logger.info(f"配置文件加载成功: {self.config_path}")
             except json.JSONDecodeError:
                 logger.exception("配置文件格式错误")
@@ -181,13 +182,13 @@ class ConfigManager(Singleton):
         else:
             self.config[key] = value
 
-    def update_window_geometry(self, geometry):
+    def updateWindowGeometry(self, geometry):
         self.set("Edit.width", geometry.width())
         self.set("Edit.height", geometry.height())
         self.set("Edit.x", geometry.x())
         self.set("Edit.y", geometry.y())
 
-    def add_recent_file(self, file_path: str):
+    def addRecentFile(self, file_path: str):
         file_path = os.path.normpath(file_path)
         recent = self.get("Edit.recent", [])
         if file_path in recent:
@@ -333,6 +334,9 @@ class SettingsDialog(QDialog):
         self.font_size_spin.setValue(self.config.get("font_size", 12))
         self.font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         layout.addRow(tr("字号"), self.font_size_spin)
+
+        self.extra_plugin_edit, self.extra_plugin_browse = filePathWidget(self, layout, tr("额外插件"), "", "", "dir")
+        self.extra_plugin_edit.setText(self.config.get("extra_plugin", ""))
 
         self.context_menu_check = QCheckBox(tr("右键菜单"))
         self.context_menu_check.setChecked(self.config.get("context_menu", False))
@@ -779,6 +783,7 @@ class SettingsDialog(QDialog):
             "Edit.auto_save": self.auto_save_check.isChecked(),
             "Edit.auto_save_interval": self.auto_save_interval.value(),
             "Edit.shortcuts": shortcuts,
+            "extra_plugin": self.extra_plugin_edit.text().strip(),
             "Plugin": self.config.get("Plugin", {}),
             "Edit.engine": self.searchEngine()
         }
@@ -894,5 +899,3 @@ class SettingsDialog(QDialog):
                     if key in tool and tool[key]:
                         tool[key] = convertPath(tool[key], new_mode)
         return tools
-
-

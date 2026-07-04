@@ -189,7 +189,7 @@ class FileOperation(Singleton):
             logger.exception("带限制读取文件失败")
             return "", 0, 0, -1, ""
 
-    def write_file(self, file_path: str, content: str, encoding: str = 'utf-8') -> bool:
+    def writeFile(self, file_path: str, content: str, encoding: str = 'utf-8') -> bool:
         """写入文件，自动创建父目录"""
         try:
             file_path = Path(file_path)
@@ -203,7 +203,7 @@ class FileOperation(Singleton):
             logger.exception("文件写入失败")
             return False
 
-    def create_backup(self, file_path: str, config=None) -> Optional[str]:
+    def createBackup(self, file_path: str, config=None) -> Optional[str]:
         """创建文件备份，返回备份路径；config 中 history_backup 为 False 时跳过"""
         if config is not None and not config.get("Edit.backup", True):
             return None
@@ -219,14 +219,14 @@ class FileOperation(Singleton):
             shutil.copyfile(file_path, backup_path)
             logger.info(f"文件备份成功: {backup_path}")
             
-            self._clean_old_backups(config)
+            self._cleanOldBackups(config)
             
             return str(backup_path)
         except Exception:
             logger.exception("备份创建失败")
             return None
 
-    def _clean_old_backups(self, config=None) -> None:
+    def _cleanOldBackups(self, config=None) -> None:
         """清理超过指定天数的旧备份文件"""
         try:
             days_to_keep = 7
@@ -246,7 +246,7 @@ class FileOperation(Singleton):
         except Exception:
             logger.exception("清理旧备份失败")
 
-    def get_file_info(self, file_path: str) -> dict:
+    def getFileInfo(self, file_path: str) -> dict:
         """获取文件元信息：名称、路径、大小、修改/创建时间、扩展名"""
         file_path = Path(file_path)
         if not file_path.exists():
@@ -413,13 +413,13 @@ class FileControl:
         for handler in self._file_handlers:
             if handler.can_handle(file_path):
                 handler.open(file_path, self.main)
-                self.main.config.add_recent_file(file_path)
+                self.main.config.addRecentFile(file_path)
                 return
 
         for can_handle, open_file in getPluginManager(self.main).file_handlers:
             if can_handle(file_path):
                 open_file(file_path, self.main)
-                self.main.config.add_recent_file(file_path)
+                self.main.config.addRecentFile(file_path)
                 return
 
         self._open_text_file(file_path)
@@ -496,7 +496,7 @@ class FileControl:
                 editor.set_truncated(total_lines, loaded_lines, file_path, encoding)
             self.main.encoding_label.setText(encodingName(encoding) if encoding else "")
             self.main._toc_panel.hide_panel()
-            self.main.config.add_recent_file(file_path)
+            self.main.config.addRecentFile(file_path)
             if truncated > 0:
                 self.main.statusBar().showMessage(
                     f"已打开: {os.path.abspath(file_path)} （显示 {loaded_lines}/{total_lines} 行）", 5000)
@@ -521,7 +521,7 @@ class FileControl:
 
         backup_path = None
         if file_path:
-            backup_path = self.main.file_op.create_backup(file_path, self.main.config)
+            backup_path = self.main.file_op.createBackup(file_path, self.main.config)
 
         try:
             # 大文件翻页模式下：合并各页内容再写出

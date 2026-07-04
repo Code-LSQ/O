@@ -1,12 +1,13 @@
-from functools import partial
+import os
 
 from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy, QDialog, QLabel, QListWidget, QPushButton, QHBoxLayout, QVBoxLayout
-from PySide6.QtGui import QKeySequence, QAction, QIcon
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QAction, QIcon, QMouseEvent
+from PySide6.QtCore import Qt, Signal, QPoint
 
-from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger
-from src.plugin import getPluginManager, pluginActionMenu
-from src.config import DEFAULT_CONFIG
+from src.util import tr, ENCODING_MAP, EXTENSION, icon_dir, messageBox, logger
+from src.plugin import getPluginManager
+from src.config import DEFAULT_CONFIG, getConfig
+from src.gui.view import ViewMode
 
 def getMaxIcon(theme="Light"):
     suffix = "-wh" if theme in {"Dark", "UI_Dark"} else ""
@@ -15,6 +16,148 @@ def getMaxIcon(theme="Light"):
     max_icon = QIcon(str(icon_dir / f"max{suffix}.svg"))
     maxed_icon = QIcon(str(icon_dir / f"maxed{suffix}.svg"))
     return max_icon, maxed_icon
+
+class WindowMouse:
+    """窗口拖拽和调整大小"""
+
+    isDragging = Signal(bool)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMouseTracking(True)
+        self._resize_edge = None
+        self._dragging = False
+        self._start_global_pos = QPoint()
+        self._start_window_pos = QPoint()
+        self._start_size = None
+        self._title_bar_height = 32
+        self._is_maximized = False
+        self._pre_maximize_geometry = None
+
+    def _get_edge(self, pos: QPoint):
+        """获取鼠标位置的边缘方向"""
+        w, h = self.width(), self.height()
+        x, y = pos.x(), pos.y()
+        edge_size = 8
+
+        if x < edge_size:
+            return "left"
+        if x > w - edge_size:
+            return "right"
+        if y < edge_size:
+            return "top"
+        if y > h - edge_size:
+            return "bottom"
+        return None
+
+    def _is_on_title_bar(self, pos: QPoint):
+        """检查是否在标题栏区域（用于拖拽，不包含顶部边缘区域）"""
+        edge_size = 8
+        return 0 <= pos.x() < self.width() and edge_size <= pos.y() <= self._title_bar_height
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+
+        pos = event.position().toPoint()
+        self._start_global_pos = event.globalPosition().toPoint()
+        self._start_window_pos = self.pos()
+        self._start_size = self.size()
+
+        if self._is_on_title_bar(pos):
+            self._dragging = True
+            self.grabMouse()
+            self.isDragging.emit(True)
+        else:
+            edge = self._get_edge(pos)
+            if edge:
+                self._resize_edge = edge
+                self._dragging = True
+                self.grabMouse()
+                self.isDragging.emit(True)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if not self._dragging:
+            return
+
+        gpos = event.globalPosition().toPoint()
+
+        if self._resize_edge:
+            self._do_resize(gpos)
+        else:
+            self._do_drag(gpos)
+
+    def _do_drag(self, gpos: QPoint):
+        """执行窗口拖拽"""
+        dx = gpos.x() - self._start_global_pos.x()
+        dy = gpos.y() - self._start_global_pos.y()
+        x = self._start_window_pos.x() + dx
+        y = self._start_window_pos.y() + dy
+        self.move(x, y)
+
+    def _do_resize(self, gpos: QPoint):
+        """执行窗口大小调整"""
+        dx = gpos.x() - self._start_global_pos.x()
+        dy = gpos.y() - self._start_global_pos.y()
+
+        x = self._start_window_pos.x()
+        y = self._start_window_pos.y()
+        w = self._start_size.width()
+        h = self._start_size.height()
+        edge = self._resize_edge
+
+        if edge == "left":
+            x += dx
+            w -= dx
+        elif edge == "right":
+            w += dx
+        elif edge == "top":
+            y += dy
+            h -= dy
+        elif edge == "bottom":
+            h += dy
+
+        min_w = self.minimumWidth() or 200
+        min_h = self.minimumHeight() or 150
+
+        if w < min_w:
+            if edge == "left":
+                x = self._start_window_pos.x() + self._start_size.width() - min_w
+            w = min_w
+        if h < min_h:
+            if edge == "top":
+                y = self._start_window_pos.y() + self._start_size.height() - min_h
+            h = min_h
+
+        if edge in ("left", "top"):
+            self.setGeometry(x, y, w, h)
+        else:
+            self.resize(w, h)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self._dragging:
+            self.releaseMouse()
+            self._resize_edge = None
+            self._dragging = False
+            self.isDragging.emit(False)
+
+    def _toggle_maximize(self):
+        if self._is_maximized:
+            self._is_maximized = False
+            if self._pre_maximize_geometry:
+                self.setGeometry(self._pre_maximize_geometry)
+            elif hasattr(self, "_fallback_size"):
+                self.resize(*self._fallback_size)
+            self.window_control.update_max_button(False)
+        else:
+            self._pre_maximize_geometry = self.geometry()
+            self._is_maximized = True
+            screen = self.screen()
+            if screen:
+                self.setGeometry(screen.availableGeometry())
+            self.window_control.update_max_button(True)
 
 class WindowControl:
     def __init__(self, main_window):
@@ -107,6 +250,54 @@ class MenuControl:
     def createWindowButton(self, toolbar: QToolBar):
         self.main.window_control.createWindowButton(toolbar)
 
+    def build_view_menu(self) -> QToolButton:
+        btn, menu = self.createMenuButton(tr("模式") + "(&V)")
+
+        menu.setStyleSheet("QMenu::indicator:checked { background-color: palette(text); border-radius: 4px; width: 8px; height: 8px; margin: 2px 2px; }")
+
+        self._view_actions = {}
+        for mode in ViewMode.ALL:
+            action = QAction(tr(mode), self.main)
+            action.setCheckable(True)
+            action.triggered.connect(lambda checked, m=mode: self.main.change_view_mode(m))
+            menu.addAction(action)
+            self._view_actions[mode] = action
+
+        menu.aboutToShow.connect(self._sync_view_menu)
+        return btn
+
+    def _sync_view_menu(self):
+        editor = self.main.get_current_editor()
+        current = self._detect_current_mode(editor)
+        supported = self._get_supported_modes(editor)
+        for mode, action in self._view_actions.items():
+            action.setVisible(mode in supported)
+            action.setChecked(mode == current)
+
+    def _get_supported_modes(self, editor):
+        if not editor or not editor.file_path:
+            return [ViewMode.TEXT, ViewMode.HEX]
+
+        ext = os.path.splitext(editor.file_path)[1].lower()
+        supported = [ViewMode.TEXT, ViewMode.HEX]
+
+        for mode, keys in ViewMode.EXT_KEYS.items():
+            if any(ext in EXTENSION[k] for k in keys):
+                supported.append(mode)
+
+        return supported
+
+    def _detect_current_mode(self, editor):
+        if not editor:
+            return ViewMode.TEXT
+        if editor._comic_view_enabled or editor._is_zip_gallery:
+            return ViewMode.GALLERY
+        if editor._is_pdf:
+            return ViewMode.PDF
+        if editor.is_image:
+            return ViewMode.IMAGE
+        return editor.view_mode
+
     def createMenuButton(self, title: str) -> tuple[QToolButton, QMenu]:
         btn = QToolButton()
         btn.setText(title)
@@ -174,11 +365,6 @@ class MenuControl:
 
         menu.addSeparator()
 
-        for mode in [tr("十六进制")]:
-            action = QAction(mode, self.main)
-            action.triggered.connect(partial(self.main.change_view_mode, mode))
-            menu.addAction(action)
-
         encoding_menu = QMenu(tr("编码"), self.main)
         menu.addMenu(encoding_menu)
 
@@ -204,21 +390,6 @@ class MenuControl:
         btn.setMenu(menu)
         return btn, menu
 
-    def build_plugin_menu(self) -> tuple[QToolButton, QMenu]:
-        btn, menu = self.createMenuButton(tr("插件") + "(&P)")
-
-        self._add_action(menu, tr("插件管理"), self.main._show_plugin_manager)
-
-        menu.addSeparator()
-
-        self.main.action_plugin_placeholder = QAction(tr("无插件"), self.main)
-        self.main.action_plugin_placeholder.setEnabled(False)
-        menu.addAction(self.main.action_plugin_placeholder)
-
-        self.main.plugin_menu = menu
-        btn.setMenu(menu)
-        return btn, menu
-
     def build_settings_action(self) -> QAction:
         settings_action = QAction(tr("设置"), self.main)
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
@@ -228,12 +399,12 @@ class MenuControl:
     def buildMenuBar(self, toolbar: QToolBar):
         file_btn, _ = self.build_file_menu()
         edit_btn, _ = self.build_edit_menu()
-        plugin_btn, _ = self.build_plugin_menu()
+        view_btn = self.build_view_menu()
         settings_action = self.build_settings_action()
 
         toolbar.addWidget(file_btn)
         toolbar.addWidget(edit_btn)
-        toolbar.addWidget(plugin_btn)
+        toolbar.addWidget(view_btn)
         toolbar.addAction(settings_action)
 
         spacer = QWidget()
@@ -245,171 +416,89 @@ class MenuControl:
         self._apply_shortcuts(self.config.get("Edit.shortcuts", {}))
 
 
-class PluginControl:
-    """插件控制器 - 管理插件的加载、启用、禁用和删除"""
+def show_plugin_dialog(parent=None):
+    """显示插件管理对话框"""
+    pm = getPluginManager()
 
-    def __init__(self, main_window):
-        self.main = main_window
-        self.plugin_manager = None
+    dialog = QDialog(parent)
+    dialog.setAttribute(Qt.WA_DeleteOnClose)
+    dialog.setWindowTitle(tr("插件管理"))
+    dialog.setMinimumWidth(450)
 
-    def init_plugins(self):
-        """初始化插件系统"""
-        self.plugin_manager = getPluginManager(self.main)
-        self.plugin_manager.initConfig(self.main.config)
-        self.refresh_plugin_menu()
+    layout = QVBoxLayout(dialog)
 
-    def save_plugin_config(self):
-        """保存插件配置到 config.json"""
-        self.plugin_manager.saveConfig(self.main.config)
+    label = QLabel(tr("已安装插件"))
+    layout.addWidget(label)
 
-    def refresh_plugin_menu(self):
-        """刷新插件菜单"""
-        available_plugins = self.plugin_manager.scanPlugins()
-        if available_plugins:
-            self.update_plugin_menu(available_plugins)
+    plugin_list = QListWidget()
+    available = pm.scanPlugins()
 
-    def update_plugin_menu(self, available_plugins: list):
-        """更新插件菜单"""
-        if not hasattr(self.main, 'plugin_menu') or not self.main.plugin_menu:
-            return
-
-        plugin_menu: QMenu = self.main.plugin_menu
-        plugin_menu.clear()
-
-        plugin_manager_action = QAction(tr("插件管理"), self.main)
-        plugin_manager_action.triggered.connect(self.show_plugin_manager)
-        plugin_menu.addAction(plugin_manager_action)
-
-        reload_action = QAction(tr("重载插件"), self.main)
-        reload_action.triggered.connect(self.reloadPlugins)
-        plugin_menu.addAction(reload_action)
-
-        plugin_menu.addSeparator()
-
-        for description, menu_item, _ in pluginActionMenu(self.plugin_manager, self.main):
-            if isinstance(menu_item, QMenu):
-                menu_item.setTitle(description)
-                plugin_menu.addMenu(menu_item)
-            else:
-                plugin_menu.addAction(menu_item)
-
-
-    def run_plugin(self, plugin):
-        """直接运行已加载的插件"""
-        if hasattr(plugin, 'show_ocr_dialog'):
-            plugin.show_ocr_dialog()
-        elif hasattr(plugin, 'run'):
-            plugin.run()
-        elif hasattr(plugin, 'show'):
-            plugin.show()
-        else:
-            menu = plugin.getAction()
-            if menu and isinstance(menu, QMenu) and menu.actions():
-                action = menu.actions()[0]
-                action.trigger()
-            else:
-                messageBox(self.main, tr("提示"), tr("插件") + f"{getattr(plugin, 'description', tr('未知'))}" + tr("暂无功能或未实现"), 1)
-
-    def reloadPlugins(self):
-        """重新加载所有插件"""
-        self.plugin_manager.initConfig(self.main.config)
-        self.refresh_plugin_menu()
-        logger.info(tr("插件已重新加载"))
-
-    def show_plugin_manager(self):
-        """显示插件管理对话框"""
-        dialog = QDialog(self.main)
-        dialog.setAttribute(Qt.WA_DeleteOnClose)
-        dialog.setWindowTitle(tr("插件管理"))
-        dialog.setMinimumWidth(450)
-
-        layout = QVBoxLayout(dialog)
-
-        label = QLabel(tr("已安装插件"))
-        layout.addWidget(label)
-
-        plugin_list = QListWidget()
-        available_plugins = self.plugin_manager.scanPlugins()
-
-        for plugin_name in available_plugins:
-            plugin_list.addItem(self._getPluginItem(plugin_name))
-
-        layout.addWidget(plugin_list)
-
-        btn_layout = QHBoxLayout()
-
-        enable_btn = QPushButton(tr("启用"))
-        enable_btn.clicked.connect(partial(self.toggle_plugin, available_plugins, plugin_list, True))
-        btn_layout.addWidget(enable_btn)
-
-        disable_btn = QPushButton(tr("禁用"))
-        disable_btn.clicked.connect(partial(self.toggle_plugin, available_plugins, plugin_list, False))
-        btn_layout.addWidget(disable_btn)
-
-        delete_btn = QPushButton(tr("删除插件"))
-        delete_btn.clicked.connect(partial(self.delete_plugin, available_plugins, plugin_list, dialog))
-        btn_layout.addWidget(delete_btn)
-
-        close_btn = QPushButton(tr("取消"))
-        close_btn.clicked.connect(dialog.close)
-        btn_layout.addWidget(close_btn)
-
-        layout.addLayout(btn_layout)
-
-        dialog.exec()
-
-    def delete_plugin(self, plugins: list, plugin_list: QListWidget, dialog: QDialog):
-        """删除插件"""
-        current_row = plugin_list.currentRow()
-        if current_row < 0 or current_row >= len(plugins):
-            return
-
-        plugin_name = plugins[current_row]
-
-        if not messageBox(self.main, tr("确认删除"), tr("确定要删除插件") + f" '{plugin_name}' " + tr("吗？") + "\n" + tr("这将同时删除插件文件和相关数据")):
-            return
-
-        errors = self.plugin_manager.deletePlugin(plugin_name)
-        self.save_plugin_config()
-
-        if errors:
-            messageBox(self.main, tr("删除失败"), tr("删除过程出现问题") + "\n".join(errors), 1)
-        else:
-            messageBox(self.main, tr("删除成功"), tr("插件") + plugin_name + tr("已完全删除"), 1)
-
-        dialog.close()
-        self.plugin_manager.reloadPlugins()
-        self.refresh_plugin_menu()
-
-    def _getPluginItem(self, plugin_name: str) -> str:
-        """获取插件列表项的显示文本"""
-        is_enabled = self.plugin_manager.isPluginEnabled(plugin_name)
-        status = tr('启用') if is_enabled else tr('禁用')
-        plugin = self.plugin_manager.plugins.get(plugin_name)
+    def _item_text(name):
+        enabled = pm.isPluginEnabled(name)
+        status = tr("启用") if enabled else tr("禁用")
+        plugin = pm.plugins.get(name)
         if plugin:
             return f"{plugin.description} ({status})"
-        cls = self.plugin_manager.getPluginClass(plugin_name)
-        name = getattr(cls, 'description', plugin_name) if cls else plugin_name
-        return f"{name} ({status})"
+        cls = pm.getPluginClass(name)
+        display = getattr(cls, "description", name) if cls else name
+        return f"{display} ({status})"
 
-    def toggle_plugin(self, plugins: list, plugin_list: QListWidget, enable: bool):
-        """启用或禁用插件"""
-        current_row = plugin_list.currentRow()
-        if current_row < 0 or current_row >= len(plugins):
+    for name in available:
+        plugin_list.addItem(_item_text(name))
+
+    layout.addWidget(plugin_list)
+
+    btn_layout = QHBoxLayout()
+
+    def _toggle(enable):
+        row = plugin_list.currentRow()
+        if row < 0 or row >= len(available):
             return
-
-        plugin_name = plugins[current_row]
-
+        name = available[row]
         if enable:
-            self.plugin_manager.enablePlugin(plugin_name)
-            logger.info(plugin_name + " " + tr("插件已启用"))
+            pm.enablePlugin(name)
+            logger.info(name + " " + tr("插件已启用"))
         else:
-            self.plugin_manager.disablePlugin(plugin_name)
-            logger.info(plugin_name + " " + tr("插件已禁用"))
-
-        self.save_plugin_config()
-        self.refresh_plugin_menu()
-
-        item = plugin_list.item(current_row)
+            pm.disablePlugin(name)
+            logger.info(name + " " + tr("插件已禁用"))
+        pm.saveConfig(getConfig())
+        item = plugin_list.item(row)
         if item:
-            item.setText(self._getPluginItem(plugin_name))
+            item.setText(_item_text(name))
+
+    enable_btn = QPushButton(tr("启用"))
+    enable_btn.clicked.connect(lambda: _toggle(True))
+    btn_layout.addWidget(enable_btn)
+
+    disable_btn = QPushButton(tr("禁用"))
+    disable_btn.clicked.connect(lambda: _toggle(False))
+    btn_layout.addWidget(disable_btn)
+
+    def _delete():
+        row = plugin_list.currentRow()
+        if row < 0 or row >= len(available):
+            return
+        name = available[row]
+        if not messageBox(dialog, tr("确认删除"),
+                          tr("确定要删除插件") + f" '{name}' " + tr("吗？") + "\n" +
+                          tr("这将同时删除插件文件和相关数据")):
+            return
+        errors = pm.deletePlugin(name)
+        pm.saveConfig(getConfig())
+        if errors:
+            messageBox(dialog, tr("删除失败"), tr("删除过程出现问题") + "\n".join(errors), 1)
+        else:
+            messageBox(dialog, tr("删除成功"), tr("插件") + name + tr("已完全删除"), 1)
+        dialog.close()
+        pm.reloadPlugins()
+
+    delete_btn = QPushButton(tr("删除插件"))
+    delete_btn.clicked.connect(_delete)
+    btn_layout.addWidget(delete_btn)
+
+    close_btn = QPushButton(tr("取消"))
+    close_btn.clicked.connect(dialog.close)
+    btn_layout.addWidget(close_btn)
+
+    layout.addLayout(btn_layout)
+    dialog.exec()

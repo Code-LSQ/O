@@ -45,17 +45,14 @@ class MarkdownRenderer(Singleton):
         return self._build_full_html(html_body)
     
     def _build_full_html(self, html_body: str) -> str:
-        """将 Markdown 转换后的 HTML body 包装为完整 HTML 文档（含 CSS/JS）"""
+        """将 Markdown 转换后的 HTML body 包装为完整 HTML 文档"""
         return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.2.0/github-markdown.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
 <style>
-body {{ 
+body {{
     box-sizing: border-box;
     min-width: 200px;
     max-width: 980px;
@@ -112,8 +109,6 @@ body {{
 .markdown-body .toc a:hover {{
     text-decoration: underline;
 }}
-.katex {{ font-size: 1.1em; }}
-.katex-display {{ overflow-x: auto; overflow-y: hidden; padding: 8px 0; }}
 #toc-nav {{
     max-height: 300px;
     overflow-y: auto;
@@ -129,39 +124,6 @@ h1, h2, h3, h4, h5, h6 {{
 <article class="markdown-body">
 {html_body}
 </article>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function() {{
-    renderMathInElement(document.body, {{
-        delimiters: [
-            {{left: '$$', right: '$$', display: true}},
-            {{left: '$', right: '$', display: false}},
-            {{left: '\\\\(', right: '\\\\)', display: false}},
-            {{left: '\\\\[', right: '\\\\]', display: true}}
-        ],
-        throwOnError: false
-    }});
-    
-    if (typeof hljs !== 'undefined') {{
-        document.querySelectorAll('.hljs').forEach(function(block) {{
-            hljs.highlightElement(block);
-        }});
-    }}
-    
-    document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {{
-        anchor.addEventListener('click', function(e) {{
-            e.preventDefault();
-            var targetId = this.getAttribute('href').substring(1);
-            var target = document.getElementById(targetId);
-            if (target) {{
-                target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-            }}
-        }});
-    }});
-}});
-</script>
 </body>
 </html>"""
 
@@ -346,29 +308,6 @@ def _enhance_html_with_features(html_body: Optional[str]) -> str:
         r'<pre><code class="hljs">',
         html_body
     )
-    
-    heading_id_map = {}
-    heading_texts = []
-    
-    def fix_heading_id(match):
-        level = match.group(1)
-        text = match.group(2)
-        anchor = _generate_anchor(text, heading_id_map)
-        heading_texts.append((len(heading_texts), anchor, text))
-        return f'<h{level} id="{anchor}">{text}</h{level}>'
-    
-    html_body = re.sub(r'<h([1-6])>([^<]+)</h\1>', fix_heading_id, html_body)
-    
-    def fix_toc_link(match):
-        idx = int(match.group(1))
-        for i, anchor, text in heading_texts:
-            if i == idx:
-                return f'href="#{anchor}"'
-        return match.group(0)
-    
-    html_body = re.sub(r'href="#toc-(?:nav-)?(\d+)"', fix_toc_link, html_body)
-    
-    html_body = re.sub(r'id="toc-(?:nav-)?(\d+)"', '', html_body)
     
     return html_body
 

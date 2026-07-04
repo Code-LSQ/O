@@ -110,6 +110,7 @@ class AIExtendPlugin(PluginBase):
         name = getattr(self, '_pending_ai_prompt', None)
         text = text.strip()
         if not text:
+            messageBox(self._launcher, tr("提示"), tr("请先选中文本后再执行此操作"), 1)
             return
 
         mime = QApplication.clipboard().mimeData()

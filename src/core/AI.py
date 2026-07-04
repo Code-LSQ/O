@@ -780,8 +780,7 @@ class AIClient:
     def _build_prompt_content(self, prompt_content: str, user_message: str) -> str:
         if "{request}" in prompt_content:
             return prompt_content.replace("{request}", user_message)
-        else:
-            return f"{prompt_content}\n\n{user_message}"
+        return prompt_content
     
     def _prepare_messages(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> List[Dict]:
         request_messages = []

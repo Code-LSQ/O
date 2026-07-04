@@ -13,9 +13,8 @@ from src.file import FileControl, FileOperation, ArchiveItemModel
 from src.core.md import extract_toc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
-from src.gui.mouse import WindowMouse
-from src.gui.view import FolderPanelManager
-from src.gui.control import MenuControl, PluginControl, WindowControl
+from src.gui.view import FolderPanelManager, ViewMode
+from src.gui.control import WindowMouse, WindowControl, MenuControl
 
 
 class EditorWindow(WindowMouse, QMainWindow):
@@ -45,7 +44,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.file_op = FileOperation()
         self.find_replace_dialog = None
         self.auto_save_timer = None
-        self.plugin_menu = None
         self._file_controller = FileControl(self)
         self._fallback_size = (1000, 650)
         self._initialization_complete = False
@@ -336,7 +334,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             
             try:
                 encoding = editor.get_encoding()
-                self.file_op.create_backup(file_path, self.config)
+                self.file_op.createBackup(file_path, self.config)
                 with open(file_path, 'w', encoding=encoding) as f:
                     f.write(editor.get_content())
                 editor.mark_saved()
@@ -781,16 +779,22 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor = self.get_current_editor()
         if not editor:
             return
-        
-        if mode == tr("十六进制"):
-            if editor.view_mode == 'hex':
-                editor.setViewMode('file')
-                mode = 'file'
+
+        if mode == ViewMode.IMAGE:
+            if editor.file_path:
+                editor.load_image(editor.file_path)
+        elif mode == ViewMode.GALLERY:
+            editor._enter_folder_comic_view()
+        elif mode == ViewMode.PDF:
+            if editor.file_path:
+                from src.file import pdfView
+                pdfView(editor, editor.file_path)
+        else:
+            if editor.view_mode == mode:
+                editor.setViewMode(ViewMode.TEXT)
             else:
-                editor.setViewMode('hex')
-        elif mode == "Markdown" + tr("预览"):
-            editor.setViewMode('markdown')
-        
+                editor.setViewMode(mode)
+
         self.statusBar().showMessage(tr("查看模式") + f": {mode}", 2000)
     
     def show_settings(self):
@@ -849,18 +853,9 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def _save_before_close(self):
         """保存窗口状态"""
-        self.config.update_window_geometry(self.geometry())
+        self.config.updateWindowGeometry(self.geometry())
         self._save_open_files()
         self.config.save()
-    
-    def _init_plugins(self):
-        """初始化插件系统"""
-        try:
-            self._plugin_controller = PluginControl(self)
-            self._plugin_controller.init_plugins()
-        except Exception as e:
-            logger.error(f"插件初始化失败: {e}")
-            self.statusBar().showMessage(tr("插件加载失败") + f": {e}", 5000)
     
     TEXT_PROCESS_METHODS = {
         "remove_empty_lines": ("去除空行", "已去除 {count} 行空行"),
@@ -930,11 +925,6 @@ class EditorWindow(WindowMouse, QMainWindow):
                 if Path(file_path).exists():
                     self.open_file_path(file_path)
     
-    def _show_plugin_manager(self):
-        """显示插件管理对话框"""
-        self._plugin_controller.show_plugin_manager()
-
-
 class TocPanel:
     """标题面板管理类"""
     

@@ -1,6 +1,7 @@
 """工具模块，不导入本地模块，防止循环依赖"""
 import os
 import sys
+import re
 import json
 import base64
 import hashlib
@@ -1170,6 +1171,71 @@ class ManagePair(QDialog):
         if messageBox(self, "确认删除", f"确定要删除 '{current_item.text()}' 吗？"):
             row = self.pair_list.row(current_item)
             self.pair_list.takeItem(row)
+
+
+def fetchWebTitle(url):
+    """获取网页标题，失败返回 None"""
+    try:
+        if not url.startswith("http"):
+            url = "https://" + url
+        resp = requests.get(url, timeout=5, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        resp.encoding = resp.apparent_encoding
+        m = re.search(r"<title[^>]*>(.*?)</title>", resp.text, re.I | re.S)
+        if m:
+            return m.group(1).strip()
+    except Exception:
+        logger.exception("获取网页标题失败")
+    return None
+
+
+def fetchWebIcon(url):
+    """获取网站图标，保存到 data/url/ 并返回路径，失败返回 None"""
+    try:
+        from urllib.parse import urlparse
+        if not url.startswith("http"):
+            url = "https://" + url
+        parsed = urlparse(url)
+
+        # 从 HTML 中解析 favicon 链接
+        icon_url = None
+        resp = requests.get(url, timeout=5, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        m = re.search(
+            r'<link[^>]*rel=["\'](?:shortcut )?icon["\'][^>]*href=["\']([^"\']+)["\']',
+            resp.text, re.I,
+        )
+        if m:
+            icon_href = m.group(1)
+            if icon_href.startswith("//"):
+                icon_url = parsed.scheme + ":" + icon_href
+            elif icon_href.startswith("/"):
+                icon_url = f"{parsed.scheme}://{parsed.netloc}{icon_href}"
+            elif not icon_href.startswith("http"):
+                icon_url = f"{parsed.scheme}://{parsed.netloc}/{icon_href}"
+            else:
+                icon_url = icon_href
+        else:
+            icon_url = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+
+        icon_data = requests.get(icon_url, timeout=5, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }).content
+        if len(icon_data) < 100:
+            return None
+
+        save_dir = data_dir / "url"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        hostname = parsed.netloc.replace(":", "_")
+        ext = Path(urlparse(icon_url).path).suffix or ".png"
+        save_path = save_dir / f"{hostname}{ext}"
+        save_path.write_bytes(icon_data)
+        return str(save_path)
+    except Exception:
+        logger.exception("获取网站图标失败")
+    return None
 
 
 # Windows 11 右键一级菜单

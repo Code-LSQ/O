@@ -13,6 +13,7 @@ from src.util import logger, EXTENSION, messageBox, urlToPath
 from src.core.syntax import create_highlighter
 from src.core.md import render_for_view
 from src.core.timer import LRUCache
+from src.gui.view import ViewMode
 
 
 _LINE_ENDING_RE = re.compile(r'\r\n|\r')
@@ -34,7 +35,7 @@ class EditorTab(QWidget):
         self.file_path = None
         self.is_modified = False
         self.encoding = 'utf-8'
-        self.view_mode = 'file'
+        self.view_mode = ViewMode.TEXT
         self._original_content = ''
         self.highlighter = None
         self.is_markdown = False
@@ -642,13 +643,6 @@ class EditorTab(QWidget):
         """获取内部文本编辑器组件"""
         return self.text_edit
 
-    def _toggle_markdown_view(self):
-        """切换Markdown渲染状态"""
-        if self.view_mode == 'markdown':
-            self.setViewMode('file')
-        else:
-            self.setViewMode('markdown')
-
     def setViewMode(self, mode: str, emit_changed: bool = True):
         """设置查看模式"""
         if self.view_mode == mode:
@@ -657,7 +651,7 @@ class EditorTab(QWidget):
         old_mode = self.view_mode
         self.view_mode = mode
         
-        if mode == 'file':
+        if mode == ViewMode.TEXT:
             if self.is_image and self.file_path:
                 self.load_image(self.file_path)
                 self._pagination_bar.setVisible(False)
@@ -671,22 +665,24 @@ class EditorTab(QWidget):
                 self._pagination_bar.setVisible(was_truncated)
                 if was_truncated:
                     self.text_edit.setReadOnly(True)
-            try:
-                self.text_edit.document().clearResources()
-            except Exception:
-                logger.exception("清除文档资源失败")
             if not self._is_truncated:
                 self.text_edit.setReadOnly(False)
             self.is_markdown = False
             self.markdown_mode_changed.emit(False)
-        elif mode == 'markdown':
+        elif mode == ViewMode.MARKDOWN:
             if self.is_image:
                 self.text_edit.show()
                 self.image_scroll.hide()
             
             content_to_render = self._original_content
             
-            cache_key = hashlib.md5((content_to_render + (self.file_path or "")).encode()).hexdigest()
+            mtime = ""
+            if self.file_path:
+                try:
+                    mtime = str(os.path.getmtime(self.file_path))
+                except OSError:
+                    pass
+            cache_key = hashlib.md5((content_to_render + (self.file_path or "") + mtime).encode()).hexdigest()
             
             html = self._markdown_cache.get(cache_key)
             if html is None:
@@ -707,7 +703,7 @@ class EditorTab(QWidget):
             self.is_markdown = True
             self.markdown_mode_changed.emit(True)
             self._pagination_bar.setVisible(False)
-        elif mode == 'hex':
+        elif mode == ViewMode.HEX:
             self.hexView()
             self.markdown_mode_changed.emit(False)
             self._pagination_bar.setVisible(False)
@@ -755,18 +751,20 @@ class EditorTab(QWidget):
         self.is_modified = False
         self.clear_truncated(clear_buffer=False)
 
+        # setPlainText 会触发 textChanged 信号，导致 _on_text_changed 误判
+        # QPlainTextEdit 内部始终有至少一个段落，toPlainText() 返回的内容末尾会多出 \n，与 _original_content 比较不等，导致 is_modified 被错误设为 True
+        self.text_edit.blockSignals(True)
         try:
-            self.text_edit.blockSignals(not emit_changed)
-            try:
-                doc = self.text_edit.document()
-                if doc:
-                    cursor = self.text_edit.textCursor()
-                    if cursor.position() > max(1, doc.characterCount()):
-                        cursor.setPosition(0)
-                        self.text_edit.setTextCursor(cursor)
-            except Exception:
-                logger.exception("恢复光标位置失败")
+            doc = self.text_edit.document()
+            if doc:
+                cursor = self.text_edit.textCursor()
+                if cursor.position() > max(1, doc.characterCount()):
+                    cursor.setPosition(0)
+                    self.text_edit.setTextCursor(cursor)
+        except Exception:
+            logger.exception("恢复光标位置失败")
 
+        try:
             self.text_edit.setPlainText(content)
             self.text_edit.document().setModified(False)
         except Exception:
@@ -806,7 +804,7 @@ class EditorTab(QWidget):
         self.text_edit.show()
         self.image_scroll.hide()
         self._gallery_widget.hide()
-        self.view_mode = 'file'
+        self.view_mode = ViewMode.TEXT
 
         self.is_markdown = False
         self._markdown_cache.clear()

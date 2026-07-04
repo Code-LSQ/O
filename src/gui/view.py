@@ -12,21 +12,25 @@ from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr, 
 from src.file import ArchiveItemModel
 
 
-# class ViewMode():
-#     考虑编辑器上方增加模式按钮
-#     TEXT = 0
-#     Markdown = 1
-#     HEX = 2
-#     IMAGE = 3
-#     GALLERY = 4
-#     PDF = 5
+class ViewMode:
+    # 显示名称，同时也是程序内部判断时的名称
+    TEXT = "文本"
+    MARKDOWN = "Markdown"
+    HEX = "十六进制"
+    IMAGE = "图像"
+    GALLERY = "图库"
+    PDF = "PDF"
 
-# def setViewMode(self, mode: ViewMode):
-#     self.text_edit.setVisible(mode in (ViewMode.TEXT, ViewMode.HEX))
-#     self.image_scroll.setVisible(mode == ViewMode.IMAGE)
-#     self._gallery_widget.setVisible(mode == ViewMode.GALLERY)
-#     self._pagination_bar.setVisible(mode == ViewMode.TEXT and self._is_truncated)
-#     self.is_image = (mode == ViewMode.IMAGE)
+    ALL = [TEXT, MARKDOWN, HEX, IMAGE, GALLERY, PDF]
+
+    EXT_KEYS = {
+        MARKDOWN: ("Markdown",),
+        IMAGE: ("IMAGE",),
+        GALLERY: ("ZIP", "TAR", "ARCHIVE", "IMAGE"),
+        HEX: ("EXECUTE", "DISK"),
+    }
+
+    HANDLERS = {}
 
 
 class FileSystemModel(QFileSystemModel):
@@ -196,7 +200,7 @@ class FolderPanelManager:
                     editor.set_content(content_str)
                     editor.set_file_path(display_path)
             
-            self.main_window.config.add_recent_file(self.current_archive_path)
+            self.main_window.config.addRecentFile(self.current_archive_path)
             self.main_window.statusBar().showMessage(tr("已打开") + f": {display_path}", 3000)
     
     def _show_tree_context_menu(self, pos):

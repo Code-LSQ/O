@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import copy
 import subprocess
 import webbrowser
@@ -12,10 +13,9 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env
+from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon
 from src.config import SettingsDialog, getConfig
-from src.gui.mouse import WindowMouse
-from src.gui.control import WindowControl, PluginControl
+from src.gui.control import WindowMouse, WindowControl, show_plugin_dialog
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
 from src.plugin import getPluginManager, pluginActionMenu
@@ -243,6 +243,54 @@ def filterList(items: list, whitelist: set, kind: str) -> list:
             safe.append(item)
     return safe
 
+
+def validateServiceName(text: str) -> tuple:
+    """校验服务名格式，返回 (是否合法, 错误信息)"""
+    if not text.strip():
+        return True, ""
+    parts = [s.strip() for s in text.split("|") if s.strip()]
+    for part in parts:
+        if part.startswith('"'):
+            if not part.endswith('"'):
+                return False, f"服务 {part} 的引号未闭合"
+            inner = part[1:-1]
+            if not inner:
+                return False, f"服务 {part} 引号内容为空"
+            if not re.match(r"^[a-zA-Z0-9 _.\-]+$", inner):
+                return False, f"服务 {inner} 包含不合法字符"
+        else:
+            if '"' in part:
+                return False, f"服务 {part} 引号位置不正确"
+            if not re.match(r"^[a-zA-Z0-9.\-_]+$", part):
+                return False, f"服务 {part} 包含不合法字符"
+    return True, ""
+
+
+def validateProcessName(text: str) -> tuple:
+    """校验进程名格式，返回 (是否合法, 错误信息)"""
+    if not text.strip():
+        return True, ""
+    parts = [s.strip() for s in text.split("|") if s.strip()]
+    for part in parts:
+        if part.startswith('"'):
+            if not part.endswith('"'):
+                return False, f"进程 {part} 的引号未闭合"
+            inner = part[1:-1]
+            if not inner:
+                return False, f"进程 {part} 引号内容为空"
+            if not re.match(r"^[a-zA-Z0-9 _.\-]+$", inner):
+                return False, f"进程 {inner} 包含不合法字符"
+            if "." not in inner:
+                return False, f"进程 {inner} 缺少扩展名"
+        else:
+            if '"' in part:
+                return False, f"进程 {part} 引号位置不正确"
+            if not re.match(r"^[a-zA-Z0-9.\-_]+$", part):
+                return False, f"进程 {part} 包含不合法字符"
+            if "." not in part:
+                return False, f"进程 {part} 缺少扩展名"
+    return True, ""
+
 # 打开文件或文件夹，不用检查文件存在性，runItem 统一检查并抛异常
 def openFile(path: str, cwd=None, args=None, operation="open"):
     if sys.platform == "win32":
@@ -380,6 +428,9 @@ class EditTool(QDialog):
         
         # 路径/URL
         def _on_browse():
+            if self.type_combo.currentText() == "网址":
+                self._fetch_url_info()
+                return
             t = self.type_combo.currentText()
             choices = {
                 "文件": ("选择文件", ""),
@@ -393,7 +444,6 @@ class EditTool(QDialog):
                 self.name_edit.setText(Path(path).stem)
 
         self.path_edit, self.browse_btn = filePathWidget(self, form_layout, "路径", "选择文件", "")
-        self.path_edit.setPlaceholderText("选择文件或输入路径")
         self._path_label = form_layout.itemAt(form_layout.rowCount() - 1, QFormLayout.ItemRole.LabelRole).widget()
         self.browse_btn.clicked.disconnect()
         self.browse_btn.clicked.connect(_on_browse)
@@ -407,13 +457,11 @@ class EditTool(QDialog):
         
         # 附属服务（仅文件类型显示）
         self.service_edit = QLineEdit()
-        self.service_edit.setPlaceholderText('VMAuthdService | VMnetDHCP')
         self._service_label = QLabel("服务")
         form_layout.addRow(self._service_label, self.service_edit)
         
         # 附属进程（仅文件类型显示）
         self.process_edit = QLineEdit()
-        self.process_edit.setPlaceholderText('YunDetectService.exe')
         self._process_label = QLabel("进程")
         form_layout.addRow(self._process_label, self.process_edit)
         
@@ -487,11 +535,11 @@ class EditTool(QDialog):
         self.service_edit.setVisible(is_file)
         self._process_label.setVisible(is_file)
         self.process_edit.setVisible(is_file)
-        
+
         if tool_type == "网址":
             self._path_label.setText("URL")
-            self.path_edit.setPlaceholderText("输入网址")
-            self.browse_btn.setVisible(False)
+            self.browse_btn.setText("获取")
+            self.browse_btn.setVisible(True)
             self.cwd_edit.setEnabled(False)
             self.cwd_browse_btn.setEnabled(False)
         elif tool_type == "预设":
@@ -501,10 +549,26 @@ class EditTool(QDialog):
             self.cwd_browse_btn.setEnabled(False)
         else:
             self._path_label.setText("路径")
+            self.browse_btn.setText("选择")
             self.browse_btn.setVisible(True)
             self.cwd_edit.setEnabled(True)
             self.cwd_browse_btn.setEnabled(True)
     
+    def _fetch_url_info(self):
+        """获取网址信息并填充名称和图标"""
+        url = self.path_edit.text().strip()
+        if not url:
+            messageBox(self, "提示", "请先输入网址", 1)
+            return
+
+        title = fetchWebTitle(url)
+        if title and not self.name_edit.text().strip():
+            self.name_edit.setText(title)
+
+        icon_path = fetchWebIcon(url)
+        if icon_path and not self.icon_edit.text().strip():
+            self.icon_edit.setText(icon_path)
+
     def get_data(self) -> dict:
         """获取工具数据"""
         tool_type = self.type_combo.currentText()
@@ -562,6 +626,17 @@ class EditTool(QDialog):
     def _check_whitelist(self) -> bool:
         svc_text = self.service_edit.text()
         proc_text = self.process_edit.text()
+
+        valid, msg = validateServiceName(svc_text)
+        if not valid:
+            messageBox(self, "格式错误", msg, 1)
+            return False
+
+        valid, msg = validateProcessName(proc_text)
+        if not valid:
+            messageBox(self, "格式错误", msg, 1)
+            return False
+
         for text, whitelist, kind in [
             (svc_text, SERVICE_LIST, "服务"),
             (proc_text, PROCESS_LIST, "进程"),
@@ -635,13 +710,12 @@ class MainWindow(WindowMouse, QMainWindow):
         QTimer.singleShot(0, self._lazy_init)
 
         if self.app:
-            self.app.aboutToQuit.connect(self._on_about_to_quit)
+            self.app.aboutToQuit.connect(self._onQuit)
 
-    def _on_about_to_quit(self):
-        """应用退出时保底清理所有附属服务"""
+    def _onQuit(self):
+        """应用退出时保存状态"""
+        self._save_geometry()
         getConfig().save()
-        for sp in self._service_processes:
-            sp._cleanup()
 
     def _sync_tools(self):
         """同步 _tools 到配置"""
@@ -659,7 +733,6 @@ class MainWindow(WindowMouse, QMainWindow):
         if self._editor_window is None:
             self._editor_window = EditorWindow(self.app, file_path, main_window=self)
             self.applyTheme(self._editor_window)
-            self._editor_window._init_plugins()
             self._editor_window.destroyed.connect(lambda: setattr(self, '_editor_window', None))
             getPluginManager().setMainWindow(self._editor_window)
         elif file_path:
@@ -739,8 +812,8 @@ class MainWindow(WindowMouse, QMainWindow):
         if tool_type == "plugin_toggle":
             name = tool.get("name", "")
             editor = self._editor_window
-            if editor and hasattr(editor, '_plugin_controller'):
-                plugin = editor._plugin_controller.plugin_manager.plugins.get(name)
+            if editor:
+                plugin = getPluginManager().plugins.get(name)
                 if plugin and plugin.getAction():
                     plugin.getAction().trigger()
             return
@@ -1296,6 +1369,7 @@ class MainWindow(WindowMouse, QMainWindow):
         for name, path, note in [
             ("编辑器", "editor", "打开编辑器窗口"),
             ("插件管理", "plugin_manager", "管理插件启用/禁用"),
+            ("重载插件", "reload_plugins", "重新加载插件"),
             ("打开日志", "openLog", "打开日志文件"),
             ("打开配置", "openConfig", "打开配置文件"),
             ("重启程序", "restart_app", "重启本程序"),
@@ -1343,12 +1417,6 @@ class MainWindow(WindowMouse, QMainWindow):
             logger.exception("获取插件列表失败")
 
         return items
-
-    def _show_plugin_manager(self):
-        """显示插件管理对话框"""
-        pc = PluginControl(self)
-        pc.init_plugins()
-        pc.show_plugin_manager()
 
     def _get_plugin_instance(self, plugin_name: str):
         """按显示名称获取插件实例"""
@@ -1542,7 +1610,8 @@ class MainWindow(WindowMouse, QMainWindow):
             "editor": lambda: self._open_editor(),
             "restart_app": lambda: restartApplication(self),
             "quit_app": QApplication.quit,
-            "plugin_manager": lambda: self._show_plugin_manager(),
+            "plugin_manager": lambda: show_plugin_dialog(self),
+            "reload_plugins": lambda: getPluginManager().initConfig(getConfig()),
             "openLog": lambda: self._open_editor(str(log_file)),
             "openConfig": lambda: self._open_editor(str(config_file)),
         }

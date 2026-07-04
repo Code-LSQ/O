@@ -615,15 +615,6 @@ class EditorTextEdit(QTextEdit):
             action_reload.triggered.connect(self._reload_file)
             menu.addAction(action_reload)
         
-        # Markdown渲染选项
-        if hasattr(self, '_parent_tab') and self._parent_tab:
-            parent_tab = self._parent_tab
-            if parent_tab.file_path and any(parent_tab.file_path.lower().endswith(ext) for ext in EXTENSION["Markdown"]):
-                menu.addSeparator()
-                action_render_md = QAction(("Markdown" + tr("渲染")), self)
-                action_render_md.triggered.connect(parent_tab._toggle_markdown_view)
-                menu.addAction(action_render_md)
-        
         menu.exec(event.globalPos())
 
     def delete_selected(self):

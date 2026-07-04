@@ -141,14 +141,13 @@ class PluginManager(Singleton):
         self._scan_cache: Dict[str, tuple] = {}
         self.enabled_plugins: Dict[str, bool] = {}
         self._file_handlers: List[tuple] = []
+        self.extra_plugin_dir = None
         self.scanPlugins()
     
-    def scanPlugins(self) -> List[str]:
-        self._scan_cache.clear()
-        if not plugin_dir.exists():
-            return []
-        
-        for item in plugin_dir.iterdir():
+    def _scan_dir(self, scan_dir: Path):
+        if not scan_dir.exists():
+            return
+        for item in scan_dir.iterdir():
             if item.name.startswith('_'):
                 continue
             if item.is_file() and item.suffix in PLUGIN_EXTENSION:
@@ -159,7 +158,12 @@ class PluginManager(Singleton):
                         dotted = f"plugin.{item.name}.{f.stem}"
                         if '__init__' not in dotted:
                             self._scan_cache[f.stem] = (dotted, f, None)
-        
+
+    def scanPlugins(self) -> List[str]:
+        self._scan_cache.clear()
+        self._scan_dir(plugin_dir)
+        if self.extra_plugin_dir:
+            self._scan_dir(Path(self.extra_plugin_dir))
         return list(self._scan_cache.keys())
 
     def importPluginModule(self, module_key: str):
@@ -315,6 +319,7 @@ class PluginManager(Singleton):
             if isinstance(plugin_data, dict):
                 self.enabled_plugins[plugin_name] = plugin_data.get("enabled", True)
         
+        self.extra_plugin_dir = config.get("extra_plugin", "")
         available = self.scanPlugins()
         for p in available:
             if p not in self.enabled_plugins:
@@ -344,16 +349,17 @@ class PluginManager(Singleton):
         """删除插件文件及关联数据，返回错误列表"""
         errors = []
 
-        plugin_file = plugin_dir / f"{plugin_name}.py"
-        if plugin_file.exists():
+        entry = self._scan_cache.get(plugin_name)
+        if entry:
+            _, plugin_file, cached_class = entry
+        else:
+            plugin_file = plugin_dir / f"{plugin_name}.py"
+            cached_class = None
+        if plugin_file and plugin_file.exists():
             try:
                 plugin_file.unlink()
             except Exception as e:
                 errors.append(f"插件文件: {e}")
-
-        entry = self._scan_cache.get(plugin_name)
-        if entry:
-            _, _, cached_class = entry
             if cached_class:
                 for f in cached_class.file:
                     p = Path(f)
