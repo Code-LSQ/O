@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, getFilePath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
+from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
 from src.core.input import translate_key_to_str, KeyCaptureFilter
 from src.system import setAutoStart
 
@@ -740,7 +740,7 @@ class SettingsDialog(QDialog):
     def _on_launcher_key_captured(self, seq):
         """处理启动器快捷键捕获"""
         self.launcher_hotkey_edit.setText(seq)
-    
+
     def _reset_shortcuts_to_default(self):
         """重置快捷键为默认值"""
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]

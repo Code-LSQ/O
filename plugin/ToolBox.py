@@ -6,16 +6,17 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from pynput import keyboard, mouse
-from PySide6.QtCore import Qt, QTimer, QThread, Signal
+from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QFrame, QStyle, QAbstractSpinBox
+from PySide6.QtCore import Qt, QSize, QTimer, QThread, Signal, QEvent
 from PySide6.QtGui import QAction, QTextCursor
-from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QStyle, QAbstractSpinBox
 
+from src.main import getIcon
+from src.file import FileSelect
 from src.plugin import PluginBase
+from src.config import getConfig
 from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize
-
 from src.core.timer import TimerManager
 from src.core.input import GlobalHotkeyListener
-from src.file import FileSelect
 
 _MAX_SEARCH_FILE_SIZE = 10 * 1024 * 1024
 
@@ -77,6 +78,9 @@ class ToolBox(PluginBase):
 
     def getAction(self):
         menu = QMenu(self.description, self.main_window)
+
+        search_action = menu.addAction(tr("搜索"))
+        search_action.triggered.connect(self._open_search)
 
         menu.addAction("批量重命名", self._batch_rename)
         menu.addAction("查找重复文件", self._find_duplicates)
@@ -230,6 +234,11 @@ class ToolBox(PluginBase):
         cursor = editor.text_edit.textCursor()
         cursor.insertText(text)
 
+    def _open_search(self):
+        config = getConfig()
+        dialog = SearchDialog(config.get("Launch.tools", {}), self.main_window)
+        dialog.exec()
+
     def _show_settings(self):
         self.initialize()
         dialog = ToolBoxSettings(self.settings, self.main_window)
@@ -251,6 +260,125 @@ class ToolBox(PluginBase):
         if hasattr(mw, '_open_editor'):
             return mw._open_editor()
         return None
+
+class SearchDialog(QDialog):
+    def __init__(self, tools, parent=None):
+        super().__init__(parent)
+        self._tools = tools
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setFixedSize(500, 420)
+        self._setup_ui()
+        self._populate()
+        self.search_edit.setFocus()
+        QTimer.singleShot(0, self._do_center)
+
+    def _do_center(self):
+        parent = self.parent()
+        if parent:
+            center = parent.geometry().center()
+            self.move(center.x() - self.width() // 2, center.y() - self.height() // 2)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.activateWindow()
+        self.search_edit.setFocus()
+
+    def eventFilter(self, obj, event):
+        if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Up:
+                self._move_selection(-1)
+                return True
+            elif event.key() == Qt.Key.Key_Down:
+                self._move_selection(1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def _move_selection(self, direction):
+        current = self.list_widget.currentRow()
+        count = self.list_widget.count()
+        if count == 0:
+            return
+        next_row = (current + direction) % count
+        self.list_widget.setCurrentRow(next_row)
+
+    def _setup_ui(self):
+        self.setObjectName("search_dialog")
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setFixedHeight(42)
+        self.search_edit.setStyleSheet("border-radius: 0;")
+        self.search_edit.textChanged.connect(self._filter)
+        self.search_edit.returnPressed.connect(self._accept_current)
+        main_layout.addWidget(self.search_edit)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        main_layout.addWidget(sep)
+
+        self.list_widget = QListWidget()
+        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.setIconSize(QSize(24, 24))
+        main_layout.addWidget(self.list_widget, 1)
+
+        self.search_edit.installEventFilter(self)
+
+    def _all_tools(self):
+        result = []
+        for group_tools in self._tools.values():
+            result.extend(group_tools)
+        return result
+
+    def _populate(self, tools=None):
+        self.list_widget.clear()
+        source = self._all_tools() if tools is None else tools
+        for tool in source:
+            item = QListWidgetItem(getIcon(tool, 24), tool.get("name", ""))
+            item.setSizeHint(QSize(0, 36))
+            self.list_widget.addItem(item)
+            item.setData(Qt.ItemDataRole.UserRole, tool)
+
+    def _filter(self, text):
+        text = text.strip().lower()
+        if not text:
+            self._populate()
+            return
+        matched = []
+        for tool in self._all_tools():
+            if (text in tool.get("name", "").lower()
+                    or text in (tool.get("path", "") or tool.get("url", "")).lower()
+                    or text in tool.get("note", "").lower()):
+                matched.append(tool)
+        self._populate(matched)
+
+    def _accept_current(self):
+        current = self.list_widget.currentItem()
+        if current:
+            self._on_item_clicked(current)
+
+    def _on_item_clicked(self, item):
+        tool = item.data(Qt.ItemDataRole.UserRole)
+        if tool:
+            self.accept()
+            main_window = self.parent()
+            if main_window and hasattr(main_window, "runItem"):
+                main_window.runItem(tool)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self.focusWidget() is not self.search_edit:
+                self._accept_current()
+        else:
+            super().keyPressEvent(event)
+
 
 class FileSearcher:
     def __init__(self, search_text: str, case_sensitive: bool = False, regex: bool = False):

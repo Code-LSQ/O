@@ -15,11 +15,11 @@ from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, Q
 
 from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon
 from src.config import SettingsDialog, getConfig
-from src.gui.control import WindowMouse, WindowControl, show_plugin_dialog
+from src.system import SYSTEM_ACT, getFileIcon
+from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
-from src.plugin import getPluginManager, pluginActionMenu
-from src.system import SYSTEM_ACT, getFileIcon
+from src.gui.control import WindowMouse, WindowControl, show_plugin_dialog
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -398,6 +398,7 @@ class EditTool(QDialog):
         self.setMinimumWidth(450)
         self.setWindowTitle(tr("添加"))
         self.setWindowFlags(Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._setup_ui()
         self._load_data()
         QTimer.singleShot(0, self._do_center)
@@ -648,10 +649,15 @@ class EditTool(QDialog):
                     return False
         return True
 
-    def reject(self):
-        """取消"""
-        super().reject()
-        self.deleteLater()
+
+def _envPlaceholder(args: str) -> tuple[str, dict]:
+    env_vars = {}
+    def replace_env(m):
+        env_vars[m.group(1).strip()] = m.group(2).strip()
+        return ""
+    cleaned = re.sub(r'\{env:([^=]+)=([^}]+)\}', replace_env, args)
+    return cleaned.strip(), env_vars
+
 
 def argsPlaceholder(args: str) -> str:
     if not args:
@@ -668,6 +674,26 @@ def _get_groups(tools: dict) -> list:
 
 def _get_group_tools(tools: dict, group: str) -> list:
     return tools.get(group, [])
+
+def getIcon(tool, icon_size=32):
+    icon_path = tool.get("icon", "")
+    path = tool.get("path", "") or tool.get("url", "")
+    icon = QIcon()
+    if icon_path:
+        icon_check_path = convertPath(icon_path, "absolute")
+        if os.path.isfile(icon_check_path):
+            if Path(icon_check_path).suffix.lower() == ".exe":
+                provider = QFileIconProvider()
+                icon = provider.icon(QFileInfo(icon_check_path))
+            else:
+                icon = QIcon(icon_check_path)
+    elif path:
+        try:
+            icon = getFileIcon(path, icon_size)
+        except Exception:
+            logger.exception("获取图标失败")
+    return icon
+
 
 class MainWindow(WindowMouse, QMainWindow):
     """启动器主窗口"""
@@ -1013,7 +1039,7 @@ class MainWindow(WindowMouse, QMainWindow):
         child = self.group_frame.childAt(pos)
         group = child.text() if isinstance(child, QPushButton) else None
         menu = QMenu(self)
-        menu.addAction("新建", self._add_group)
+        menu.addAction("新建", self._addGroup)
         if group:
             menu.addSeparator()
             rename_action = QAction("重命名", self)
@@ -1027,7 +1053,7 @@ class MainWindow(WindowMouse, QMainWindow):
             menu.addAction("下移", lambda g=group: self._move_group(g, 1))
         menu.exec(self.group_frame.mapToGlobal(pos))
     
-    def _add_group(self):
+    def _addGroup(self):
         """添加分组"""
         name = inputDialog(self, "新建", "分组名称")
         if name:
@@ -1229,28 +1255,9 @@ class MainWindow(WindowMouse, QMainWindow):
             tip_parts.append(note)
         btn.setToolTip("\n".join(tip_parts))
         
-        # 获取绝对路径用于图标
-        path_mode = self._path_mode
-        path = os.path.expandvars(path)
-        if path_mode == "relative":
-            path = convertPath(path, "absolute")
-
         # 设置图标
-        icon = QIcon()
         icon_size = getConfig().get("Launch.icon", 32)
-        if icon_path:
-            icon_check_path = convertPath(icon_path, "absolute") if path_mode == "relative" else icon_path
-            if os.path.isfile(icon_check_path):
-                if Path(icon_check_path).suffix.lower() == ".exe":
-                    provider = QFileIconProvider()
-                    icon = provider.icon(QFileInfo(icon_check_path))
-                else:
-                    icon = QIcon(icon_check_path)
-        elif path:
-            try:
-                icon = getFileIcon(path, icon_size)
-            except Exception:
-                logger.exception("获取图标失败")
+        icon = getIcon(tool, icon_size)
         btn.setIcon(icon)
         btn.setIconSize(QSize(icon_size, icon_size))
 
@@ -1551,10 +1558,21 @@ class MainWindow(WindowMouse, QMainWindow):
         """启动工具"""
         args_raw = tool.get("args", "")
 
+        clean_args, env_vars = _envPlaceholder(args_raw)
+        if env_vars:
+            tool = dict(tool)
+            tool["args"] = clean_args
+            args_raw = clean_args
+
         if "{Select}" in args_raw:
             self.hide()
             QTimer.singleShot(500, lambda t=tool: self._run_with_selection(t))
             return
+
+        saved_env = {}
+        for k, v in env_vars.items():
+            saved_env[k] = os.environ.get(k)
+            os.environ[k] = v
 
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
@@ -1562,6 +1580,11 @@ class MainWindow(WindowMouse, QMainWindow):
         args = argsPlaceholder(tool.get("args", ""))
 
         if not path and tool_type != "预设":
+            for k, v in saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
             messageBox(self, "警告", "路径为空", 1)
             return
 
@@ -1592,10 +1615,16 @@ class MainWindow(WindowMouse, QMainWindow):
                 if action:
                     action(path, cwd, args, operation)
             logger.info(f"启动工具: {tool.get('name', '')} ({tool_type})")
-            
+
         except Exception as e:
             messageBox(self, "错误", f"启动失败: {str(e)}", 1)
             logger.error(f"启动工具失败: {e}")
+        finally:
+            for k, v in saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
     def runPreset(self, tool: dict):
         """运行预设工具"""

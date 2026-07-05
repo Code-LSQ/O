@@ -144,7 +144,7 @@ class PluginManager(Singleton):
         self.extra_plugin_dir = None
         self.scanPlugins()
     
-    def _scan_dir(self, scan_dir: Path):
+    def _scanDir(self, scan_dir: Path):
         if not scan_dir.exists():
             return
         for item in scan_dir.iterdir():
@@ -161,9 +161,9 @@ class PluginManager(Singleton):
 
     def scanPlugins(self) -> List[str]:
         self._scan_cache.clear()
-        self._scan_dir(plugin_dir)
+        self._scanDir(plugin_dir)
         if self.extra_plugin_dir:
-            self._scan_dir(Path(self.extra_plugin_dir))
+            self._scanDir(Path(self.extra_plugin_dir))
         return list(self._scan_cache.keys())
 
     def importPluginModule(self, module_key: str):
@@ -360,16 +360,17 @@ class PluginManager(Singleton):
                 plugin_file.unlink()
             except Exception as e:
                 errors.append(f"插件文件: {e}")
-            if cached_class:
-                for f in cached_class.file:
-                    p = Path(f)
-                    try:
-                        if p.is_dir():
-                            shutil.rmtree(p)
-                        elif p.exists():
-                            p.unlink()
-                    except Exception as e:
-                        errors.append(f"清理文件 {p}: {e}")
+
+        if cached_class:
+            for f in cached_class.file:
+                p = Path(f)
+                try:
+                    if p.is_dir():
+                        shutil.rmtree(p)
+                    elif p.exists():
+                        p.unlink()
+                except Exception as e:
+                    errors.append(f"清理文件 {p}: {e}")
 
         if plugin_name in self.plugins:
             self.disablePlugin(plugin_name)
