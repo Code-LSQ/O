@@ -48,21 +48,21 @@ class SystemTray:
         self.tray_icon: QSystemTrayIcon = None
         self.tray_menu: QMenu = None
     
-    def init_tray(self):
+    def initTray(self):
         """初始化系统托盘"""
         tray = getConfig().get("tray", False)
         if tray:
-            self._create_tray_icon()
+            self._createTrayIcon()
     
-    def update_tray(self):
+    def updateTray(self):
         """更新托盘图标状态（根据当前配置）"""
         tray = getConfig().get("tray", False)
         if tray and self.tray_icon is None:
-            self._create_tray_icon()
+            self._createTrayIcon()
         elif not tray and self.tray_icon:
-            self._remove_tray_icon()
+            self._removeTrayIcon()
     
-    def _create_tray_icon(self):
+    def _createTrayIcon(self):
         """创建托盘图标"""
         if self.tray_icon:
             return
@@ -78,16 +78,16 @@ class SystemTray:
         self.tray_menu.setFixedWidth(80)
         
         show_action = self.tray_menu.addAction(tr("主窗口"))
-        show_action.triggered.connect(self.show_from_tray)
+        show_action.triggered.connect(self.showFromTray)
         
         quit_action = self.tray_menu.addAction(tr("退出"))
-        quit_action.triggered.connect(self.quit_from_tray)
+        quit_action.triggered.connect(self.quitFromTray)
         
         self.tray_icon.show()
         
-        self.tray_icon.activated.connect(self.on_tray_activated)
+        self.tray_icon.activated.connect(self.onTrayActivated)
     
-    def _remove_tray_icon(self):
+    def _removeTrayIcon(self):
         """移除托盘图标"""
         if self.tray_icon:
             self.tray_icon.hide()
@@ -97,18 +97,18 @@ class SystemTray:
             self.tray_menu.deleteLater()
             self.tray_menu = None
     
-    def show_from_tray(self):
+    def showFromTray(self):
         """从托盘显示窗口"""
         self.parent.show()
         self.parent.activateWindow()
     
-    def quit_from_tray(self):
+    def quitFromTray(self):
         """从托盘退出程序"""
-        self._remove_tray_icon()
+        self._removeTrayIcon()
         if self.app:
             self.app.quit()
     
-    def on_tray_activated(self, reason):
+    def onTrayActivated(self, reason):
         """托盘图标被点击"""
         if reason == QSystemTrayIcon.ActivationReason.Context:
             if self.tray_menu is None:
@@ -130,7 +130,7 @@ class SystemTray:
                     y = max(g.top(), min(y, g.bottom() - sz.height()))
             self.tray_menu.popup(QPoint(x, y))
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick or reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.show_from_tray()
+            self.showFromTray()
 
 class ServiceProcess:
     """监控主进程退出后自动清理附属进程和服务"""
@@ -345,7 +345,7 @@ def runJava(path: str, cwd, args, operation):
     else:
         raise TypeError("仅支持 .jar 文件")
 
-def open_url(url, *args, **kwargs):
+def openUrl(url, *args, **kwargs):
     webbrowser.open(url)
 
 # 类型映射，对于 .py，.jar，.ps1，设置 shell=True 是为了方便在关闭 cmd 窗口时结束脚本或程序，否则不好结束
@@ -354,7 +354,7 @@ TYPES = {
     "命令行": cmdApp,
     "Python": runPython,
     "Java": runJava,
-    "网址": open_url,
+    "网址": openUrl,
     "预设": None  # 预设类型由 runPreset 方法处理
 }
 
@@ -399,11 +399,11 @@ class EditTool(QDialog):
         self.setWindowTitle(tr("添加"))
         self.setWindowFlags(Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self._setup_ui()
-        self._load_data()
-        QTimer.singleShot(0, self._do_center)
+        self._setupUI()
+        self._loadData()
+        QTimer.singleShot(0, self._doCenter)
     
-    def _do_center(self):
+    def _doCenter(self):
         screen = self.screen()
         if screen:
             screen_geom = screen.geometry()
@@ -411,7 +411,7 @@ class EditTool(QDialog):
             y = screen_geom.y() + (screen_geom.height() - self.height()) // 2
             self.move(x, y)
     
-    def _setup_ui(self):
+    def _setupUI(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
         
@@ -424,13 +424,13 @@ class EditTool(QDialog):
         # 排除"预设"类型，因为预设工具不能通过对话框添加
         available_types = [t for t in TYPES.keys() if t != "预设"]
         self.type_combo.addItems(available_types)
-        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        self.type_combo.currentTextChanged.connect(self._onTypeChanged)
         form_layout.addRow("类型", self.type_combo)
         
         # 路径/URL
-        def _on_browse():
+        def _onBrowse():
             if self.type_combo.currentText() == "网址":
-                self._fetch_url_info()
+                self._fetchUrlInfo()
                 return
             t = self.type_combo.currentText()
             choices = {
@@ -447,7 +447,7 @@ class EditTool(QDialog):
         self.path_edit, self.browse_btn = filePathWidget(self, form_layout, "路径", "选择文件", "")
         self._path_label = form_layout.itemAt(form_layout.rowCount() - 1, QFormLayout.ItemRole.LabelRole).widget()
         self.browse_btn.clicked.disconnect()
-        self.browse_btn.clicked.connect(_on_browse)
+        self.browse_btn.clicked.connect(_onBrowse)
         
         # 工作目录
         self.cwd_edit, self.cwd_browse_btn = filePathWidget(self, form_layout, "工作目录", "", "", "dir")
@@ -492,7 +492,7 @@ class EditTool(QDialog):
         
         dialogBox(layout, self, show=False)
     
-    def _load_data(self):
+    def _loadData(self):
         """加载数据"""
         if not self.tool_data:
             return
@@ -529,7 +529,7 @@ class EditTool(QDialog):
         self.hotkey_edit.setText(self.tool_data.get("hotkey", ""))
         self.icon_edit.setText(self.tool_data.get("icon", ""))
     
-    def _on_type_changed(self, tool_type: str):
+    def _onTypeChanged(self, tool_type: str):
         """类型改变时更新UI"""
         is_file = tool_type == "文件"
         self._service_label.setVisible(is_file)
@@ -555,7 +555,7 @@ class EditTool(QDialog):
             self.cwd_edit.setEnabled(True)
             self.cwd_browse_btn.setEnabled(True)
     
-    def _fetch_url_info(self):
+    def _fetchUrlInfo(self):
         """获取网址信息并填充名称和图标"""
         url = self.path_edit.text().strip()
         if not url:
@@ -570,7 +570,7 @@ class EditTool(QDialog):
         if icon_path and not self.icon_edit.text().strip():
             self.icon_edit.setText(icon_path)
 
-    def get_data(self) -> dict:
+    def getData(self) -> dict:
         """获取工具数据"""
         tool_type = self.type_combo.currentText()
         path_text = self.path_edit.text().strip().strip('"')
@@ -618,13 +618,13 @@ class EditTool(QDialog):
             messageBox(self, "警告", "路径不能为空", 1)
             return
 
-        if not self._check_whitelist():
+        if not self._checkWhitelist():
             return
 
         super().accept()
         self.deleteLater()
 
-    def _check_whitelist(self) -> bool:
+    def _checkWhitelist(self) -> bool:
         svc_text = self.service_edit.text()
         proc_text = self.process_edit.text()
 
@@ -652,10 +652,7 @@ class EditTool(QDialog):
 
 def _envPlaceholder(args: str) -> tuple[str, dict]:
     env_vars = {}
-    def replace_env(m):
-        env_vars[m.group(1).strip()] = m.group(2).strip()
-        return ""
-    cleaned = re.sub(r'\{env:([^=]+)=([^}]+)\}', replace_env, args)
+    cleaned = re.sub(r'\{env:([^=]+)=([^}]+)\}', lambda m: env_vars.update({m.group(1).strip(): m.group(2).strip()}) or "", args)
     return cleaned.strip(), env_vars
 
 
@@ -668,16 +665,17 @@ def argsPlaceholder(args: str) -> str:
             args = args.replace(placeholder, value)
     return args
 
-def _get_groups(tools: dict) -> list:
+def _getGroups(tools: dict) -> list:
     return list(tools.keys()) if tools else []
 
 
-def _get_group_tools(tools: dict, group: str) -> list:
+def _getGroupTools(tools: dict, group: str) -> list:
     return tools.get(group, [])
 
 def getIcon(tool, icon_size=32):
     icon_path = tool.get("icon", "")
     path = tool.get("path", "") or tool.get("url", "")
+    path = os.path.expandvars(path)
     icon = QIcon()
     if icon_path:
         icon_check_path = convertPath(icon_path, "absolute")
@@ -717,13 +715,13 @@ class MainWindow(WindowMouse, QMainWindow):
         self._service_processes = []
         self._tools_initialized = False
         self.setAcceptDrops(True)
-        self._setup_ui()
+        self._setupUI()
         self.applyTheme()
-        self.system_tray.init_tray()
-        self._load_geometry()
+        self.system_tray.initTray()
+        self._loadGeometry()
 
         if file_path:
-            QTimer.singleShot(0, lambda: self._open_editor(file_path))
+            QTimer.singleShot(0, lambda: self._openEditor(file_path))
         
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
@@ -731,28 +729,28 @@ class MainWindow(WindowMouse, QMainWindow):
 
         self._hover_timer = QTimer(self)
         self._hover_timer.setSingleShot(True)
-        self._hover_timer.timeout.connect(self._on_hover_timeout)
+        self._hover_timer.timeout.connect(self._onHover)
 
-        QTimer.singleShot(0, self._lazy_init)
+        QTimer.singleShot(0, self._lazyInit)
 
         if self.app:
             self.app.aboutToQuit.connect(self._onQuit)
 
     def _onQuit(self):
         """应用退出时保存状态"""
-        self._save_geometry()
+        self._saveGeometry()
         getConfig().save()
 
-    def _sync_tools(self):
+    def _syncTools(self):
         """同步 _tools 到配置"""
         getConfig().set("Launch.tools", self._tools)
 
-    def _save_tools(self):
+    def _saveTools(self):
         """同步 _tools 到配置并保存"""
-        self._sync_tools()
+        self._syncTools()
         getConfig().save()
 
-    def _open_editor(self, file_path=None):
+    def _openEditor(self, file_path=None):
         """打开/激活编辑器窗口"""
         from src.edit import EditorWindow
         # 按需导入降低内存占用
@@ -788,12 +786,12 @@ class MainWindow(WindowMouse, QMainWindow):
         except Exception:
             logger.exception("应用主题失败")
 
-    def _lazy_init(self):
+    def _lazyInit(self):
         """延迟初始化"""
         self.startGlobalListener()
-        self._init_plugins()
+        self._initPlugins()
 
-    def _init_plugins(self):
+    def _initPlugins(self):
         """初始化插件系统"""
         try:
             pm = getPluginManager(self)
@@ -803,7 +801,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
     def startGlobalListener(self):
         """启动全局监听器"""
-        self._register_editor_hotkeys()
+        self._editorHotkeys()
         self.registerHotkeys()
         config = getConfig()
         hotkey_str = config.get("Launch.hotkey", "Ctrl+L")
@@ -811,7 +809,7 @@ class MainWindow(WindowMouse, QMainWindow):
         double_ctrl_enabled = config.get("Launch.double_ctrl", False)
         GlobalHotkeyListener().start(self, hotkey_str, mouse_side_enabled, double_ctrl_enabled)
 
-    def _register_editor_hotkeys(self):
+    def _editorHotkeys(self):
         """注册编辑器快捷键（插件）"""
         listener = GlobalHotkeyListener()
         config = getConfig()
@@ -847,7 +845,7 @@ class MainWindow(WindowMouse, QMainWindow):
         # 普通工具（文件/脚本/预设/网址）
         self.runItem(tool)
 
-    def _setup_ui(self):
+    def _setupUI(self):
         """初始化UI"""
         # 无边框窗口，可独立移动
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
@@ -866,14 +864,14 @@ class MainWindow(WindowMouse, QMainWindow):
         main_layout.setSpacing(0)
         
         # 标题栏
-        self._create_title_bar(main_layout)
+        self._createTitleBar(main_layout)
 
         # 内容区域（分组 + 启动项）
         layout_mode = getConfig().get("Launch.layout", "horizontal")
         
         if layout_mode == "horizontal":
             # 横向排列
-            self._create_group_bar(main_layout)
+            self._createGroupBar(main_layout)
             
             separator = QFrame()
             separator.setObjectName("sep_h")
@@ -886,7 +884,7 @@ class MainWindow(WindowMouse, QMainWindow):
             self._tools_widget = tools_widget
             tools_layout = QVBoxLayout(tools_widget)
             tools_layout.setContentsMargins(0, 0, 0, 0)
-            self._create_tools_area(tools_layout)
+            self._createToolsArea(tools_layout)
             main_layout.addWidget(tools_widget, 1)
 
         else:
@@ -898,7 +896,7 @@ class MainWindow(WindowMouse, QMainWindow):
             content_layout.setSpacing(0)
             
             # 分组区域
-            self._create_group_bar(content_layout)
+            self._createGroupBar(content_layout)
 
             separator = QFrame()
             separator.setObjectName("sep_v")
@@ -911,12 +909,12 @@ class MainWindow(WindowMouse, QMainWindow):
             self._tools_widget = tools_widget
             tools_layout = QVBoxLayout(tools_widget)
             tools_layout.setContentsMargins(0, 0, 0, 0)
-            self._create_tools_area(tools_layout)
+            self._createToolsArea(tools_layout)
             content_layout.addWidget(tools_widget, 1)
             
             main_layout.addWidget(content_widget, 1)
 
-    def _create_title_bar(self, parent_layout: QVBoxLayout):
+    def _createTitleBar(self, parent_layout: QVBoxLayout):
         """创建标题栏"""
         title_bar = QWidget()
         title_bar.setObjectName("title_bar")
@@ -949,27 +947,27 @@ class MainWindow(WindowMouse, QMainWindow):
         parent_layout.addWidget(self.separate)
         
         # 标题栏双击最大化
-        title_bar.mouseDoubleClickEvent = self._title_double_click
+        title_bar.mouseDoubleClickEvent = self._titleDblClick
 
-    def _title_double_click(self, event):
+    def _titleDblClick(self, event):
         """标题栏双击"""
         if event.button() == Qt.MouseButton.LeftButton:
             self._toggle_maximize()
 
-    def _create_group_bar(self, parent_layout):
+    def _createGroupBar(self, parent_layout):
         """创建分组按钮栏"""
         self.group_frame = QFrame()
         self.group_frame.setObjectName("group_frame")
         self.group_frame.setFrameShape(QFrame.Shape.NoFrame)
         self.group_frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.group_frame.customContextMenuRequested.connect(self._show_group_frame_menu)
+        self.group_frame.customContextMenuRequested.connect(self._groupMenu)
 
-        self._setup_group_layout()
+        self._setupGroupLayout()
         self.refreshGroup()
         
         parent_layout.addWidget(self.group_frame)
     
-    def _setup_group_layout(self):
+    def _setupGroupLayout(self):
         """设置分组布局"""
         # 清除旧布局
         if hasattr(self, 'group_layout') and self.group_layout:
@@ -995,7 +993,7 @@ class MainWindow(WindowMouse, QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
         
-        groups = _get_groups(self._tools)
+        groups = _getGroups(self._tools)
         
         hover_enabled = getConfig().get("Launch.hover_switch", False)
         
@@ -1030,12 +1028,12 @@ class MainWindow(WindowMouse, QMainWindow):
                 self._hover_timer.stop()
         return super().eventFilter(obj, event)
 
-    def _on_hover_timeout(self):
+    def _onHover(self):
         """悬停定时器触发时切换分组"""
         if self._hover_target:
             self.switchGroup(self._hover_target)
     
-    def _show_group_frame_menu(self, pos):
+    def _groupMenu(self, pos):
         child = self.group_frame.childAt(pos)
         group = child.text() if isinstance(child, QPushButton) else None
         menu = QMenu(self)
@@ -1043,33 +1041,33 @@ class MainWindow(WindowMouse, QMainWindow):
         if group:
             menu.addSeparator()
             rename_action = QAction("重命名", self)
-            rename_action.triggered.connect(lambda checked, g=group: self._rename_group(g))
+            rename_action.triggered.connect(lambda checked, g=group: self._renameGroup(g))
             menu.addAction(rename_action)
             delete_action = QAction("删除", self)
-            delete_action.triggered.connect(lambda checked, g=group: self._delete_group(g))
+            delete_action.triggered.connect(lambda checked, g=group: self._deleteGroup(g))
             menu.addAction(delete_action)
             menu.addSeparator()
-            menu.addAction("上移", lambda g=group: self._move_group(g, -1))
-            menu.addAction("下移", lambda g=group: self._move_group(g, 1))
+            menu.addAction("上移", lambda g=group: self._moveGroup(g, -1))
+            menu.addAction("下移", lambda g=group: self._moveGroup(g, 1))
         menu.exec(self.group_frame.mapToGlobal(pos))
     
     def _addGroup(self):
         """添加分组"""
         name = inputDialog(self, "新建", "分组名称")
         if name:
-            groups = _get_groups(self._tools)
+            groups = _getGroups(self._tools)
             if name.strip() in groups:
                 messageBox(self, "警告", "分组名称已存在", 1)
                 return
             self._tools[name.strip()] = []
-            self._save_tools()
+            self._saveTools()
             self.refreshGroup()
     
-    def _rename_group(self, group: str):
+    def _renameGroup(self, group: str):
         """重命名分组"""
         name = inputDialog(self, "重命名分组", "新名称", default=group)
         if name and name != group:
-            groups = _get_groups(self._tools)
+            groups = _getGroups(self._tools)
             if name.strip() in groups:
                 messageBox(self, "警告", "分组名称已存在", 1)
                 return
@@ -1080,33 +1078,33 @@ class MainWindow(WindowMouse, QMainWindow):
                 self._current_group = name.strip()
                 getConfig().set("Launch.active_group", name.strip())
             
-            self._save_tools()
+            self._saveTools()
             self.refreshGroup()
             self.refreshTool()
     
-    def _delete_group(self, group: str):
+    def _deleteGroup(self, group: str):
         """删除分组"""
         if messageBox(self, "确认删除", f"确定要删除分组 \"{group}\" 吗？\n该分组下的启动项将被删除。"):
             del self._tools[group]
             
             if self._current_group == group:
-                groups = _get_groups(self._tools)
+                groups = _getGroups(self._tools)
                 self._current_group = groups[0] if groups else ""
                 getConfig().set("Launch.active_group", self._current_group)
             
-            self._save_tools()
+            self._saveTools()
             self.refreshGroup()
             self.refreshTool()
     
-    def _move_group(self, group: str, direction: int):
+    def _moveGroup(self, group: str, direction: int):
         """移动分组"""
-        groups = _get_groups(self._tools)
+        groups = _getGroups(self._tools)
         idx = groups.index(group)
         new_idx = idx + direction
         if 0 <= new_idx < len(groups):
             groups[idx], groups[new_idx] = groups[new_idx], groups[idx]
             self._tools = {g: self._tools.get(g, []) for g in groups}
-            self._sync_tools()
+            self._syncTools()
             self.refreshGroup()
     
     def switchGroup(self, group: str):
@@ -1116,7 +1114,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self.refreshGroup()
         self.refreshTool()
     
-    def _create_tools_area(self, parent_layout: QVBoxLayout):
+    def _createToolsArea(self, parent_layout: QVBoxLayout):
         """创建启动项区域"""
         scroll_area = QScrollArea()
         scroll_area.setObjectName("tools_scroll")
@@ -1131,7 +1129,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self.tools_widget = QWidget()
         self.tools_widget.setAcceptDrops(True)
         self.tools_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tools_widget.customContextMenuRequested.connect(self._show_empty_area_menu)
+        self.tools_widget.customContextMenuRequested.connect(self._emptyMenu)
         padding = getConfig().get("Launch.padding", 8)
         self.tools_layout = QGridLayout(self.tools_widget)
         self.tools_layout.setContentsMargins(padding, padding, padding, padding)
@@ -1139,28 +1137,28 @@ class MainWindow(WindowMouse, QMainWindow):
         self.tools_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         
         # 启用工具排序拖放
-        self.tools_widget.dragEnterEvent = self._tool_drag_enter
-        self.tools_widget.dragMoveEvent = self._tool_drag_move
-        self.tools_widget.dropEvent = self._tool_drop
+        self.tools_widget.dragEnterEvent = self._dragEnter
+        self.tools_widget.dragMoveEvent = self._dragMove
+        self.tools_widget.dropEvent = self._toolDrop
         
         scroll_area.setWidget(self.tools_widget)
         parent_layout.addWidget(scroll_area, 1)
     
-    def _tool_drag_enter(self, event):
+    def _dragEnter(self, event):
         """工具排序拖拽进入"""
         if event.mimeData().hasFormat("application/x-tool-index"):
             event.acceptProposedAction()
         else:
             event.ignore()
     
-    def _tool_drag_move(self, event):
+    def _dragMove(self, event):
         """工具排序拖拽移动"""
         if event.mimeData().hasFormat("application/x-tool-index"):
             event.acceptProposedAction()
         else:
             event.ignore()
     
-    def _tool_drop(self, event):
+    def _toolDrop(self, event):
         """工具排序拖拽放下"""
         if not event.mimeData().hasFormat("application/x-tool-index"):
             event.ignore()
@@ -1188,14 +1186,14 @@ class MainWindow(WindowMouse, QMainWindow):
                 target_index = self.tools_layout.count()
         
         if target_index >= 0 and target_index != source_index:
-            tools = _get_group_tools(self._tools, self._current_group)
+            tools = _getGroupTools(self._tools, self._current_group)
             if 0 <= source_index < len(tools) and 0 <= target_index <= len(tools):
                 item = tools.pop(source_index)
                 if source_index < target_index:
                     target_index -= 1
                 tools.insert(target_index, item)
                 self._tools[self._current_group] = tools
-                self._save_tools()
+                self._saveTools()
                 self.refreshTool()
         
         event.acceptProposedAction()
@@ -1207,7 +1205,7 @@ class MainWindow(WindowMouse, QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
 
-        tools = _get_group_tools(self._tools, self._current_group) or []
+        tools = _getGroupTools(self._tools, self._current_group) or []
         if not tools:
             return
 
@@ -1230,11 +1228,11 @@ class MainWindow(WindowMouse, QMainWindow):
             self.tools_layout.setSpacing(spacing)
 
         for i, tool in enumerate(tools):
-            btn = self._create_tool_button(tool, i)
+            btn = self._createButton(tool, i)
             btn.setFixedSize(item_width, item_height)
             self.tools_layout.addWidget(btn, i // cols, i % cols)
 
-    def _create_tool_button(self, tool: dict, index: int) -> DragToolButton:
+    def _createButton(self, tool: dict, index: int) -> DragToolButton:
         """创建工具按钮"""
         name = tool.get("name", "未命名")
         icon_path = tool.get("icon", "")
@@ -1282,15 +1280,15 @@ class MainWindow(WindowMouse, QMainWindow):
         btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         
         btn.clicked.connect(lambda checked=False, t=tool: self.runItem(t))
-        btn.drag_started.connect(self._on_drag_started)
+        btn.drag_started.connect(self._onDrag)
         
         # 右键菜单
         btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        btn.customContextMenuRequested.connect(lambda pos, t=tool, i=index, b=btn: self._show_tool_menu(pos, t, i, b))
+        btn.customContextMenuRequested.connect(lambda pos, t=tool, i=index, b=btn: self._toolMenu(pos, t, i, b))
         
         return btn
     
-    def _on_drag_started(self, source_btn, pos):
+    def _onDrag(self, source_btn, pos):
         """处理拖拽开始"""
         drag = QDrag(source_btn)
         mime = QMimeData()
@@ -1310,12 +1308,12 @@ class MainWindow(WindowMouse, QMainWindow):
         source_btn.style().unpolish(source_btn)
         source_btn.style().polish(source_btn)
         
-    def _show_tool_menu(self, pos, tool: dict, index: int, btn: QToolButton):
+    def _toolMenu(self, pos, tool: dict, index: int, btn: QToolButton):
         """显示工具右键菜单"""
         menu = QMenu(self)
 
         open_location_action = QAction(tr("打开文件位置"), self)
-        open_location_action.triggered.connect(lambda: self._open_tool_location(tool))
+        open_location_action.triggered.connect(lambda: self._openLocation(tool))
         menu.addAction(open_location_action)
 
         open_editor_action = QAction("编辑器打开", self)
@@ -1325,7 +1323,7 @@ class MainWindow(WindowMouse, QMainWindow):
         menu.addSeparator()
         
         edit_action = QAction(tr("编辑"), self)
-        edit_action.triggered.connect(lambda: self._edit_tool(index))
+        edit_action.triggered.connect(lambda: self._editTool(index))
         menu.addAction(edit_action)
         
         copy_action = QAction("复制", self)
@@ -1333,29 +1331,29 @@ class MainWindow(WindowMouse, QMainWindow):
         menu.addAction(copy_action)
 
         move_menu = menu.addMenu("移动到")
-        groups = _get_groups(self._tools)
+        groups = _getGroups(self._tools)
         for g in groups:
             if g == self._current_group:
                 continue
             action = QAction(g, self)
             action.triggered.connect(lambda checked, target=g, t=tool, i=index:
-                self._move_tool_to_group(t, i, target))
+                self._moveTool(t, i, target))
             move_menu.addAction(action)
         
         menu.addSeparator()
         
         delete_action = QAction("删除", self)
-        delete_action.triggered.connect(lambda: self._delete_tool(index))
+        delete_action.triggered.connect(lambda: self._deleteTool(index))
         menu.addAction(delete_action)
         
         menu.exec(btn.mapToGlobal(pos))
     
-    def _show_empty_area_menu(self, pos):
+    def _emptyMenu(self, pos):
         """在空白区域显示右键菜单"""
         menu = QMenu(self)
         
         add_action = QAction("添加启动项", self)
-        add_action.triggered.connect(self._add_tool)
+        add_action.triggered.connect(self._addTool)
         menu.addAction(add_action)
         
         add_preset_action = QAction("添加预设项", self)
@@ -1365,9 +1363,9 @@ class MainWindow(WindowMouse, QMainWindow):
         action = menu.exec(global_pos)
         
         if action == add_preset_action:
-            self._show_preset_items_menu(global_pos)
+            self._presetMenu(global_pos)
     
-    def _show_preset_items_menu(self, global_pos):
+    def _presetMenu(self, global_pos):
         """显示预设项菜单"""
         menu = QMenu(self)
         
@@ -1383,7 +1381,7 @@ class MainWindow(WindowMouse, QMainWindow):
             ("退出", "quit_app", "退出本程序"),
         ]:
             action = QAction(name, self)
-            action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._add_preset_item(n, p, nt))
+            action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._addPreset(n, p, nt))
             in_menu.addAction(action)
 
         # 系统子菜单
@@ -1391,26 +1389,26 @@ class MainWindow(WindowMouse, QMainWindow):
 
         for name, path in SYSTEM_ACT.items():
             action = QAction(name, self)
-            action.triggered.connect(lambda checked, n=name, p=path: self._add_preset_item(n, p, ""))
+            action.triggered.connect(lambda checked, n=name, p=path: self._addPreset(n, p, ""))
             sys_menu.addAction(action)
 
         # 获取插件列表
-        plugin_items = self._get_plugin_items()
+        plugin_items = self._pluginItems()
         if plugin_items:
             menu.addSeparator()
             for name, path, note in plugin_items:
                 if path.startswith("plugin_menu:"):
-                    sub_menu = self._build_plugin_submenu(name)
+                    sub_menu = self._pluginSubmenu(name)
                     if sub_menu:
                         menu.addMenu(sub_menu)
                         continue
                 action = QAction(name, self)
-                action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._add_preset_item(n, p, nt))
+                action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._addPreset(n, p, nt))
                 menu.addAction(action)
         
         menu.exec(global_pos)
     
-    def _get_plugin_items(self):
+    def _pluginItems(self):
         """获取可用的插件项"""
         items = []
         try:
@@ -1425,7 +1423,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
         return items
 
-    def _get_plugin_instance(self, plugin_name: str):
+    def _getPlugin(self, plugin_name: str):
         """按显示名称获取插件实例"""
         try:
             pm = getPluginManager(self)
@@ -1437,10 +1435,10 @@ class MainWindow(WindowMouse, QMainWindow):
             logger.exception("获取插件实例失败")
         return None
 
-    def _build_plugin_submenu(self, plugin_name: str, source_menu: QMenu = None) -> QMenu:
+    def _pluginSubmenu(self, plugin_name: str, source_menu: QMenu = None) -> QMenu:
         """构建插件的子菜单"""
         if source_menu is None:
-            inst = self._get_plugin_instance(plugin_name)
+            inst = self._getPlugin(plugin_name)
             if not inst:
                 return None
             try:
@@ -1458,12 +1456,12 @@ class MainWindow(WindowMouse, QMainWindow):
             sub_action = QAction(action_text, self)
             sub_action.triggered.connect(
                 lambda checked, at=action_text, pn=plugin_name:
-                self._add_preset_item(at, f"plugin_action:{pn}:{at}", pn)
+                self._addPreset(at, f"plugin_action:{pn}:{at}", pn)
             )
             sub_menu.addAction(sub_action)
         return sub_menu
 
-    def _add_preset_item(self, name: str, path: str, note: str):
+    def _addPreset(self, name: str, path: str, note: str):
         """添加预设项"""
         tool_data = {
             "name": name,
@@ -1477,28 +1475,28 @@ class MainWindow(WindowMouse, QMainWindow):
         }
         tool_data = {k: v for k, v in tool_data.items() if v}
         self._tools.setdefault(self._current_group, []).append(tool_data)
-        self._save_tools()
+        self._saveTools()
         self.refreshTool()
     
-    def _add_tool(self):
+    def _addTool(self):
         """添加启动项"""
         dialog = EditTool(parent=self)
-        dialog.accepted.connect(lambda: self._edit_accepted(dialog))
+        dialog.accepted.connect(lambda: self._editAccepted(dialog))
         dialog.show()
     
-    def _edit_tool(self, index: int):
+    def _editTool(self, index: int):
         """编辑启动项"""
-        tools = _get_group_tools(self._tools, self._current_group)
+        tools = _getGroupTools(self._tools, self._current_group)
         if 0 <= index < len(tools):
             tool = tools[index]
             dialog = EditTool(tool, parent=self)
-            dialog.accepted.connect(lambda d=dialog, i=index: self._on_edit_tool_updated(d, i))
+            dialog.accepted.connect(lambda d=dialog, i=index: self._onToolUpdate(d, i))
             dialog.show()
     
-    def _on_edit_tool_updated(self, dialog, index):
-        tool_data = dialog.get_data()
+    def _onToolUpdate(self, dialog, index):
+        tool_data = dialog.getData()
         self._tools[self._current_group][index] = tool_data
-        self._save_tools()
+        self._saveTools()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()
@@ -1509,18 +1507,18 @@ class MainWindow(WindowMouse, QMainWindow):
         new_tool["name"] = f"{new_tool['name']}_副本"
         new_tool = {k: v for k, v in new_tool.items() if v}
         self._tools.setdefault(self._current_group, []).append(new_tool)
-        self._save_tools()
+        self._saveTools()
         self.refreshTool()
 
-    def _move_tool_to_group(self, tool: dict, index: int, target_group: str):
+    def _moveTool(self, tool: dict, index: int, target_group: str):
         """将工具移动到目标分组"""
         self._tools[self._current_group].pop(index)
         self._tools.setdefault(target_group, []).append(tool)
-        self._save_tools()
+        self._saveTools()
         self.refreshTool()
         self.refreshGroup()
     
-    def _open_tool_location(self, tool: dict):
+    def _openLocation(self, tool: dict):
         """打开工具文件位置"""
         tool_type = tool.get("type", "文件")
         if tool_type == "网址":
@@ -1541,16 +1539,16 @@ class MainWindow(WindowMouse, QMainWindow):
         path_mode = self._path_mode
         if path_mode == "relative":
             tool_path = convertPath(tool_path, "absolute")
-        self._open_editor(tool_path)
+        self._openEditor(tool_path)
     
-    def _delete_tool(self, index: int):
+    def _deleteTool(self, index: int):
         """删除启动项"""
-        tools = _get_group_tools(self._tools, self._current_group)
+        tools = _getGroupTools(self._tools, self._current_group)
         if 0 <= index < len(tools):
             tool = tools[index]
             if messageBox(self, "确认删除", f"确定要删除 \"{tool.get('name', '')}\" 吗？"):
                 self._tools[self._current_group].pop(index)
-                self._save_tools()
+                self._saveTools()
                 self.refreshTool()
                 self.registerHotkeys()
     
@@ -1566,7 +1564,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
         if "{Select}" in args_raw:
             self.hide()
-            QTimer.singleShot(500, lambda t=tool: self._run_with_selection(t))
+            QTimer.singleShot(500, lambda t=tool: self._runSelect(t))
             return
 
         saved_env = {}
@@ -1604,7 +1602,7 @@ class MainWindow(WindowMouse, QMainWindow):
                 service_str = tool.get("service", "").strip()
                 process_str = tool.get("process", "").strip()
                 if service_str or process_str:
-                    self._run_with_services(tool, path, cwd, args, service_str, process_str)
+                    self._runService(tool, path, cwd, args, service_str, process_str)
                 else:
                     action = TYPES.get(tool_type)
                     if action:
@@ -1636,13 +1634,13 @@ class MainWindow(WindowMouse, QMainWindow):
             return
         
         func_act = {
-            "editor": lambda: self._open_editor(),
+            "editor": lambda: self._openEditor(),
             "restart_app": lambda: restartApplication(self),
             "quit_app": QApplication.quit,
             "plugin_manager": lambda: show_plugin_dialog(self),
             "reload_plugins": lambda: getPluginManager().initConfig(getConfig()),
-            "openLog": lambda: self._open_editor(str(log_file)),
-            "openConfig": lambda: self._open_editor(str(config_file)),
+            "openLog": lambda: self._openEditor(str(log_file)),
+            "openConfig": lambda: self._openEditor(str(config_file)),
         }
         action = func_act.get(path)
         if action:
@@ -1660,7 +1658,7 @@ class MainWindow(WindowMouse, QMainWindow):
                 plugin_name = parts[1]
                 action_text = parts[2] if len(parts) >= 3 else None
                 
-                plugin_instance = self._get_plugin_instance(plugin_name)
+                plugin_instance = self._getPlugin(plugin_name)
                 if not plugin_instance:
                     messageBox(self, "警告", f"未找到插件: {plugin_name}", 1)
                     return
@@ -1691,7 +1689,7 @@ class MainWindow(WindowMouse, QMainWindow):
         
         messageBox(self, "警告", f"未知的预设功能: {path}", 1)
 
-    def _run_with_services(self, tool: dict, path: str, cwd: str, args: str, service_str: str, process_str: str):
+    def _runService(self, tool: dict, path: str, cwd: str, args: str, service_str: str, process_str: str):
         """启动带有附属服务/进程管理的 exe 程序"""
         services = [s.strip().strip('"') for s in service_str.split("|") if s.strip()]
         process_names = [p.strip().strip('"') for p in process_str.split("|") if p.strip()]
@@ -1765,20 +1763,20 @@ class MainWindow(WindowMouse, QMainWindow):
         mouse_side_enabled = getConfig().get("Launch.mouse_side", False)
         double_ctrl_enabled = getConfig().get("Launch.double_ctrl", False)
         listener.restart(self, hotkey_str, mouse_side_enabled, double_ctrl_enabled)
-        self._register_editor_hotkeys()
-        self.system_tray.update_tray()
+        self._editorHotkeys()
+        self.system_tray.updateTray()
         
         # 更新窗口置顶状态
-        self._update_on_top()
+        self._keepTop()
         
         # 始终重建UI以确保事件过滤器正确安装/卸载
         old_widget = self.centralWidget()
         if old_widget:
             old_widget.deleteLater()
-        self._setup_ui()
+        self._setupUI()
         QTimer.singleShot(0, self.refreshTool)
     
-    def _update_on_top(self):
+    def _keepTop(self):
         """更新窗口置顶状态"""
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
         if self._on_top:
@@ -1791,7 +1789,7 @@ class MainWindow(WindowMouse, QMainWindow):
         if self.isVisible():
             self.show()
     
-    def _load_geometry(self):
+    def _loadGeometry(self):
         """加载窗口位置和大小"""
         width = getConfig().get("Launch.width", 600)
         height = getConfig().get("Launch.height", 400)
@@ -1803,7 +1801,7 @@ class MainWindow(WindowMouse, QMainWindow):
         else:
             self.resize(width, height)
     
-    def _save_geometry(self):
+    def _saveGeometry(self):
         """保存窗口位置和大小"""
         geometry = self.geometry()
         getConfig().set("Launch.width", geometry.width())
@@ -1874,20 +1872,20 @@ class MainWindow(WindowMouse, QMainWindow):
         }
         
         dialog = EditTool(tool_data, self)
-        dialog.accepted.connect(lambda: self._edit_accepted(dialog))
+        dialog.accepted.connect(lambda: self._editAccepted(dialog))
         dialog.show()
     
-    def _edit_accepted(self, dialog):
-        final_data = dialog.get_data()
+    def _editAccepted(self, dialog):
+        final_data = dialog.getData()
         self._tools.setdefault(self._current_group, []).append(final_data)
-        self._save_tools()
+        self._saveTools()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()
     
     def closeEvent(self, event):
         """关闭事件"""
-        self._save_geometry()
+        self._saveGeometry()
         if getConfig().get("tray", False) and self.system_tray.tray_icon:
             event.ignore()
             self.hide()
@@ -1904,7 +1902,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self._resize_timer.start(200)
     
     @Slot()
-    def _toggle_launcher(self):
+    def _toggleWindow(self):
         """接收全局快捷键（双击 Ctrl、Ctrl+L），显示/隐藏启动器"""
         if self.windowState() & Qt.WindowState.WindowMinimized:
             self.setWindowState(Qt.WindowState.WindowActive)
@@ -1941,7 +1939,7 @@ class MainWindow(WindowMouse, QMainWindow):
             self.refreshTool()
             self._tools_initialized = True
     
-    def _run_with_selection(self, tool):
+    def _runSelect(self, tool):
         """隐藏后捕获选中文本替换 {Select} 再执行工具"""
         clipboard = QApplication.clipboard()
         grabbed = False

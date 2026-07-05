@@ -89,7 +89,7 @@ DEFAULT_CONFIG = {
 class ConfigManager(Singleton):
     _initialized = False
 
-    def _init_impl(self, config_path: Path = None):
+    def _init(self, config_path: Path = None):
         if config_path is None:
             self.config_path = config_file
         elif Path(config_path).is_absolute():

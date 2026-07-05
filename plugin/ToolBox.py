@@ -191,9 +191,8 @@ class ToolBox(PluginBase):
         self.settings["duplicate.paths"] = paths
         self.settings["duplicate.exclude"] = rules
         self.saveConfig()
-        logger.info("正在扫描重复文件...")
+        logger.info("正在扫描重复文件")
         finder = DuplicateFinder(files, folder_path=paths[0] if paths else None)
-        finder.progress.connect(lambda c, t: logger.info(f"正在扫描: {c}/{t}"))
         finder.finished.connect(lambda dups, g=gen: self._on_dup_finished(editor, dups, g))
         finder.error.connect(lambda err: messageBox(editor, "错误", f"扫描失败: {err}", 1))
         finder.start()
@@ -257,8 +256,8 @@ class ToolBox(PluginBase):
             return mw
         if hasattr(mw, '_editor_window') and mw._editor_window:
             return mw._editor_window
-        if hasattr(mw, '_open_editor'):
-            return mw._open_editor()
+        if hasattr(mw, '_openEditor'):
+            return mw._openEditor()
         return None
 
 class SearchDialog(QDialog):
@@ -268,7 +267,7 @@ class SearchDialog(QDialog):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setFixedSize(500, 420)
-        self._setup_ui()
+        self._setupUI()
         self._populate()
         self.search_edit.setFocus()
         QTimer.singleShot(0, self._do_center)
@@ -302,7 +301,7 @@ class SearchDialog(QDialog):
         next_row = (current + direction) % count
         self.list_widget.setCurrentRow(next_row)
 
-    def _setup_ui(self):
+    def _setupUI(self):
         self.setObjectName("search_dialog")
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -549,7 +548,7 @@ class BatchRenameDialog(QDialog):
         self.folder_label.folderDropped.connect(self.on_folder_dropped)
         self.folder_label.fileDropped.connect(self.on_file_dropped)
         self.folder_label.filesDropped.connect(self.on_files_dropped)
-        self.folder_label.reset_style()
+        self.folder_label.resetStyle()
         folder_layout.addWidget(self.folder_label, 1)
         self.file_count_label = QLabel("文件数: 0   ")
         layout.addLayout(folder_layout)
@@ -668,12 +667,12 @@ class BatchRenameDialog(QDialog):
 
     def on_folder_dropped(self, folder_path: str):
         self.folder_path = folder_path
-        self.folder_label.set_folder_path(folder_path)
+        self.folder_label.setFolderPath(folder_path)
         self.load_folder(folder_path)
 
     def on_file_dropped(self, file_path: str):
         self.folder_path = os.path.dirname(file_path)
-        self.folder_label.set_folder_path(self.folder_path)
+        self.folder_label.setFolderPath(self.folder_path)
         self.rename_items = [RenameItem(file_path)]
         self.file_count_label.setText("文件数: 1")
         self.apply_preview()
@@ -681,7 +680,7 @@ class BatchRenameDialog(QDialog):
 
     def on_files_dropped(self, files: list):
         self.folder_path = os.path.dirname(files[0])
-        self.folder_label.set_folder_path(self.folder_path)
+        self.folder_label.setFolderPath(self.folder_path)
         self.rename_items = [RenameItem(f) for f in files]
         self.file_count_label.setText(f"文件数: {len(files)}")
         self.apply_preview()
@@ -691,7 +690,7 @@ class BatchRenameDialog(QDialog):
         folder = getFilePath(self, "选择文件夹", mode="dir")
         if folder:
             self.folder_path = folder
-            self.folder_label.set_folder_path(folder)
+            self.folder_label.setFolderPath(folder)
             self.load_folder(folder)
 
     def load_folder(self, folder_path: str):
@@ -792,8 +791,8 @@ class BatchRenameDialog(QDialog):
     def clear_items(self):
         self.rename_items = []
         self.folder_path = ""
-        self.folder_label.set_folder_path("拖拽文件夹到此处")
-        self.folder_label.reset_style()
+        self.folder_label.setFolderPath("拖拽文件夹到此处")
+        self.folder_label.resetStyle()
         self.file_count_label.setText("文件数: 0")
         self.update_list()
         self.execute_btn.setEnabled(False)
@@ -958,8 +957,9 @@ class DuplicatePanelManager:
         menu.exec_(self.tree.mapToGlobal(pos))
 
     def _move_to_trash(self, file_path: str):
-        if self.folder_panel_manager:
-            self.folder_panel_manager.move_to_trash(file_path)
+        from src.system import moveTrash
+        if not moveTrash(file_path):
+            messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
         for md5, files in list(self._current_duplicates.items()):
             self._current_duplicates[md5] = [f for f in files if f["path"] != file_path]
             if not self._current_duplicates[md5]:

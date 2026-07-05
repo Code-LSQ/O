@@ -121,7 +121,7 @@ class LinkManage(QDialog):
     def closeEvent(self, event):
         """对话框关闭时保存配置"""
         if self.on_save:
-            self.on_save(self.pair_manage.get_pairs())
+            self.on_save(self.pair_manage.getPairs())
         super().closeEvent(event)
 
     def _show_elevation_dialog(self):

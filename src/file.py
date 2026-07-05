@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from src.util import Singleton, data_dir, logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, getFilePath, dialogBox, messageBox
 from src.plugin import getPluginManager
-from src.core.md import render_markdown
+from src.core.md import renderMarkdown
 
 SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
 
@@ -128,7 +128,7 @@ def pdfView(tab, file_path: str) -> bool:
 class FileOperation(Singleton):
     """文件操作核心类：读、写、备份、压缩包浏览、Markdown 渲染"""
 
-    def _init_impl(self):
+    def _init(self):
         self.backup_dir = data_dir / "backup"
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -270,7 +270,7 @@ class FileOperation(Singleton):
             elif content is None:
                 return None
             
-            return render_markdown(content, file_path)
+            return renderMarkdown(content, file_path)
         except Exception:
             logger.exception("Markdown渲染失败")
             return None
@@ -416,7 +416,7 @@ class FileControl:
                 self.main.config.addRecentFile(file_path)
                 return
 
-        for can_handle, open_file in getPluginManager(self.main).file_handlers:
+        for can_handle, open_file in getPluginManager(self.main).fileHandlers:
             if can_handle(file_path):
                 open_file(file_path, self.main)
                 self.main.config.addRecentFile(file_path)

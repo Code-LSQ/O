@@ -72,9 +72,9 @@ class _MockSingleton:
         if getattr(self, "_initialized", False):
             return
         self._initialized = True
-        self._init_impl(*args, **kwargs)
+        self._init(*args, **kwargs)
 
-    def _init_impl(self, *args, **kwargs):
+    def _init(self, *args, **kwargs):
         pass
 
 

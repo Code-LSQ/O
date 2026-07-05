@@ -24,7 +24,7 @@ _MARKDOWN_EXTENSIONS = [
 class MarkdownRenderer(Singleton):
     """Markdown渲染器类，替代全局函数，避免全局状态问题"""
 
-    def _init_impl(self):
+    def _init(self):
         self._renderer = markdown.Markdown(extensions=_MARKDOWN_EXTENSIONS)
 
     def reset(self):
@@ -34,17 +34,17 @@ class MarkdownRenderer(Singleton):
     def convert(self, content: str, file_path: str = None) -> Optional[str]:
         self._renderer.reset()
         
-        content = _process_image_paths(content, file_path)
-        content = _process_html_img_tags(content, file_path)
-        content = _process_relative_links(content, file_path)
+        content = _processImagePaths(content, file_path)
+        content = _processHtmlImgTags(content, file_path)
+        content = _processRelativeLinks(content, file_path)
         
         html_body = self._renderer.convert(content)
         if html_body is None:
             return None
-        html_body = _enhance_html_with_features(html_body)
-        return self._build_full_html(html_body)
+        html_body = _enhanceHtmlWithFeatures(html_body)
+        return self._buildFullHtml(html_body)
     
-    def _build_full_html(self, html_body: str) -> str:
+    def _buildFullHtml(self, html_body: str) -> str:
         """将 Markdown 转换后的 HTML body 包装为完整 HTML 文档"""
         return f"""<!DOCTYPE html>
 <html>
@@ -128,7 +128,7 @@ h1, h2, h3, h4, h5, h6 {{
 </html>"""
 
 
-def extract_toc(content: str) -> List[Dict[str, str]]:
+def extractToc(content: str) -> List[Dict[str, str]]:
     """提取markdown中的标题
     
     Args:
@@ -148,7 +148,7 @@ def extract_toc(content: str) -> List[Dict[str, str]]:
         if match:
             level = len(match.group(1))
             text = match.group(2).strip()
-            anchor = _generate_anchor(text, seen_anchors)
+            anchor = _generateAnchor(text, seen_anchors)
             
             headings.append({
                 'level': level,
@@ -162,7 +162,7 @@ def extract_toc(content: str) -> List[Dict[str, str]]:
     
     return headings
 
-def _convert_image_to_data_uri(file_path: str, image_path: str) -> Optional[str]:
+def _convertImageToDataUri(file_path: str, image_path: str) -> Optional[str]:
     """将本地图片转换为data URI"""
     try:
         if not file_path:
@@ -200,11 +200,11 @@ def _convert_image_to_data_uri(file_path: str, image_path: str) -> Optional[str]
         return None
 
 
-def _is_remote_url(url: str) -> bool:
+def _isRemoteUrl(url: str) -> bool:
     return url.startswith(('http://', 'https://', 'data:', 'file://')) or url.startswith('//')
 
 
-def _generate_anchor(text: str, seen: Dict[str, int]) -> str:
+def _generateAnchor(text: str, seen: Dict[str, int]) -> str:
     anchor = re.sub(r'[^\w\u4e00-\u9fff\-]', '', text).replace(' ', '-').lower()
     if not anchor:
         anchor = 'heading'
@@ -216,18 +216,18 @@ def _generate_anchor(text: str, seen: Dict[str, int]) -> str:
     return anchor
 
 
-def _process_html_img_tags(content: str, file_path: str) -> str:
+def _processHtmlImgTags(content: str, file_path: str) -> str:
     """处理HTML中的img标签路径"""
-    def replace_img(match):
+    def replaceImg(match):
         attrs = match.group(1)
         src_match = re.search(r'src\s*=\s*["\']([^"\']+)["\']', attrs)
         if not src_match:
             return match.group(0)
         src = src_match.group(1)
-        if _is_remote_url(src):
+        if _isRemoteUrl(src):
             return match.group(0)
         if file_path:
-            new_src = _convert_image_to_data_uri(file_path, src)
+            new_src = _convertImageToDataUri(file_path, src)
             if new_src:
                 new_attrs = re.sub(r'src\s*=\s*["\'][^"\']+["\']', '', attrs).strip()
                 new_attrs = re.sub(r'\s*width\s*=\s*["\'][^"\']*["\']', '', new_attrs).strip()
@@ -235,20 +235,20 @@ def _process_html_img_tags(content: str, file_path: str) -> str:
                 new_attrs = re.sub(r'\s*style\s*=\s*["\'][^"\']*["\']', '', new_attrs).strip()
                 return f'<img src="{new_src}" style="max-width:100%;width:100%" {new_attrs}>'
         return match.group(0)
-    return re.sub(r'<img\s+([^>]+)>', replace_img, content)
+    return re.sub(r'<img\s+([^>]+)>', replaceImg, content)
 
 
-def _process_image_paths(content: str, file_path: str) -> str:
+def _processImagePaths(content: str, file_path: str) -> str:
     """处理markdown中的图片路径"""
-    def replace_image(match):
+    def replaceImage(match):
         alt_text = match.group(1)
         src = match.group(2)
         title = match.group(3) if match.group(3) else ''
         
-        if _is_remote_url(src):
+        if _isRemoteUrl(src):
             return match.group(0)
         if file_path:
-            new_src = _convert_image_to_data_uri(file_path, src)
+            new_src = _convertImageToDataUri(file_path, src)
             if new_src is None:
                 return match.group(0)
             if title:
@@ -258,10 +258,10 @@ def _process_image_paths(content: str, file_path: str) -> str:
         return match.group(0)
     
     pattern = r'!\[([^\]]*)\]\(([^)]+)(?:\s+"([^"]*)")?\)'
-    return re.sub(pattern, replace_image, content)
+    return re.sub(pattern, replaceImage, content)
 
 
-def _process_relative_links(content: str, file_path: str) -> str:
+def _processRelativeLinks(content: str, file_path: str) -> str:
     """处理相对路径链接"""
     if not file_path:
         return content
@@ -269,7 +269,7 @@ def _process_relative_links(content: str, file_path: str) -> str:
     try:
         md_dir = Path(file_path).parent.resolve()
         
-        def replace_link(match):
+        def replaceLink(match):
             link_text = match.group(1)
             href = match.group(2)
             title = match.group(3) if match.group(3) else ''
@@ -287,13 +287,13 @@ def _process_relative_links(content: str, file_path: str) -> str:
             return f'[{link_text}]({href})'
         
         pattern = r'\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)'
-        return re.sub(pattern, replace_link, content)
+        return re.sub(pattern, replaceLink, content)
     except Exception:
         logger.exception("链接处理失败")
         return content
 
 
-def _enhance_html_with_features(html_body: Optional[str]) -> str:
+def _enhanceHtmlWithFeatures(html_body: Optional[str]) -> str:
     """增强HTML功能"""
     if html_body is None:
         return ""
@@ -312,7 +312,7 @@ def _enhance_html_with_features(html_body: Optional[str]) -> str:
     return html_body
 
 
-def render_markdown(content: str, file_path: str = None) -> Optional[str]:
+def renderMarkdown(content: str, file_path: str = None) -> Optional[str]:
     """将markdown内容渲染为HTML
     
     Args:
@@ -327,7 +327,7 @@ def render_markdown(content: str, file_path: str = None) -> Optional[str]:
         return None
 
 
-def render_for_view(content: str, file_path: str = None) -> tuple[Optional[str], bool]:
+def renderForView(content: str, file_path: str = None) -> tuple[Optional[str], bool]:
     """渲染markdown用于编辑器视图模式
     
     Args:
@@ -340,7 +340,7 @@ def render_for_view(content: str, file_path: str = None) -> tuple[Optional[str],
     if not content:
         return None, False
     
-    html = render_markdown(content, file_path)
+    html = renderMarkdown(content, file_path)
     if html:
         return html, True
     

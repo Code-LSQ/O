@@ -472,7 +472,7 @@ class PowerShellHighlighter(BaseHighlighter):
         self.add_rule(r'-eq|-ne|-gt|-lt|-le|-ge|-like|-notlike|-match|-notmatch|-contains|-notcontains|-in|-notin|-replace', of)
 
 
-def create_highlighter(file_path: str, parent=None):
+def createHighlighter(file_path: str, parent=None):
     """根据文件扩展名创建高亮器"""
     if not file_path:
         return None

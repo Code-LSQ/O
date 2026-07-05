@@ -222,9 +222,9 @@ class Singleton:
         if self._initialized:
             return
         self._initialized = True
-        self._init_impl(*args, **kwargs)
+        self._init(*args, **kwargs)
 
-    def _init_impl(self, *args, **kwargs):
+    def _init(self, *args, **kwargs):
         pass
 
 
@@ -301,7 +301,7 @@ def systemLanguage() -> str:
 class Translator(Singleton):
     """翻译，简体中文不做处理，其他语言加载 JSON 文件，通过字符串替换进行翻译"""
 
-    def _init_impl(self):
+    def _init(self):
         self._translations = {}
         self.lang = "简体中文"
 
@@ -571,7 +571,7 @@ class FileDrop(QLabel):
         self.setStyleSheet("color: gray; border: 2px dashed gray;")
         self.setText("拖拽文件或文件夹到此处")
 
-    def _filter_files(self, files: list) -> list:
+    def _filterFiles(self, files: list) -> list:
         if not self._file_filter:
             return files
         return [
@@ -586,7 +586,7 @@ class FileDrop(QLabel):
             super().dragEnterEvent(event)
 
     def dropEvent(self, event: QDropEvent):
-        self.reset_style()
+        self.resetStyle()
         urls = event.mimeData().urls()
         files = []
         folder = None
@@ -621,10 +621,10 @@ class FileDrop(QLabel):
 
         event.acceptProposedAction()
 
-    def reset_style(self):
+    def resetStyle(self):
         self.setStyleSheet("color: gray; border: 2px dashed gray;")
 
-    def set_folder_path(self, path: str):
+    def setFolderPath(self, path: str):
         self.setText(path)
 
 
@@ -922,32 +922,29 @@ def labelEdit(parent, name):
 class ClipboardMonitor(Singleton):
     """剪贴板监控器 - 使用 QClipboard 信号监听剪贴板变化"""
 
-    def _init_impl(self):
+    def _init(self):
         self._clipboard = QApplication.clipboard()
-        self._last_content = ""
         self._callbacks = set()
         self.enabled = False
-        self._init_clipboard()
-
-    def _init_clipboard(self):
         try:
             self._last_content = self._clipboard.text() or ""
         except Exception:
             logger.exception("初始化剪贴板失败")
+            self._last_content = ""
 
     def start(self):
         self.enabled = True
-        self._clipboard.dataChanged.connect(self._on_clipboard_changed)
+        self._clipboard.dataChanged.connect(self._onClipboardChanged)
 
     def stop(self):
         self.enabled = False
         try:
             if self._clipboard.receivers(self._clipboard.dataChanged) > 0:
-                self._clipboard.dataChanged.disconnect(self._on_clipboard_changed)
+                self._clipboard.dataChanged.disconnect(self._onClipboardChanged)
         except (TypeError, RuntimeError):
             pass
 
-    def _on_clipboard_changed(self):
+    def _onClipboardChanged(self):
         if not self.enabled or not self._callbacks:
             return
         try:
@@ -1110,9 +1107,9 @@ class ManagePair(QDialog):
 
         # 如果有初始数据，加载
         if pairs:
-            self.set_pairs(pairs)
+            self.setPairs(pairs)
 
-    def set_pairs(self, pairs):
+    def setPairs(self, pairs):
         """设置配对数据，支持 dict {name: value} 或列表 [{"name":..., "value":...}]"""
         self.pair_list.clear()
         if isinstance(pairs, dict):
@@ -1126,7 +1123,7 @@ class ManagePair(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, value)
             self.pair_list.addItem(item)
 
-    def get_pairs(self):
+    def getPairs(self):
         """获取当前所有配对，返回 dict {name: value}"""
         pairs = {}
         for i in range(self.pair_list.count()):
@@ -1136,13 +1133,13 @@ class ManagePair(QDialog):
             pairs[name] = value
         return pairs
 
-    def pair_dialog(self, title, initial_name="", initial_value=""):
+    def pairDialog(self, title, initial_name="", initial_value=""):
         """显示编辑对话框，返回 (name, value) 如果用户确认，否则 (None, None)"""
         return dictDialog(self, title, name_text=initial_name, value_text=initial_value)
 
     def add(self):
         """添加新配对"""
-        name, value = self.pair_dialog("添加")
+        name, value = self.pairDialog("添加")
         if name:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, value)
@@ -1157,7 +1154,7 @@ class ManagePair(QDialog):
         old_name = current_item.text()
         old_value = current_item.data(Qt.ItemDataRole.UserRole)
 
-        name, value = self.pair_dialog("编辑", old_name, old_value)
+        name, value = self.pairDialog("编辑", old_name, old_value)
         if name:
             current_item.setText(name)
             current_item.setData(Qt.ItemDataRole.UserRole, value)

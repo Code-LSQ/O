@@ -7,7 +7,7 @@ import requests
 
 from src.util import APP_NAME, VERSION, root, data_dir, logger, arch
 
-# GitHub API 对未认证的匿名请求存在频率限制，每小时检查一次更新足够了
+# GitHub API 对未认证的匿名请求存在频率限制，如果要自动更新，每小时检查一次更新足够了，手动更新可以不用写额外线程
 
 URL = f"https://api.github.com/repos/Code-LSQ/{APP_NAME}/releases/latest"
 

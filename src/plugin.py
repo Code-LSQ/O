@@ -135,7 +135,7 @@ class PluginManager(Singleton):
 
     使用单例模式，通过 getPluginManager() 获取实例。"""
     
-    def _init_impl(self, main_window=None):
+    def _init(self, main_window=None):
         self.main_window = main_window
         self.plugins: Dict[str, PluginBase] = {}
         self._scan_cache: Dict[str, tuple] = {}
@@ -307,7 +307,7 @@ class PluginManager(Singleton):
         self._file_handlers.append((can_handle, open_file))
     
     @property
-    def file_handlers(self) -> list:
+    def fileHandlers(self) -> list:
         return self._file_handlers
     
     def initConfig(self, config):

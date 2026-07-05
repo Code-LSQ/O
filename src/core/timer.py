@@ -14,7 +14,7 @@ from src.util import Singleton, logger
 class TimerManager(Singleton):
     """全局计时器管理器 - 统一管理所有 QTimer"""
 
-    def _init_impl(self):
+    def _init(self):
         self._timers = []
         self._one_shot_timers = []
     

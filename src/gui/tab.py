@@ -10,8 +10,8 @@ from PySide6.QtGui import QFont, QPixmap, QTextCursor, QTextDocument, QAction, Q
 
 from src.file import FileOperation, pdfView, readEncoding
 from src.util import logger, EXTENSION, messageBox, urlToPath
-from src.core.syntax import create_highlighter
-from src.core.md import render_for_view
+from src.core.syntax import createHighlighter
+from src.core.md import renderForView
 from src.core.timer import LRUCache
 from src.gui.view import ViewMode
 
@@ -519,7 +519,7 @@ class EditorTab(QWidget):
             doc = self.text_edit.document()
             if not doc:
                 return
-            highlighter = create_highlighter(self.file_path, doc)
+            highlighter = createHighlighter(self.file_path, doc)
             if highlighter:
                 self.highlighter = highlighter
         except Exception:
@@ -686,7 +686,7 @@ class EditorTab(QWidget):
             
             html = self._markdown_cache.get(cache_key)
             if html is None:
-                html, success = render_for_view(content_to_render, self.file_path)
+                html, success = renderForView(content_to_render, self.file_path)
                 if success:
                     self._markdown_cache.set(cache_key, html)
             else:

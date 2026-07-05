@@ -63,7 +63,7 @@ class GlobalHotkeyListener(Singleton):
         0x08: 'backspace', 0x1B: 'esc',
     }
 
-    def _init_impl(self):
+    def _init(self):
         self._lock = threading.Lock()
     
     @staticmethod
@@ -123,7 +123,7 @@ class GlobalHotkeyListener(Singleton):
                     
                     if not ctrl_was_held and time_since_last_press < 0.5:
                         logger.info("连按Ctrl键触发启动器")
-                        QMetaObject.invokeMethod(main_window, "_toggle_launcher", Qt.ConnectionType.QueuedConnection)
+                        QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
                     
                     last_ctrl_press_time = current_time
                     ctrl_was_held = True
@@ -132,7 +132,7 @@ class GlobalHotkeyListener(Singleton):
                     with self._lock:
                         if self._check_hotkey(pressed_keys_copy, hotkey_config):
                             self._hotkey_triggered = True
-                            QMetaObject.invokeMethod(main_window, "_toggle_launcher", Qt.ConnectionType.QueuedConnection)
+                            QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
                 
                 self._check_tool_hotkeys(pressed_keys_copy)
                 
@@ -159,7 +159,7 @@ class GlobalHotkeyListener(Singleton):
         
         def on_mouse_click(x, y, button, pressed):
             if pressed and button in (mouse.Button.x1, mouse.Button.x2) and mouse_side_enabled:
-                QMetaObject.invokeMethod(main_window, "_toggle_launcher", Qt.ConnectionType.QueuedConnection)
+                QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
         
         def keyboard_win32_filter(msg, data):
             if self._is_pasting:
@@ -206,7 +206,7 @@ class GlobalHotkeyListener(Singleton):
                         button = data.mouseData >> 16
                         if button in (1, 2):
                             if msg == WM_XBUTTONDOWN:
-                                QMetaObject.invokeMethod(main_window, "_toggle_launcher", Qt.ConnectionType.QueuedConnection)
+                                QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
                             self._mouse_listener.suppress_event()
 
                 self._mouse_listener = mouse.Listener(

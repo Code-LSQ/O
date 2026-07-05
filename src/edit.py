@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QTimer
 from src.config import SettingsDialog, getConfig
 from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor
 from src.file import FileControl, FileOperation, ArchiveItemModel
-from src.core.md import extract_toc
+from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
 from src.gui.view import FolderPanelManager, ViewMode
@@ -956,7 +956,7 @@ class TocPanel:
     def update_toc(self, content: str):
         """更新标题内容"""
         self.list_widget.clear()
-        self._headings = extract_toc(content)
+        self._headings = extractToc(content)
         
         if not self._headings:
             self.panel.hide()

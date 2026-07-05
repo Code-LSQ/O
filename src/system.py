@@ -1,9 +1,11 @@
 """跨平台适配模块，谨慎导入本地模块"""
 import os
 import sys
+import shutil
 import subprocess
 from pathlib import Path
 from functools import lru_cache
+from datetime import datetime
 
 from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
@@ -225,6 +227,23 @@ if sys.platform == "win32":
             ILFree(pidl)
         return icon
 
+    def moveTrash(path):
+        try:
+            path = os.path.abspath(path)
+            escaped = path.replace("'", "''")
+            result = subprocess.run(
+                ["powershell", "-Command",
+                    f"Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('{escaped}', 'OnlyErrorDialogs', 'SendToRecycleBin')"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                logger.info(f"{path} 成功移动到回收站")
+                return True
+            logger.error(f"{path} 移动到回收站失败: {result.stderr}")
+        except Exception:
+            logger.exception(f"{path} 移动到回收站失败")
+        return False
+
 
 elif sys.platform == "linux":
 
@@ -283,6 +302,39 @@ elif sys.platform == "linux":
             return QFileIconProvider().icon(QFileInfo(file_path))
         return QIcon()
 
+    def moveTrash(path):
+        try:
+            path = os.path.abspath(path)
+            trash_dir = os.path.expanduser("~/.local/share/Trash")
+            files_dir = os.path.join(trash_dir, "files")
+            info_dir = os.path.join(trash_dir, "info")
+            os.makedirs(files_dir, exist_ok=True)
+            os.makedirs(info_dir, exist_ok=True)
+            basename = os.path.basename(path)
+            dest = os.path.join(files_dir, basename)
+            info_path = os.path.join(info_dir, basename + ".trashinfo")
+            if os.path.exists(dest) or os.path.exists(info_path):
+                name, ext = os.path.splitext(basename)
+                counter = 1
+                while True:
+                    new_name = f"{name}.{counter}{ext}"
+                    dest = os.path.join(files_dir, new_name)
+                    info_path = os.path.join(info_dir, new_name + ".trashinfo")
+                    if not os.path.exists(dest) and not os.path.exists(info_path):
+                        logger.info(f"回收站中已存在 {basename}，重命名为 {os.path.basename(dest)}")
+                        break
+                    counter += 1
+            shutil.move(path, dest)
+            with open(info_path, "w", encoding="utf-8") as f:
+                f.write("[Trash Info]\n")
+                f.write(f"Path={path}\n")
+                f.write(f"DeletionDate={datetime.now().isoformat()}\n")
+            logger.info(f"{path} 成功移动到回收站")
+            return True
+        except Exception:
+            logger.exception(f"{path} 移动到回收站失败")
+            return False
+
 
 elif sys.platform == "darwin":
 
@@ -339,3 +391,19 @@ elif sys.platform == "darwin":
         if os.path.exists(file_path):
             return QFileIconProvider().icon(QFileInfo(file_path))
         return QIcon()
+
+    def moveTrash(path):
+        try:
+            path = os.path.abspath(path)
+            result = subprocess.run(
+                ["osascript", "-e",
+                 f'tell application "Finder" to delete POSIX file "{path}"'],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                logger.info(f"{path} 成功移动到回收站")
+                return True
+            logger.error(f"{path} 移动到回收站失败: {result.stderr}")
+        except Exception:
+            logger.exception(f"{path} 移动到回收站失败")
+        return False

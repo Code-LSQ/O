@@ -237,7 +237,7 @@ class FolderPanelManager:
                 
                 if os.path.isfile(item_path):
                     move_to_trash_action = QAction(tr("移动到回收站"), self.parent)
-                    move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.move_to_trash(fp))
+                    move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.moveTrash(fp))
                     menu.addAction(move_to_trash_action)
         elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
             open_terminal_action = QAction(tr("在终端中打开"), self.parent)
@@ -262,36 +262,14 @@ class FolderPanelManager:
 
         menu.exec_(self.tree.mapToGlobal(pos))
     
-    def move_to_trash(self, item_path: str):
+    def moveTrash(self, item_path: str):
         """移动文件到回收站"""
-        try:
-            if sys.platform == "win32":
-                item_path = os.path.abspath(item_path)
-                result = subprocess.run(
-                    ['powershell', '-Command',
-                     f'Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("{item_path}", "OnlyErrorDialogs", "SendToRecycleBin")'],
-                    capture_output=True, text=True
-                )
-                if result.returncode == 0:
-                    logger.info(f"成功移动到回收站: {item_path}")
-                    self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
-                    self._on_file_deleted(item_path)
-                else:
-                    logger.error(f"移动到回收站失败: {item_path}, 错误: {result.stderr}")
-                    messageBox(self.parent, tr("错误"), tr("移动到回收站失败") + f": {result.stderr}", 1)
-            else:
-                trash_path = os.path.expanduser("~/.local/share/Trash/files/")
-                os.makedirs(trash_path, exist_ok=True)
-                if os.path.isfile(item_path):
-                    shutil.move(item_path, trash_path)
-                else:
-                    shutil.move(item_path, trash_path)
-                logger.info(f"成功移动到回收站: {item_path}")
-                self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
-                self._on_file_deleted(item_path)
-        except Exception as e:
-            logger.error(f"移动到回收站异常: {item_path}, 错误: {e}")
-            messageBox(self.parent, tr("错误"), tr("移动到回收站失败") + f": {e}", 1)
+        from src.system import moveTrash as _moveTrash
+        if _moveTrash(item_path):
+            self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
+            self._on_file_deleted(item_path)
+        else:
+            messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
     
     def _on_file_deleted(self, deleted_path: str):
         """文件删除后刷新视图"""
