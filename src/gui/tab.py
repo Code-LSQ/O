@@ -6,7 +6,7 @@ import hashlib
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QTextEdit, QMenu
 from PySide6.QtCore import Qt, Signal, QEvent, QObject
-from PySide6.QtGui import QFont, QPixmap, QTextCursor, QTextDocument, QAction, QImage
+from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QAction, QImage
 
 from src.file import FileOperation, pdfView, readEncoding
 from src.util import logger, EXTENSION, messageBox, urlToPath
@@ -34,7 +34,7 @@ class EditorTab(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.file_path = None
         self.is_modified = False
-        self.encoding = 'utf-8'
+        self.encoding = "utf-8"
         self.view_mode = ViewMode.TEXT
         self._original_content = ''
         self.highlighter = None
@@ -76,19 +76,19 @@ class EditorTab(QWidget):
         self._loaded_lines = 0
         self._page_buffer = {}         # {page_num: modified_content}
         self._truncated_file_path = ''
-        self._truncated_encoding = 'utf-8'
+        self._truncated_encoding = "utf-8"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.text_edit = EditorTextEdit()
         self.text_edit.setPlaceholderText("新建文件...")
-        self.text_edit.textChanged.connect(self._on_text_changed)
+        self.text_edit.textChanged.connect(self._onTextChanged)
         self.text_edit._parent_tab = self
         self.text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.text_edit.installEventFilter(self)
-        self.text_edit.set_zoom_callback(self._on_text_zoom_changed)
-        self.text_edit.cursor_position_changed.connect(self._on_cursor_position_changed)
+        self.text_edit.setZoomCallback(self._onTextZoom)
+        self.text_edit.cursor_position_changed.connect(self._onCursorPos)
         self._cursor_position_callback = None
 
         layout.addWidget(self.text_edit)
@@ -103,7 +103,7 @@ class EditorTab(QWidget):
 
         self._prev_page_btn = QPushButton("上一页")
         self._prev_page_btn.setFixedWidth(80)
-        self._prev_page_btn.clicked.connect(self._on_prev_page)
+        self._prev_page_btn.clicked.connect(self._onPrevPage)
         pag_layout.addWidget(self._prev_page_btn)
 
         self._page_label = QLabel("第 0 / 0 页")
@@ -112,12 +112,12 @@ class EditorTab(QWidget):
 
         self._next_page_btn = QPushButton("下一页")
         self._next_page_btn.setFixedWidth(80)
-        self._next_page_btn.clicked.connect(self._on_next_page)
+        self._next_page_btn.clicked.connect(self._onNextPage)
         pag_layout.addWidget(self._next_page_btn)
 
         self._load_all_btn = QPushButton("加载全部")
         self._load_all_btn.setFixedWidth(100)
-        self._load_all_btn.clicked.connect(self._on_load_all)
+        self._load_all_btn.clicked.connect(self._onLoadAll)
         pag_layout.addWidget(self._load_all_btn)
 
         layout.addWidget(self._pagination_bar)
@@ -125,13 +125,13 @@ class EditorTab(QWidget):
         self.image_scroll = QScrollArea()
         self.image_scroll.setWidgetResizable(True)
         self.image_label = ImageLabel()
-        self.image_label.set_zoom_callback(self._on_image_zoom_changed)
+        self.image_label.setZoomCallback(self._onImgZoom)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_scroll.setWidget(self.image_label)
         self.image_scroll.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.image_scroll.customContextMenuRequested.connect(self._show_image_context_menu)
+        self.image_scroll.customContextMenuRequested.connect(self._showCtxMenu)
         self.image_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.image_label.customContextMenuRequested.connect(self._show_image_label_menu)
+        self.image_label.customContextMenuRequested.connect(self._showLabelMenu)
         self.image_scroll.hide()
         layout.addWidget(self.image_scroll)
 
@@ -148,7 +148,7 @@ class EditorTab(QWidget):
         
         self._gallery_back_btn = QPushButton("← 返回编辑器")
         self._gallery_back_btn.setFixedWidth(120)
-        self._gallery_back_btn.clicked.connect(self._exit_gallery)
+        self._gallery_back_btn.clicked.connect(self._exitGallery)
         self._gallery_back_btn.setStyleSheet("border: none; padding: 5px;")
         
         self._gallery_title_label = QLabel("ZIP 图库")
@@ -191,7 +191,7 @@ class EditorTab(QWidget):
                         self.file_opened.emit(file_path)
                     event.acceptProposedAction()
 
-    def _on_text_changed(self):
+    def _onTextChanged(self):
         current_content = self.text_edit.toPlainText()
         current_normalized = _LINE_ENDING_RE.sub('\n', current_content)
         original_normalized = _LINE_ENDING_RE.sub('\n', self._original_content)
@@ -204,23 +204,23 @@ class EditorTab(QWidget):
                 self.is_modified = False
                 self.file_changed.emit(False)
 
-    def _on_text_zoom_changed(self, zoom_factor: float):
+    def _onTextZoom(self, zoom_factor: float):
         """文本缩放变化回调"""
         zoom_percent = int(zoom_factor * 100)
         self.window().statusBar().showMessage(f"当前缩放 {zoom_percent}%", 1500)
 
-    def _on_image_zoom_changed(self, zoom_factor: float):
+    def _onImgZoom(self, zoom_factor: float):
         """图片缩放变化回调"""
         zoom_percent = int(zoom_factor * 100)
         self.window().statusBar().showMessage(f"当前缩放 {zoom_percent}%", 1500)
     
     def eventFilter(self, obj, event):
         if obj == self.text_edit and event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type and self.file_path:
-            return self._handle_archive_double_click(event)
+            return self._onArcDblClick(event)
         return False
         return super().eventFilter(obj, event)
     
-    def _handle_archive_double_click(self, event):
+    def _onArcDblClick(self, event):
         cursor = self.text_edit.textCursor()
         cursor.select(cursor.SelectionType.LineUnderCursor)
         line_text = cursor.selectedText().strip()
@@ -229,24 +229,20 @@ class EditorTab(QWidget):
             name_lower = line_text.lower()
             if any(name_lower.endswith(ext) for ext in EXTENSION["IMAGE"]):
                 logger.info(f">>> 触发加载图片: {line_text}")
-                self._load_single_archive_image(line_text)
+                self._loadSingleImg(line_text)
                 return True
         return False
     
-    def get_content(self) -> str:
-        """获取编辑器当前文本内容"""
-        return self.text_edit.toPlainText()
-
-    def set_file_path(self, path: str):
+    def setFilePath(self, path: str):
         """设置文件路径：初始化高亮器，检测文件类型（Markdown/图片/压缩包）"""
         try:
             self.file_path = path
-            self.setup_highlighter()
+            self.setupHighlighter()
             
             if path:
                 path_lower = path.lower()
                 is_markdown = any(path_lower.endswith(ext) for ext in EXTENSION["Markdown"])
-                is_image = self.is_image_file(path)
+                is_image = self.isImgFile(path)
                 is_zip = any(path_lower.endswith(ext) for ext in EXTENSION["ZIP"])
                 is_tar = any(path_lower.endswith(ext) for ext in EXTENSION["TAR"])
                 try:
@@ -256,7 +252,7 @@ class EditorTab(QWidget):
                 
                 self._archive_type = 'zip' if is_zip else ('tar' if is_tar else None)
                 if self._archive_type:
-                    self._load_archive_listing(path)
+                    self._loadArcList(path)
             else:
                 is_markdown = False
                 is_image = False
@@ -267,11 +263,11 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("设置文件路径失败")
     
-    def _is_zip_all_images(self, zip_path: str) -> tuple:
+    def _isZipAllImg(self, zip_path: str) -> tuple:
         """检查ZIP文件是否只包含图片，返回(是否全是图片, 图片路径列表)"""
         try:
             image_paths = []
-            with zipfile.ZipFile(zip_path, 'r') as zf:
+            with zipfile.ZipFile(zip_path, "r") as zf:
                 for info in zf.infolist():
                     if info.is_dir():
                         continue
@@ -280,19 +276,19 @@ class EditorTab(QWidget):
                     if not is_image:
                         return False, []
                     image_paths.append(info.filename)
-            return len(image_paths) > 0, sorted(image_paths, key=lambda x: self._natural_sort_key(x))
+            return len(image_paths) > 0, sorted(image_paths, key=lambda x: self._sortKey(x))
         except Exception:
             logger.exception("检查ZIP文件失败")
             return False, []
     
     @staticmethod
-    def _natural_sort_key(path):
+    def _sortKey(path):
         """自然排序key：提取文件名中的数字用于排序"""
         basename = os.path.basename(path)
         parts = re.split(r'(\d+)', basename)
         return [int(p) if p.isdigit() else p for p in parts]
     
-    def _load_gallery(self, image_paths: list, read_image: callable) -> bool:
+    def _loadGallery(self, image_paths: list, read_image: callable) -> bool:
         """加载图片图库（通用）"""
         for i in reversed(range(self._gallery_layout.count())):
             widget = self._gallery_layout.itemAt(i).widget()
@@ -313,7 +309,7 @@ class EditorTab(QWidget):
                 img_widget.setStyleSheet("border: 1px solid #cccccc; padding: 5px; background-color: white;")
                 img_widget.setMinimumHeight(50)
                 img_widget.setMinimumWidth(100)
-                img_widget.mousePressEvent = lambda e, path=img_name: self._on_gallery_image_clicked(path)
+                img_widget.mousePressEvent = lambda e, path=img_name: self._onGalleryClick(path)
                 img_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
                 name_label = QLabel(f"{idx + 1}. {img_name}")
@@ -339,10 +335,10 @@ class EditorTab(QWidget):
         logger.info(f"图库已加载: {len(image_paths)} 张图片")
         return True
 
-    def _load_zip_gallery(self, zip_path: str):
+    def _loadZipGallery(self, zip_path: str):
         """加载ZIP文件为图片图库"""
         try:
-            is_all_images, image_paths = self._is_zip_all_images(zip_path)
+            is_all_images, image_paths = self._isZipAllImg(zip_path)
             logger.info(f"ZIP检查结果: is_all_images={is_all_images}, image_count={len(image_paths)}")
             if not is_all_images:
                 logger.warning(f"ZIP文件不是全部图片: {zip_path}")
@@ -351,13 +347,13 @@ class EditorTab(QWidget):
             self._zip_image_paths = image_paths
             self._is_zip_gallery = True
 
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                return self._load_gallery(image_paths, zf.read)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                return self._loadGallery(image_paths, zf.read)
         except Exception:
             logger.exception("加载ZIP图库失败")
             return False
     
-    def _exit_gallery(self):
+    def _exitGallery(self):
         """退出压缩包图库视图，返回文本编辑器"""
         self._gallery_widget.hide()
         self.image_scroll.hide()
@@ -374,10 +370,10 @@ class EditorTab(QWidget):
             if widget:
                 widget.deleteLater()
     
-    def _load_tar_gallery(self, tar_path: str):
+    def _loadTarGallery(self, tar_path: str):
         """加载TAR文件为图片图库"""
         try:
-            image_paths = self._list_tar_images(tar_path)
+            image_paths = self._listTarImgs(tar_path)
             if not image_paths:
                 logger.warning(f"TAR文件没有图片: {tar_path}")
                 return False
@@ -386,12 +382,12 @@ class EditorTab(QWidget):
             self._is_zip_gallery = True
 
             with tarfile.open(tar_path, 'r:*') as tf:
-                return self._load_gallery(image_paths, lambda n: tf.extractfile(tf.getmember(n)).read())
+                return self._loadGallery(image_paths, lambda n: tf.extractfile(tf.getmember(n)).read())
         except Exception:
             logger.exception("加载TAR图库失败")
             return False
     
-    def _list_tar_images(self, tar_path: str) -> list:
+    def _listTarImgs(self, tar_path: str) -> list:
         """列出TAR文件中的图片"""
         try:
             image_paths = []
@@ -399,12 +395,12 @@ class EditorTab(QWidget):
                 for member in tf.getmembers():
                     if member.isfile() and any(member.name.lower().endswith(ext) for ext in EXTENSION["IMAGE"]):
                         image_paths.append(member.name)
-            return sorted(image_paths, key=lambda x: self._natural_sort_key(x))
+            return sorted(image_paths, key=lambda x: self._sortKey(x))
         except Exception:
             logger.exception("列出TAR图片失败")
             return []
     
-    def _exit_pdf_view(self):
+    def _exitPdf(self):
         """清理 PDF 视图资源"""
         if not self._is_pdf:
             return
@@ -439,18 +435,18 @@ class EditorTab(QWidget):
         self.image_scroll.hide()
         self.is_image = False
     
-    def _on_gallery_image_clicked(self, img_name: str):
+    def _onGalleryClick(self, img_name: str):
         """图库中点击图片，在中央放大显示"""
         self._archive_current_image = img_name
         self._is_viewing_archive_image = True
 
         if not self._zip_image_paths:
-            is_all_images, image_paths = self._is_zip_all_images(self.file_path)
+            is_all_images, image_paths = self._isZipAllImg(self.file_path)
             if is_all_images:
                 self._zip_image_paths = image_paths
 
         try:
-            with zipfile.ZipFile(self.file_path, 'r') as zf:
+            with zipfile.ZipFile(self.file_path, "r") as zf:
                 img_data = zf.read(img_name)
                 image = QImage.fromData(img_data)
                 if not image.isNull():
@@ -462,7 +458,7 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("显示图片失败")
 
-    def is_image_file(self, path: str) -> bool:
+    def isImgFile(self, path: str) -> bool:
         """检查是否为图片文件"""
         if not path or not isinstance(path, str):
             return False
@@ -472,7 +468,7 @@ class EditorTab(QWidget):
         except (AttributeError, TypeError):
             return False
     
-    def load_image(self, file_path: str) -> bool:
+    def loadImage(self, file_path: str) -> bool:
         """加载并显示图片"""
         image = QImage(file_path)
         if image.isNull():
@@ -481,13 +477,13 @@ class EditorTab(QWidget):
         if pixmap.isNull():
             return False
 
-        self.image_label.set_file_path(file_path, self.image_scroll)
+        self.image_label.setFilePath(file_path, self.image_scroll)
         self.image_label.setPixmap(pixmap)
 
         self.text_edit.hide()
         self.image_scroll.show()
         self.is_image = True
-        self.set_line_numbers_visible(False)
+        self.text_edit.setLineNumbersVisible(False)
         return True
 
     
@@ -501,7 +497,7 @@ class EditorTab(QWidget):
         self.is_markdown = False
         self.text_edit.setReadOnly(False)
     
-    def setup_highlighter(self):
+    def setupHighlighter(self):
         """设置语法高亮器"""
         if self.highlighter:
             try:
@@ -525,30 +521,16 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("设置语法高亮器失败")
 
-    def get_file_path(self) -> str:
-        """获取文件路径（压缩包单图模式下返回 None）"""
-        if self._is_viewing_archive_image:
-            return None
-        return self.file_path
-    
-    def is_dirty(self) -> bool:
-        """文件内容是否有未保存的修改"""
-        return self.is_modified
-
-    def set_dirty(self, dirty: bool):
-        """手动设置文件修改状态"""
-        self.is_modified = dirty
-
-    def mark_saved(self):
+    def markSaved(self):
         """标记当前内容为已保存的干净状态，更新原始内容快照"""
         if self._is_truncated:
-            self._original_content = self._assemble_full_content()
+            self._original_content = self._assembleContent()
         else:
             self._original_content = self.text_edit.toPlainText()
         self.is_modified = False
         self.text_edit.document().setModified(False)
 
-    def get_title(self) -> str:
+    def getTitle(self) -> str:
         """获取标签页标题（文件名 + 修改标记 *）"""
         if self.file_path:
             name = os.path.basename(self.file_path)
@@ -558,21 +540,7 @@ class EditorTab(QWidget):
             name += " *"
         return name
 
-    def set_auto_indent(self, enabled: bool):
-        """启用 / 禁用自动缩进"""
-        self.text_edit.set_auto_indent(enabled)
-
-    def set_font(self, family: str, size: int):
-        """设置编辑器字体"""
-        try:
-            font = QFont(family, size)
-            self.text_edit.setFont(font)
-            if hasattr(self, '_line_spacing'):
-                self.set_line_spacing(self._line_spacing)
-        except Exception:
-            logger.exception("设置字体失败")
-
-    def set_line_spacing(self, spacing: int):
+    def setLineSpacing(self, spacing: int):
         """设置行间距（0=禁用，>0=增量值）"""
         self._line_spacing = spacing
         if spacing == 0:
@@ -588,26 +556,7 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("设置行距失败")
 
-    def set_word_wrap(self, enabled: bool):
-        """设置自动换行"""
-        if enabled:
-            self.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        else:
-            self.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-
-    def set_line_numbers_visible(self, visible: bool):
-        """设置行号显示"""
-        self.text_edit.setLineNumbersVisible(visible)
-
-    def undo(self):
-        """撤销"""
-        self.text_edit.undo()
-
-    def redo(self):
-        """重做"""
-        self.text_edit.redo()
-
-    def find_text(self, text: str, forward: bool = True, 
+    def findText(self, text: str, forward: bool = True, 
                   case_sensitive: bool = False, regex: bool = False):
         """查找文本"""
         flags = QTextDocument.FindFlag(0)
@@ -619,29 +568,17 @@ class EditorTab(QWidget):
             flags |= QTextDocument.FindRegExp
         self.text_edit.find(text, flags)
 
-    def replace_text(self, find_text: str, replace_text: str,
+    def replaceText(self, findText: str, replaceText: str,
                      case_sensitive: bool = False, regex: bool = False):
         """替换文本"""
         cursor = self.text_edit.textCursor()
         if cursor.hasSelection():
-            cursor.insertText(replace_text)
+            cursor.insertText(replaceText)
         else:
-            self.find_text(find_text, True, case_sensitive, regex)
+            self.findText(findText, True, case_sensitive, regex)
             if self.text_edit.textCursor().hasSelection():
                 cursor = self.text_edit.textCursor()
-                cursor.insertText(replace_text)
-
-    def set_encoding(self, encoding: str):
-        """设置文件编码"""
-        self.encoding = encoding
-
-    def get_encoding(self) -> str:
-        """获取文件编码"""
-        return self.encoding
-
-    def get_text_edit(self) -> 'EditorTextEdit':
-        """获取内部文本编辑器组件"""
-        return self.text_edit
+                cursor.insertText(replaceText)
 
     def setViewMode(self, mode: str, emit_changed: bool = True):
         """设置查看模式"""
@@ -653,11 +590,11 @@ class EditorTab(QWidget):
         
         if mode == ViewMode.TEXT:
             if self.is_image and self.file_path:
-                self.load_image(self.file_path)
+                self.loadImage(self.file_path)
                 self._pagination_bar.setVisible(False)
             else:
                 was_truncated = self._is_truncated
-                self.set_content(self._original_content, emit_changed=emit_changed)
+                self.setContent(self._original_content, emit_changed=emit_changed)
                 if was_truncated:
                     self._is_truncated = True
                 self.text_edit.show()
@@ -696,9 +633,9 @@ class EditorTab(QWidget):
                 try:
                     self.text_edit.setMarkdownHtml(html)
                 except Exception:
-                    self.set_content(content_to_render, emit_changed=emit_changed)
+                    self.setContent(content_to_render, emit_changed=emit_changed)
             else:
-                self.set_content(content_to_render, emit_changed=emit_changed)
+                self.setContent(content_to_render, emit_changed=emit_changed)
             self.text_edit.setReadOnly(True)
             self.is_markdown = True
             self.markdown_mode_changed.emit(True)
@@ -714,7 +651,7 @@ class EditorTab(QWidget):
         try:
             self.image_scroll.hide()
             self.text_edit.show()
-            with open(self.file_path, 'rb') as f:
+            with open(self.file_path, "rb") as f:
                 data = f.read()
             display = ''
             for i in range(0, len(data), 16):
@@ -727,15 +664,11 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("显示十六进制失败")
 
-    def set_cursor_position_callback(self, callback):
-        """注册光标位置变化回调，用于状态栏更新"""
-        self._cursor_position_callback = callback
-
-    def _on_cursor_position_changed(self, line: int, col: int):
+    def _onCursorPos(self, line: int, col: int):
         if self._cursor_position_callback:
             self._cursor_position_callback(line, col)
 
-    def set_content(self, content: str, emit_changed: bool = True):
+    def setContent(self, content: str, emit_changed: bool = True):
         if content is None:
             content = ''
         try:
@@ -749,9 +682,9 @@ class EditorTab(QWidget):
         self._original_content = content
         self._markdown_cache.clear()
         self.is_modified = False
-        self.clear_truncated(clear_buffer=False)
+        self.clearTruncated(clear_buffer=False)
 
-        # setPlainText 会触发 textChanged 信号，导致 _on_text_changed 误判
+        # setPlainText 会触发 textChanged 信号，导致 _onTextChanged 误判
         # QPlainTextEdit 内部始终有至少一个段落，toPlainText() 返回的内容末尾会多出 \n，与 _original_content 比较不等，导致 is_modified 被错误设为 True
         self.text_edit.blockSignals(True)
         try:
@@ -772,7 +705,7 @@ class EditorTab(QWidget):
         finally:
             self.text_edit.blockSignals(False)
 
-    def reload_file(self) -> bool:
+    def reloadFile(self) -> bool:
         """重新加载文件（相当于关闭再打开，保留光标滚动位置）"""
         if not self.file_path:
             return False
@@ -790,14 +723,14 @@ class EditorTab(QWidget):
         old_scroll_pos = scrollbar.value() if scrollbar else 0
 
         if self._is_zip_gallery:
-            self._exit_gallery()
+            self._exitGallery()
         if self._is_viewing_archive_image:
             self._is_viewing_archive_image = False
             self._archive_current_image = None
             self.text_edit.show()
             self.image_scroll.hide()
         if self._is_pdf:
-            self._exit_pdf_view()
+            self._exitPdf()
         if hasattr(self.image_label, '_comic_view_enabled') and self.image_label._comic_view_enabled:
             self.image_label._exit_comic_view()
 
@@ -816,16 +749,16 @@ class EditorTab(QWidget):
         self._comic_images_data.clear()
         self._archive_type = None
 
-        self.set_file_path(self.file_path)
+        self.setFilePath(self.file_path)
 
         path_lower = self.file_path.lower()
-        is_image = self.is_image_file(self.file_path)
+        is_image = self.isImgFile(self.file_path)
         is_archive = any(path_lower.endswith(ext) for ext in (*EXTENSION["ZIP"], *EXTENSION["TAR"]))
         is_pdf = path_lower.endswith('.pdf')
 
         try:
             if is_image:
-                self.load_image(self.file_path)
+                self.loadImage(self.file_path)
             elif is_pdf:
                 pdfView(self, self.file_path)
             elif is_archive:
@@ -836,16 +769,16 @@ class EditorTab(QWidget):
                         self.file_path, max_lines=50000, start_line=0)
                 if content:
                     self._original_content = None
-                    self.set_content(content, emit_changed=False)
+                    self.setContent(content, emit_changed=False)
                     self.encoding = encoding
-                    self.clear_truncated()
+                    self.clearTruncated()
                     if truncated > 0:
-                        self.set_truncated(total_lines, loaded_lines,
+                        self.setTruncated(total_lines, loaded_lines,
                                            self.file_path, encoding)
                 else:
                     content, encoding = readEncoding(self.file_path)
                     self._original_content = None
-                    self.set_content(content, emit_changed=False)
+                    self.setContent(content, emit_changed=False)
                     self.encoding = encoding
         except Exception as e:
             messageBox(self, "重新加载失败", f"无法重新加载文件: {e}", 1)
@@ -877,7 +810,7 @@ class EditorTab(QWidget):
 
     # ── 大文件翻页截断 ──────────────────────────────────────────────
 
-    def set_truncated(self, total_lines: int, loaded_lines: int,
+    def setTruncated(self, total_lines: int, loaded_lines: int,
                       file_path: str, encoding: str):
         self._is_truncated = True
         self._total_lines = total_lines
@@ -888,10 +821,10 @@ class EditorTab(QWidget):
         self._truncated_file_path = file_path
         self._truncated_encoding = encoding
         self.text_edit.setReadOnly(True)
-        self._update_pagination_bar()
+        self._updatePages()
         self._pagination_bar.setVisible(True)
 
-    def clear_truncated(self, clear_buffer: bool = True):
+    def clearTruncated(self, clear_buffer: bool = True):
         self._is_truncated = False
         self._total_pages = 0
         self._current_page = 0
@@ -903,13 +836,13 @@ class EditorTab(QWidget):
         self.text_edit.setReadOnly(False)
         self._pagination_bar.setVisible(False)
 
-    def _read_page_from_disk(self, page: int) -> str:
+    def _readPage(self, page: int) -> str:
         start_line = page * self._page_size
         content, total, loaded, truncated, _ = FileOperation().readFileLimit(
             self._truncated_file_path, max_lines=self._page_size, start_line=start_line)
         return content
 
-    def _update_pagination_bar(self):
+    def _updatePages(self):
         if not self._is_truncated:
             self._page_label.setText("")
             return
@@ -919,18 +852,18 @@ class EditorTab(QWidget):
         self._prev_page_btn.setEnabled(cur > 1)
         self._next_page_btn.setEnabled(cur < total)
 
-    def _on_prev_page(self):
+    def _onPrevPage(self):
         if self._current_page > 0:
-            self._go_to_page(self._current_page - 1)
+            self._goToPage(self._current_page - 1)
 
-    def _on_next_page(self):
+    def _onNextPage(self):
         if self._current_page < self._total_pages - 1:
-            self._go_to_page(self._current_page + 1)
+            self._goToPage(self._current_page + 1)
 
-    def _on_load_all(self):
-        self.load_all_content()
+    def _onLoadAll(self):
+        self.loadAllContent()
 
-    def _go_to_page(self, page: int):
+    def _goToPage(self, page: int):
         if page < 0 or page >= self._total_pages:
             return
         # 缓存当前页的编辑内容
@@ -939,16 +872,16 @@ class EditorTab(QWidget):
         if page in self._page_buffer:
             content = self._page_buffer[page]
         else:
-            content = self._read_page_from_disk(page)
+            content = self._readPage(page)
         # 切换显示
         self.text_edit.blockSignals(True)
         self.text_edit.setPlainText(content)
         self.text_edit.blockSignals(False)
         self.text_edit.document().setModified(False)
         self._current_page = page
-        self._update_pagination_bar()
+        self._updatePages()
 
-    def load_all_content(self):
+    def loadAllContent(self):
         self._page_buffer[self._current_page] = self.text_edit.toPlainText()
         # 逐页读取未缓存的页面
         all_parts = []
@@ -956,7 +889,7 @@ class EditorTab(QWidget):
             if p in self._page_buffer:
                 all_parts.append(self._page_buffer[p])
             else:
-                content = self._read_page_from_disk(p)
+                content = self._readPage(p)
                 all_parts.append(content)
         full = '\n'.join(all_parts) if all_parts else ''
         self._original_content = full
@@ -971,10 +904,10 @@ class EditorTab(QWidget):
         self.is_modified = False
         self.file_changed.emit(False)
 
-    def _assemble_full_content(self) -> str:
+    def _assembleContent(self) -> str:
         """合并各页内容为完整文件（用于保存时写出）"""
         if not self._is_truncated:
-            return self.get_content()
+            return self.text_edit.toPlainText()
         # 保存当前页
         self._page_buffer[self._current_page] = self.text_edit.toPlainText()
         all_parts = []
@@ -982,11 +915,11 @@ class EditorTab(QWidget):
             if p in self._page_buffer:
                 all_parts.append(self._page_buffer[p])
             else:
-                content = self._read_page_from_disk(p)
+                content = self._readPage(p)
                 all_parts.append(content)
         return '\n'.join(all_parts) if all_parts else ''
 
-    def remove_empty_lines(self):
+    def stripEmptyLines(self):
         """去除空行"""
         content = self.text_edit.toPlainText()
         lines = content.split('\n')
@@ -995,39 +928,39 @@ class EditorTab(QWidget):
         self.text_edit.setPlainText(result)
         return len(lines) - len(non_empty_lines)
 
-    def strip_leading_space(self):
+    def stripLeading(self):
         """去除行首空格"""
         content = self.text_edit.toPlainText()
         lines = content.split('\n')
         stripped_lines = [line.lstrip() for line in lines]
         self.text_edit.setPlainText('\n'.join(stripped_lines))
 
-    def strip_trailing_space(self):
+    def stripTrailing(self):
         """去除行尾空格"""
         content = self.text_edit.toPlainText()
         lines = content.split('\n')
         stripped_lines = [line.rstrip() for line in lines]
         self.text_edit.setPlainText('\n'.join(stripped_lines))
 
-    def indent_lines(self):
+    def indentLines(self):
         """行首缩进（添加4个空格）"""
         content = self.text_edit.toPlainText()
         lines = content.split('\n')
         indented_lines = ['    ' + line for line in lines]
         self.text_edit.setPlainText('\n'.join(indented_lines))
     
-    def _create_event_filter(self):
+    def _createFilter(self):
         """创建事件过滤器用于捕获双击"""
         filter_obj = QObject()
-        def event_filter(obj, event):
+        def eventFilter(obj, event):
             if event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type:
-                self._load_archive_image(event.position().toPoint())
+                self._loadArcImg(event.position().toPoint())
                 return True
             return False
-        filter_obj.eventFilter = event_filter
+        filter_obj.eventFilter = eventFilter
         return filter_obj
     
-    def _load_archive_image(self, pos):
+    def _loadArcImg(self, pos):
             """根据鼠标位置加载压缩包中的图片"""
             if not self._archive_type or not self.file_path:
                 return
@@ -1037,13 +970,13 @@ class EditorTab(QWidget):
             if line_text:
                 name_lower = line_text.lower()
                 if any(name_lower.endswith(ext) for ext in EXTENSION["IMAGE"]):
-                    self._load_single_archive_image(line_text)
+                    self._loadSingleImg(line_text)
         
-    def _load_single_archive_image(self, member_name: str):
+    def _loadSingleImg(self, member_name: str):
         """从压缩包中加载单张图片并显示在图片标签中"""
         if not member_name or not self._archive_type or not self.file_path:
             return
-        content = FileOperation().read_archive_file(self.file_path, member_name)
+        content = FileOperation().readArchive(self.file_path, member_name)
         if content is None:
             return
         image = QImage.fromData(content)
@@ -1054,7 +987,7 @@ class EditorTab(QWidget):
         self.is_image = True
         self._archive_current_image = member_name
 
-        self.image_label.set_file_path(member_name, self.image_scroll)
+        self.image_label.setFilePath(member_name, self.image_scroll)
         self.image_label.setPixmap(pixmap)
 
         self.text_edit.setVisible(False)
@@ -1063,52 +996,52 @@ class EditorTab(QWidget):
         self._gallery_title_label.setText(f"{self._archive_type.upper()} - {member_name}")
         self.update()
 
-    def _load_archive_listing(self, archive_path: str):
+    def _loadArcList(self, archive_path: str):
         """加载压缩包文件列表到编辑器"""
-        items = FileOperation().list_archive_contents(archive_path)
+        items = FileOperation().listArchive(archive_path)
         if items:
             lines = [item["name"] for item in items]
             content = "\n".join(lines)
-            self.set_content(content, emit_changed=False)
+            self.setContent(content, emit_changed=False)
 
-    def _show_image_menu(self, pos, widget):
+    def _showImgMenu(self, pos, widget):
         """显示图片右键菜单"""
         menu = QMenu(self)
         action = QAction("图库模式", menu)
         if self._archive_type:
-            action.triggered.connect(self._enter_archive_gallery)
+            action.triggered.connect(self._enterArcGallery)
         else:
-            action.triggered.connect(self._enter_folder_comic_view)
+            action.triggered.connect(self._enterFolderComic)
         menu.addAction(action)
         menu.exec(widget.mapToGlobal(pos))
     
-    def _show_image_label_menu(self, pos):
-        self._show_image_menu(pos, self.image_label)
+    def _showLabelMenu(self, pos):
+        self._showImgMenu(pos, self.image_label)
     
-    def _show_image_context_menu(self, pos):
-        self._show_image_menu(pos, self.image_scroll)
+    def _showCtxMenu(self, pos):
+        self._showImgMenu(pos, self.image_scroll)
     
-    def _enter_folder_comic_view(self):
+    def _enterFolderComic(self):
         """进入普通文件夹图库模式"""
         self.image_label._enter_comic_view()
     
-    def _enter_archive_gallery(self):
+    def _enterArcGallery(self):
         """进入压缩包图库模式"""
-        logger.info(f"=== _enter_archive_gallery called, archive_type={self._archive_type}")
+        logger.info(f"=== _enterArcGallery called, archive_type={self._archive_type}")
         
         if not self._zip_image_paths and self._archive_type == 'zip':
-            is_all_images, image_paths = self._is_zip_all_images(self.file_path)
+            is_all_images, image_paths = self._isZipAllImg(self.file_path)
             if is_all_images:
                 self._zip_image_paths = image_paths
         
         if not self._tar_image_paths and self._archive_type == 'tar':
-            self._tar_image_paths = self._list_tar_images(self.file_path)
+            self._tar_image_paths = self._listTarImgs(self.file_path)
         
         images_data = []
         
         if self._archive_type == 'zip':
             try:
-                with zipfile.ZipFile(self.file_path, 'r') as zf:
+                with zipfile.ZipFile(self.file_path, "r") as zf:
                     for img_name in self._zip_image_paths:
                         try:
                             img_data = zf.read(img_name)

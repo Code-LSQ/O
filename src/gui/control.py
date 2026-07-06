@@ -34,7 +34,7 @@ class WindowMouse:
         self._is_maximized = False
         self._pre_maximize_geometry = None
 
-    def _get_edge(self, pos: QPoint):
+    def _getEdge(self, pos: QPoint):
         """获取鼠标位置的边缘方向"""
         w, h = self.width(), self.height()
         x, y = pos.x(), pos.y()
@@ -50,7 +50,7 @@ class WindowMouse:
             return "bottom"
         return None
 
-    def _is_on_title_bar(self, pos: QPoint):
+    def _isTitle(self, pos: QPoint):
         """检查是否在标题栏区域（用于拖拽，不包含顶部边缘区域）"""
         edge_size = 8
         return 0 <= pos.x() < self.width() and edge_size <= pos.y() <= self._title_bar_height
@@ -64,12 +64,12 @@ class WindowMouse:
         self._start_window_pos = self.pos()
         self._start_size = self.size()
 
-        if self._is_on_title_bar(pos):
+        if self._isTitle(pos):
             self._dragging = True
             self.grabMouse()
             self.isDragging.emit(True)
         else:
-            edge = self._get_edge(pos)
+            edge = self._getEdge(pos)
             if edge:
                 self._resize_edge = edge
                 self._dragging = True
@@ -83,11 +83,11 @@ class WindowMouse:
         gpos = event.globalPosition().toPoint()
 
         if self._resize_edge:
-            self._do_resize(gpos)
+            self._doResize(gpos)
         else:
-            self._do_drag(gpos)
+            self._doDrag(gpos)
 
-    def _do_drag(self, gpos: QPoint):
+    def _doDrag(self, gpos: QPoint):
         """执行窗口拖拽"""
         dx = gpos.x() - self._start_global_pos.x()
         dy = gpos.y() - self._start_global_pos.y()
@@ -95,7 +95,7 @@ class WindowMouse:
         y = self._start_window_pos.y() + dy
         self.move(x, y)
 
-    def _do_resize(self, gpos: QPoint):
+    def _doResize(self, gpos: QPoint):
         """执行窗口大小调整"""
         dx = gpos.x() - self._start_global_pos.x()
         dy = gpos.y() - self._start_global_pos.y()
@@ -143,21 +143,21 @@ class WindowMouse:
             self._dragging = False
             self.isDragging.emit(False)
 
-    def _toggle_maximize(self):
+    def _toggleMax(self):
         if self._is_maximized:
             self._is_maximized = False
             if self._pre_maximize_geometry:
                 self.setGeometry(self._pre_maximize_geometry)
             elif hasattr(self, "_fallback_size"):
                 self.resize(*self._fallback_size)
-            self.window_control.update_max_button(False)
+            self.window_control.updateMaxBtn(False)
         else:
             self._pre_maximize_geometry = self.geometry()
             self._is_maximized = True
             screen = self.screen()
             if screen:
                 self.setGeometry(screen.availableGeometry())
-            self.window_control.update_max_button(True)
+            self.window_control.updateMaxBtn(True)
 
 class WindowControl:
     def __init__(self, main_window):
@@ -180,7 +180,7 @@ class WindowControl:
         self.main.max_btn.setIcon(max_icon)
         self.main.max_btn.setFixedSize(40, 32)
         self.main.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.main.max_btn.clicked.connect(self.main._toggle_maximize)
+        self.main.max_btn.clicked.connect(self.main._toggleMax)
 
         self.main.close_btn = QPushButton("×")
         self.main.close_btn.setObjectName("close_btn")
@@ -197,12 +197,12 @@ class WindowControl:
             container.addWidget(self.main.max_btn)
             container.addWidget(self.main.close_btn)
 
-    def update_max_button(self, is_maximized: bool):
+    def updateMaxBtn(self, is_maximized: bool):
         if hasattr(self.main, 'max_btn'):
             max_icon, maxed_icon = getMaxIcon(self._current_theme)
             self.main.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
 
-    def update_icons_for_theme(self, theme: str):
+    def updateIcons(self, theme: str):
         self._current_theme = theme
         max_icon, maxed_icon = getMaxIcon(theme)
         if hasattr(self.main, 'max_btn'):
@@ -217,9 +217,9 @@ class MenuControl:
         self.main = main_window
         self.config = main_window.config
         self.shortcut_map = {}
-        self._apply_shortcuts(DEFAULT_CONFIG["Edit"]["shortcuts"])
+        self._setKeys(DEFAULT_CONFIG["Edit"]["shortcuts"])
     
-    def _apply_shortcuts(self, shortcuts: dict):
+    def _setKeys(self, shortcuts: dict):
         self.shortcut_map = shortcuts
         if not hasattr(self.main, 'action_new'):
             return
@@ -238,7 +238,7 @@ class MenuControl:
             if action and action_name in shortcuts:
                 action.setShortcut(QKeySequence(shortcuts[action_name]))
 
-    def create_toolbar(self) -> QToolBar:
+    def createToolbar(self) -> QToolBar:
         toolbar = QToolBar()
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
@@ -250,7 +250,7 @@ class MenuControl:
     def createWindowButton(self, toolbar: QToolBar):
         self.main.window_control.createWindowButton(toolbar)
 
-    def build_view_menu(self) -> QToolButton:
+    def buildViewMenu(self) -> QToolButton:
         btn, menu = self.createMenuButton(tr("模式") + "(&V)")
 
         menu.setStyleSheet("QMenu::indicator:checked { background-color: palette(text); border-radius: 4px; width: 8px; height: 8px; margin: 2px 2px; }")
@@ -263,18 +263,18 @@ class MenuControl:
             menu.addAction(action)
             self._view_actions[mode] = action
 
-        menu.aboutToShow.connect(self._sync_view_menu)
+        menu.aboutToShow.connect(self._syncViewMenu)
         return btn
 
-    def _sync_view_menu(self):
+    def _syncViewMenu(self):
         editor = self.main.get_current_editor()
-        current = self._detect_current_mode(editor)
-        supported = self._get_supported_modes(editor)
+        current = self._detectMode(editor)
+        supported = self._getModes(editor)
         for mode, action in self._view_actions.items():
             action.setVisible(mode in supported)
             action.setChecked(mode == current)
 
-    def _get_supported_modes(self, editor):
+    def _getModes(self, editor):
         if not editor or not editor.file_path:
             return [ViewMode.TEXT, ViewMode.HEX]
 
@@ -287,7 +287,7 @@ class MenuControl:
 
         return supported
 
-    def _detect_current_mode(self, editor):
+    def _detectMode(self, editor):
         if not editor:
             return ViewMode.TEXT
         if editor._comic_view_enabled or editor._is_zip_gallery:
@@ -308,7 +308,7 @@ class MenuControl:
         btn.setMenu(menu)
         return btn, menu
 
-    def _add_action(self, menu: QMenu, text: str, callback, shortcut=None) -> QAction:
+    def _addAction(self, menu: QMenu, text: str, callback, shortcut=None) -> QAction:
         action = QAction(text, self.main)
         if shortcut:
             action.setShortcut(shortcut)
@@ -316,18 +316,18 @@ class MenuControl:
         menu.addAction(action)
         return action
 
-    def build_file_menu(self) -> tuple[QToolButton, QMenu]:
+    def buildFileMenu(self) -> tuple[QToolButton, QMenu]:
         btn, menu = self.createMenuButton(tr("文件") + "(&F)")
 
-        self.main.action_new = self._add_action(menu, tr("新建") + "(&N)", self.main.new_file, QKeySequence.StandardKey.New)
-        self.main.action_open = self._add_action(menu, tr("打开") + "(&O)", self.main.open_file, QKeySequence.StandardKey.Open)
-        self.main.action_open_folder = self._add_action(menu, tr("打开文件夹") + "(&D)", self.main.open_folder_dialog)
-        self.main.action_folder_view = self._add_action(menu, tr("文件夹视图"), self.main.toggle_folder_panel)
+        self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", self.main.new_file, QKeySequence.StandardKey.New)
+        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", self.main.open_file, QKeySequence.StandardKey.Open)
+        self.main.action_open_folder = self._addAction(menu, tr("打开文件夹") + "(&D)", self.main.open_folder_dialog)
+        self.main.action_folder_view = self._addAction(menu, tr("文件夹视图"), self.main.toggle_folder_panel)
 
         menu.addSeparator()
 
-        self.main.action_save = self._add_action(menu, tr("保存") + "(&S)", self.main.save_file, QKeySequence.StandardKey.Save)
-        self.main.action_save_as = self._add_action(menu, tr("另存为") + "(&A)", self.main.save_file_as, QKeySequence.StandardKey.SaveAs)
+        self.main.action_save = self._addAction(menu, tr("保存") + "(&S)", self.main.save_file, QKeySequence.StandardKey.Save)
+        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", self.main.save_file_as, QKeySequence.StandardKey.SaveAs)
 
         menu.addSeparator()
 
@@ -343,64 +343,64 @@ class MenuControl:
 
         menu.addSeparator()
 
-        self.main.action_exit = self._add_action(menu, tr("退出") + "(&X)", self.main.close, QKeySequence("Ctrl+Q"))
+        self.main.action_exit = self._addAction(menu, tr("退出") + "(&X)", self.main.close, QKeySequence("Ctrl+Q"))
 
         btn.setMenu(menu)
         return btn, menu
 
-    def build_edit_menu(self) -> tuple[QToolButton, QMenu]:
+    def buildEditMenu(self) -> tuple[QToolButton, QMenu]:
         btn, menu = self.createMenuButton(tr("编辑") + "(&E)")
 
-        self.main.action_undo = self._add_action(menu, tr("撤销") + "(&U)", self.main.undo, QKeySequence.StandardKey.Undo)
-        self.main.action_redo = self._add_action(menu, tr("重做") + "(&R)", self.main.redo, QKeySequence.StandardKey.Redo)
+        self.main.action_undo = self._addAction(menu, tr("撤销") + "(&U)", self.main.undo, QKeySequence.StandardKey.Undo)
+        self.main.action_redo = self._addAction(menu, tr("重做") + "(&R)", self.main.redo, QKeySequence.StandardKey.Redo)
 
         menu.addSeparator()
 
-        self.main.action_find = self._add_action(menu, tr("查找") + "(&F)", self.main.showFindRe, QKeySequence.StandardKey.Find)
-        self.main.action_replace = self._add_action(menu, tr("替换") + "(&H)", self.main.showFindRe, QKeySequence("Ctrl+H"))
+        self.main.action_find = self._addAction(menu, tr("查找") + "(&F)", self.main.showFindRe, QKeySequence.StandardKey.Find)
+        self.main.action_replace = self._addAction(menu, tr("替换") + "(&H)", self.main.showFindRe, QKeySequence("Ctrl+H"))
 
         menu.addSeparator()
 
-        self.main.action_select_all = self._add_action(menu, tr("全选") + "(&A)", self.main.select_all, QKeySequence.StandardKey.SelectAll)
+        self.main.action_select_all = self._addAction(menu, tr("全选") + "(&A)", self.main.select_all, QKeySequence.StandardKey.SelectAll)
 
         menu.addSeparator()
 
         encoding_menu = QMenu(tr("编码"), self.main)
         menu.addMenu(encoding_menu)
 
-        def add_encoding_actions(format_str, callback):
+        def addEncItems(format_str, callback):
             for enc in ENCODING_MAP:
                 action = QAction(format_str.format(enc), self.main)
                 action.setData(enc)
                 action.triggered.connect(callback)
                 encoding_menu.addAction(action)
 
-        add_encoding_actions(tr("以 {} 编码打开"), self.main._on_encoding_open_triggered)
+        addEncItems(tr("以 {} 编码打开"), self.main._on_encoding_open_triggered)
         encoding_menu.addSeparator()
-        add_encoding_actions(tr("保存为 {} 编码"), self.main._on_encoding_save_triggered)
+        addEncItems(tr("保存为 {} 编码"), self.main._on_encoding_save_triggered)
 
         text_process_menu = QMenu(tr("文本处理"), self.main)
         menu.addMenu(text_process_menu)
 
-        text_process_menu.addAction(self._add_action(text_process_menu, tr("去空行"), self.main.remove_empty_lines))
-        text_process_menu.addAction(self._add_action(text_process_menu, tr("去行首空格"), self.main.strip_leading_space))
-        text_process_menu.addAction(self._add_action(text_process_menu, tr("去行尾空格"), self.main.strip_trailing_space))
-        text_process_menu.addAction(self._add_action(text_process_menu, tr("行首缩进"), self.main.indent_lines))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去空行"), self.main.remove_empty_lines))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行首空格"), self.main.strip_leading_space))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行尾空格"), self.main.strip_trailing_space))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("行首缩进"), self.main.indent_lines))
 
         btn.setMenu(menu)
         return btn, menu
 
-    def build_settings_action(self) -> QAction:
+    def settingsAction(self) -> QAction:
         settings_action = QAction(tr("设置"), self.main)
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
         settings_action.triggered.connect(self.main.show_settings)
         return settings_action
 
     def buildMenuBar(self, toolbar: QToolBar):
-        file_btn, _ = self.build_file_menu()
-        edit_btn, _ = self.build_edit_menu()
-        view_btn = self.build_view_menu()
-        settings_action = self.build_settings_action()
+        file_btn, _ = self.buildFileMenu()
+        edit_btn, _ = self.buildEditMenu()
+        view_btn = self.buildViewMenu()
+        settings_action = self.settingsAction()
 
         toolbar.addWidget(file_btn)
         toolbar.addWidget(edit_btn)
@@ -413,10 +413,10 @@ class MenuControl:
 
         toolbar.addWidget(self.main.cpu_label)
         self.createWindowButton(toolbar)
-        self._apply_shortcuts(self.config.get("Edit.shortcuts", {}))
+        self._setKeys(self.config.get("Edit.shortcuts", {}))
 
 
-def show_plugin_dialog(parent=None):
+def managePlugins(parent=None):
     """显示插件管理对话框"""
     pm = getPluginManager()
 
@@ -433,7 +433,7 @@ def show_plugin_dialog(parent=None):
     plugin_list = QListWidget()
     available = pm.scanPlugins()
 
-    def _item_text(name):
+    def _itemText(name):
         enabled = pm.isPluginEnabled(name)
         status = tr("启用") if enabled else tr("禁用")
         plugin = pm.plugins.get(name)
@@ -444,7 +444,7 @@ def show_plugin_dialog(parent=None):
         return f"{display} ({status})"
 
     for name in available:
-        plugin_list.addItem(_item_text(name))
+        plugin_list.addItem(_itemText(name))
 
     layout.addWidget(plugin_list)
 
@@ -464,7 +464,7 @@ def show_plugin_dialog(parent=None):
         pm.saveConfig(getConfig())
         item = plugin_list.item(row)
         if item:
-            item.setText(_item_text(name))
+            item.setText(_itemText(name))
 
     enable_btn = QPushButton(tr("启用"))
     enable_btn.clicked.connect(lambda: _toggle(True))

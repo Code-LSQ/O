@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from pynput import keyboard, mouse
-from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QFrame, QStyle, QAbstractSpinBox
+from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QFrame, QStyle, QAbstractSpinBox, QStyledItemDelegate
 from PySide6.QtCore import Qt, QSize, QTimer, QThread, Signal, QEvent
-from PySide6.QtGui import QAction, QTextCursor
+from PySide6.QtGui import QAction, QTextCursor, QColor, QPalette
 
 from src.main import getIcon
 from src.file import FileSelect
@@ -37,15 +37,13 @@ class ToolBox(PluginBase):
             "search.case_sensitive": False,
             "search.regex": False,
             "search.close_delay": 3,
+            "quick_text.list": [],
             "duplicate.paths": [],
             "duplicate.exclude": ["*.pyc", "*/__pycache__/", "*/.git/"],
-            "enter.interval": 3,
-            "enter.digit_control": True,
             "click.interval": 3,
             "scroll.speed": 50
         }
         self._scroll_timer = None
-        self._enter_mgr = None
         self._copy_mgr = None
         self._search_mgr = None
         self._duplicate_mgr = None
@@ -61,7 +59,6 @@ class ToolBox(PluginBase):
         self._copy_mgr.init_monitor(self.main_window)
         self._search_mgr = _AutoSearchManager(self.main_window)
         self._search_mgr.init_monitor(self.main_window)
-        self._enter_mgr = _AutoEnterManager(self.main_window)
         self._click_mgr = _AutoClickManager(self.main_window)
 
     def cleanup(self):
@@ -71,39 +68,24 @@ class ToolBox(PluginBase):
             self._copy_mgr.set_enabled(False)
         if self._search_mgr:
             self._search_mgr.set_enabled(False)
-        if self._enter_mgr:
-            self._enter_mgr.set_enabled(False)
         if self._click_mgr:
             self._click_mgr.set_enabled(False)
 
     def getAction(self):
         menu = QMenu(self.description, self.main_window)
 
-        search_action = menu.addAction(tr("搜索"))
-        search_action.triggered.connect(self._open_search)
+        menu.addAction("工具箱设置", self._show_settings)
 
+        menu.addAction(tr("搜索"), self._open_search)
+        menu.addAction("快速文本", self._quick_text)
         menu.addAction("批量重命名", self._batch_rename)
         menu.addAction("查找重复文件", self._find_duplicates)
         menu.addAction("快速粘贴", self._quick_paste)
 
-        self._scroll_action = menu.addAction("自动滑动")
-        self._scroll_action.triggered.connect(self._toggle_scroll)
-
-        self._copy_action = menu.addAction("自动复制")
-        self._copy_action.triggered.connect(self._toggle_copy)
-
-        self._search_action = menu.addAction("自动搜索")
-        self._search_action.triggered.connect(self._toggle_search)
-
-        self._enter_action = menu.addAction("自动回车")
-        self._enter_action.triggered.connect(self._toggle_enter)
-
-        self._click_action = menu.addAction("自动点击")
-        self._click_action.triggered.connect(self._toggle_click)
-
-        menu.addSeparator()
-
-        menu.addAction("工具箱设置", self._show_settings)
+        menu.addAction("自动滑动", self._toggle_scroll)
+        menu.addAction("自动复制", self._toggle_copy)
+        menu.addAction("自动搜索", self._toggle_search)
+        menu.addAction("自动点击", self._toggle_click)
 
         return menu
 
@@ -142,17 +124,6 @@ class ToolBox(PluginBase):
                 logger.info("自动搜索已启动（未设置搜索路径）")
             else:
                 logger.info("自动搜索已启动")
-
-    def _toggle_enter(self):
-        self.initialize()
-        if self._enter_mgr.enabled:
-            self._enter_mgr.set_enabled(False)
-            logger.info("自动回车已停止")
-        else:
-            self._enter_mgr.interval = self.settings.get("enter.interval", 3)
-            self._enter_mgr._digit_control = self.settings.get("enter.digit_control", True)
-            self._enter_mgr.set_enabled(True)
-            logger.info(f"自动回车已启动（间隔: {self.settings.get('enter.interval', 3)}秒）")
 
     def _toggle_click(self):
         self.initialize()
@@ -232,6 +203,26 @@ class ToolBox(PluginBase):
         editor.text_edit.setFocus()
         cursor = editor.text_edit.textCursor()
         cursor.insertText(text)
+
+    def _quick_text(self):
+        self.initialize()
+        items = self.settings.get("quick_text.list", [])
+        dialog = QuickTextDialog(items, self.main_window)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            text = dialog.selected_text
+            if text:
+                QApplication.clipboard().setText(text)
+                QTimer.singleShot(50, self._global_paste)
+
+    def _global_paste(self):
+        try:
+            kb = keyboard.Controller()
+            kb.press(keyboard.Key.ctrl)
+            kb.press("v")
+            kb.release("v")
+            kb.release(keyboard.Key.ctrl)
+        except Exception:
+            logger.exception("全局粘贴失败")
 
     def _open_search(self):
         config = getConfig()
@@ -404,7 +395,7 @@ class FileSearcher:
         try:
             if os.path.getsize(file_path) > _MAX_SEARCH_FILE_SIZE:
                 return []
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 for line_num, line in enumerate(f, 1):
                     matches = self._find_matches(line)
                     if matches:
@@ -1121,19 +1112,6 @@ class ToolBoxSettings(QDialog):
         self.close_delay.setValue(delay)
         layout.addRow("弹窗显示时间", self.close_delay)
 
-        enter_interval = self.settings.get("enter.interval", 3)
-        self.enter_interval = QSpinBox()
-        self.enter_interval.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.enter_interval.setRange(1, 9)
-        self.enter_interval.setSuffix(" 秒")
-        self.enter_interval.setValue(enter_interval)
-        layout.addRow("自动回车间隔", self.enter_interval)
-
-        digit_control = self.settings.get("enter.digit_control", True)
-        self.enter_digit_control = QCheckBox("数字键控制间隔")
-        self.enter_digit_control.setChecked(digit_control)
-        layout.addRow("", self.enter_digit_control)
-
         click_interval = self.settings.get("click.interval", 3)
         self.click_interval = QSpinBox()
         self.click_interval.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
@@ -1141,6 +1119,29 @@ class ToolBoxSettings(QDialog):
         self.click_interval.setSuffix(" 秒")
         self.click_interval.setValue(click_interval)
         layout.addRow("自动点击间隔", self.click_interval)
+
+        self._qt_list = QListWidget()
+        self._qt_list.setMaximumHeight(120)
+        self._qt_list.itemDoubleClicked.connect(self._qt_edit)
+        layout.addRow("快速文本", self._qt_list)
+
+        qt_btn_h = QHBoxLayout()
+        qt_add = QPushButton("添加")
+        qt_add.clicked.connect(self._qt_add)
+        qt_edit = QPushButton("编辑")
+        qt_edit.clicked.connect(self._qt_edit)
+        qt_del = QPushButton("删除")
+        qt_del.clicked.connect(self._qt_del)
+        qt_btn_h.addWidget(qt_add)
+        qt_btn_h.addWidget(qt_edit)
+        qt_btn_h.addWidget(qt_del)
+        qt_btn_h.addStretch()
+        layout.addRow("", qt_btn_h)
+
+        for entry in self.settings.get("quick_text.list", []):
+            item = QListWidgetItem(entry.get("note", "") or entry.get("text", ""))
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self._qt_list.addItem(item)
 
         btn_row = QHBoxLayout()
         ok_btn = QPushButton("确定")
@@ -1162,6 +1163,70 @@ class ToolBoxSettings(QDialog):
         if row >= 0:
             self.search_paths_list.takeItem(row)
 
+    def _qt_add(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("添加快速文本")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        text_edit = QLineEdit()
+        text_edit.setPlaceholderText("文本内容")
+        note_edit = QLineEdit()
+        note_edit.setPlaceholderText("备注")
+        layout.addWidget(QLabel("文本"))
+        layout.addWidget(text_edit)
+        layout.addWidget(QLabel("备注"))
+        layout.addWidget(note_edit)
+        btn_h = QHBoxLayout()
+        ok = QPushButton("确定")
+        ok.clicked.connect(dialog.accept)
+        cancel = QPushButton("取消")
+        cancel.clicked.connect(dialog.reject)
+        btn_h.addStretch()
+        btn_h.addWidget(ok)
+        btn_h.addWidget(cancel)
+        layout.addLayout(btn_h)
+        if dialog.exec() == QDialog.DialogCode.Accepted and text_edit.text().strip():
+            entry = {"text": text_edit.text().strip(), "note": note_edit.text().strip()}
+            item = QListWidgetItem(entry["note"] or entry["text"])
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self._qt_list.addItem(item)
+
+    def _qt_edit(self):
+        current = self._qt_list.currentItem()
+        if not current:
+            return
+        entry = dict(current.data(Qt.ItemDataRole.UserRole) or {"text": "", "note": ""})
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑快速文本")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        text_edit = QLineEdit(entry.get("text", ""))
+        note_edit = QLineEdit(entry.get("note", ""))
+        layout.addWidget(QLabel("文本"))
+        layout.addWidget(text_edit)
+        layout.addWidget(QLabel("备注"))
+        layout.addWidget(note_edit)
+        btn_h = QHBoxLayout()
+        ok = QPushButton("确定")
+        ok.clicked.connect(dialog.accept)
+        cancel = QPushButton("取消")
+        cancel.clicked.connect(dialog.reject)
+        btn_h.addStretch()
+        btn_h.addWidget(ok)
+        btn_h.addWidget(cancel)
+        layout.addLayout(btn_h)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            entry["text"] = text_edit.text().strip()
+            entry["note"] = note_edit.text().strip()
+            current.setText(entry["note"] or entry["text"])
+            current.setData(Qt.ItemDataRole.UserRole, entry)
+
+    def _qt_del(self):
+        current = self._qt_list.currentItem()
+        if current:
+            row = self._qt_list.row(current)
+            self._qt_list.takeItem(row)
+
     def getSetting(self) -> dict:
         self.settings["scroll.speed"] = self.scroll_speed.value()
         self.settings["copy.target_file"] = os.path.normpath(self.copy_path_edit.text()) if self.copy_path_edit.text() else "data/copy.txt"
@@ -1172,8 +1237,10 @@ class ToolBoxSettings(QDialog):
         self.settings["search.case_sensitive"] = self.case_check.isChecked()
         self.settings["search.regex"] = self.regex_check.isChecked()
         self.settings["search.close_delay"] = self.close_delay.value()
-        self.settings["enter.interval"] = self.enter_interval.value()
-        self.settings["enter.digit_control"] = self.enter_digit_control.isChecked()
+        self.settings["quick_text.list"] = [
+            self._qt_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._qt_list.count())
+        ]
         self.settings["click.interval"] = self.click_interval.value()
         return self.settings
 
@@ -1209,7 +1276,7 @@ class _AutoCopyManager:
             if not target.is_absolute():
                 target = root / self.target_file
             target.parent.mkdir(parents=True, exist_ok=True)
-            with open(target, 'a', encoding='utf-8') as f:
+            with open(target, 'a', encoding="utf-8") as f:
                 if target.exists() and target.stat().st_size > 0:
                     f.write("\n\n\n")
                 f.write(text)
@@ -1340,68 +1407,6 @@ class _AutoSearchManager:
                 )
                 editor.text_edit.ensureCursorVisible()
 
-class _AutoEnterManager:
-    def __init__(self, parent=None):
-        self._tm = TimerManager()
-        self.parent = parent
-        self._timer = self._tm.create_timer(parent)
-        self._timer.timeout.connect(self._press_enter)
-        self.enabled = False
-        self.interval = 3
-        self._paused = False
-        self._digit_control = True
-        self._active_interval = 3
-        self._keyboard_controller = keyboard.Controller()
-        self._keyboard_listener = None
-
-    def set_enabled(self, enabled: bool):
-        self.enabled = enabled
-        if enabled:
-            self._paused = False
-            self._start_listener()
-            self._active_interval = self.interval
-            self._timer.start(int(self.interval * 1000))
-        else:
-            self._paused = False
-            self._stop_listener()
-            self._timer.stop()
-
-    def _press_enter(self):
-        if self.interval != self._active_interval:
-            self._active_interval = self.interval
-            self._timer.stop()
-            self._timer.start(int(self.interval * 1000))
-        if not self._paused:
-            try:
-                self._keyboard_controller.press(keyboard.Key.enter)
-                self._keyboard_controller.release(keyboard.Key.enter)
-            except Exception:
-                logger.exception("模拟回车键失败")
-
-    def _start_listener(self):
-        self._stop_listener()
-
-        def on_press(key):
-            try:
-                if key == keyboard.Key.esc:
-                    self._paused = True
-                elif hasattr(key, 'char') and key.char and key.char.isdigit():
-                    if self._digit_control:
-                        d = int(key.char)
-                        if 1 <= d <= 9:
-                            self.interval = d
-            except Exception:
-                logger.exception("按键监听回调失败")
-
-        self._keyboard_listener = keyboard.Listener(on_press=on_press)
-        self._keyboard_listener.daemon = True
-        self._keyboard_listener.start()
-
-    def _stop_listener(self):
-        if self._keyboard_listener:
-            self._keyboard_listener.stop()
-            self._keyboard_listener = None
-
 class _AutoClickManager:
     def __init__(self, parent=None):
         self._tm = TimerManager()
@@ -1462,6 +1467,156 @@ class _AutoClickManager:
         if self._keyboard_listener:
             self._keyboard_listener.stop()
             self._keyboard_listener = None
+
+
+class QuickTextDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        painter.save()
+        entry = index.data(Qt.ItemDataRole.UserRole)
+        if isinstance(entry, dict):
+            text = entry.get("text", "")
+            note = entry.get("note", "")
+        else:
+            text = str(entry) if entry else ""
+            note = ""
+
+        if option.state & QStyle.State_Selected:
+            painter.fillRect(option.rect, QColor("#dddddd"))
+
+        text_rect = option.rect.adjusted(8, 4, -8, -option.rect.height() // 2 + 2)
+        painter.setPen(option.palette.text().color())
+        f = painter.font()
+        f.setBold(True)
+        painter.setFont(f)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+
+        note_rect = option.rect.adjusted(8, option.rect.height() // 2, -8, -4)
+        painter.setPen(QColor("gray"))
+        f.setBold(False)
+        f.setPointSize(max(f.pointSize() - 2, 8))
+        painter.setFont(f)
+        painter.drawText(note_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, note)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return QSize(0, 50)
+
+
+class QuickTextDialog(QDialog):
+    def __init__(self, items: list, parent=None):
+        super().__init__(parent)
+        self._items = items
+        self.selected_text = ""
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setFixedSize(550, 450)
+        self._setupUI()
+        self._populate()
+        self.search_edit.setFocus()
+        QTimer.singleShot(0, self._do_center)
+
+    def _do_center(self):
+        parent = self.parent()
+        if parent:
+            center = parent.geometry().center()
+            self.move(center.x() - self.width() // 2, center.y() - self.height() // 2)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.activateWindow()
+        self.search_edit.setFocus()
+
+    def eventFilter(self, obj, event):
+        if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Up:
+                self._move_selection(-1)
+                return True
+            elif event.key() == Qt.Key.Key_Down:
+                self._move_selection(1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def _move_selection(self, direction):
+        current = self.list_widget.currentRow()
+        count = self.list_widget.count()
+        if count == 0:
+            return
+        next_row = (current + direction) % count
+        self.list_widget.setCurrentRow(next_row)
+
+    def _setupUI(self):
+        self.setObjectName("quick_text_dialog")
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setFixedHeight(42)
+        self.search_edit.setStyleSheet("border-radius: 0;")
+        self.search_edit.textChanged.connect(self._filter)
+        self.search_edit.returnPressed.connect(self._accept_current)
+        main_layout.addWidget(self.search_edit)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        main_layout.addWidget(sep)
+
+        self.list_widget = QListWidget()
+        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setItemDelegate(QuickTextDelegate(self.list_widget))
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.itemDoubleClicked.connect(self._on_item_clicked)
+        main_layout.addWidget(self.list_widget, 1)
+
+        self.search_edit.installEventFilter(self)
+
+    def _populate(self, items=None):
+        self.list_widget.clear()
+        source = self._items if items is None else items
+        for entry in source:
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self.list_widget.addItem(item)
+        if self.list_widget.count() > 0:
+            self.list_widget.setCurrentRow(0)
+
+    def _filter(self, text):
+        text = text.strip().lower()
+        if not text:
+            self._populate()
+            return
+        matched = []
+        for entry in self._items:
+            if (text in entry.get("text", "").lower()
+                    or text in entry.get("note", "").lower()):
+                matched.append(entry)
+        self._populate(matched)
+
+    def _accept_current(self):
+        current = self.list_widget.currentItem()
+        if current:
+            self._on_item_clicked(current)
+
+    def _on_item_clicked(self, item):
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(entry, dict):
+            text = entry.get("text", "")
+        else:
+            text = str(entry) if entry else ""
+        if text:
+            self.selected_text = text
+            self.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self.focusWidget() is not self.search_edit:
+                self._accept_current()
+        else:
+            super().keyPressEvent(event)
 
 
 class _AutoScrollTimer:

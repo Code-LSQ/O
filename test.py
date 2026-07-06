@@ -133,7 +133,7 @@ def _make_file():
             FileSelect=MagicMock(),
             format_file_size=MagicMock(return_value="1.0 KB"),
             fileTree=MagicMock(return_value=[]),
-            filter_files=MagicMock(return_value=[]),
+            filterFiles=MagicMock(return_value=[]),
         )
     }
 

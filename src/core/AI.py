@@ -239,7 +239,7 @@ class AIBaseAdapter(ABC):
         for line in response.iter_lines():
             if not line:
                 continue
-            line = line.decode('utf-8') if isinstance(line, bytes) else line
+            line = line.decode("utf-8") if isinstance(line, bytes) else line
             if line.startswith('data: '):
                 data = line[6:]
                 if data.strip() == '[DONE]':
@@ -379,7 +379,7 @@ class OllamaAdapter(AIBaseAdapter):
         for line in response.iter_lines():
             if not line:
                 continue
-            line = line.decode('utf-8') if isinstance(line, bytes) else line
+            line = line.decode("utf-8") if isinstance(line, bytes) else line
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError:
@@ -908,7 +908,7 @@ class AIClient:
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img}"}}
             ]
             return [{"role": "user", "content": content}]
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
         return [{"role": "user", "content": f"文件: {name}\n\n{content}"}]
 
@@ -959,7 +959,7 @@ class AIClient:
             rel = os.path.relpath(fp, folder_path)
             name = rel.replace('\\', '/')
             try:
-                with open(fp, 'r', encoding='utf-8', errors='replace') as f:
+                with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
                 if len(content) > self._MAX_FILE_CHARS:
                     content_parts.append({"type": "text", "text": f"\n--- {name} ---\n[内容过长，仅显示前 {self._MAX_FILE_CHARS} 字符]\n{content[:self._MAX_FILE_CHARS]}\n...（共 {len(content)} 字符）"})

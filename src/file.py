@@ -18,7 +18,7 @@ from src.core.md import renderMarkdown
 
 SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
 
-def readEncoding(file_path: str, encoding: str = 'utf-8', auto_detect: bool = True) -> Tuple[str, str]:
+def readEncoding(file_path: str, encoding: str = "utf-8", auto_detect: bool = True) -> Tuple[str, str]:
     """读取文件并自动检测编码
     Returns: (content, actual_encoding)
     """
@@ -31,7 +31,7 @@ def readEncoding(file_path: str, encoding: str = 'utf-8', auto_detect: bool = Tr
         raise FileNotFoundError(f"文件不存在: {file_path}")
     
     try:
-        with open(_path, 'r', encoding=encoding, newline='') as f:
+        with open(_path, "r", encoding=encoding, newline="") as f:
             content = f.read()
         return content, encoding
     except UnicodeDecodeError:
@@ -40,16 +40,16 @@ def readEncoding(file_path: str, encoding: str = 'utf-8', auto_detect: bool = Tr
     
     for enc in SUPPORTED_ENCODINGS:
         try:
-            with open(_path, 'r', encoding=enc, newline='') as f:
+            with open(_path, "r", encoding=enc, newline="") as f:
                 content = f.read()
             return content, enc
         except UnicodeDecodeError:
             continue
     
     try:
-        with open(_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
+        with open(_path, "r", encoding="utf-8", errors="replace", newline="") as f:
             content = f.read()
-        return content, 'utf-8'
+        return content, "utf-8"
     except Exception:
         raise ValueError(f"无法使用支持的编码读取文件: {file_path}")
 
@@ -116,7 +116,7 @@ def pdfView(tab, file_path: str) -> bool:
         pdf_view.show()
 
         tab.is_image = True
-        tab.set_line_numbers_visible(False)
+        tab.text_edit.setLineNumbersVisible(False)
 
         logger.info(f"PDF渲染完成: {file_path}, 页数: {page_count}")
         return True
@@ -152,12 +152,12 @@ class FileOperation(Singleton):
             if encoding:
                 encodings_to_try = [encoding]
             else:
-                encodings_to_try = ['utf-8'] + SUPPORTED_ENCODINGS
+                encodings_to_try = ["utf-8"] + SUPPORTED_ENCODINGS
             for enc in encodings_to_try:
                 try:
                     lines = []
                     total = 0
-                    with open(_path, 'r', encoding=enc, newline='') as f:
+                    with open(_path, "r", encoding=enc, newline="") as f:
                         for line in f:
                             if total >= start_line and len(lines) < max_lines:
                                 lines.append(line.rstrip('\n').rstrip('\r'))
@@ -170,32 +170,32 @@ class FileOperation(Singleton):
                     return '\n'.join(lines), total, loaded, truncated, enc
                 except (UnicodeDecodeError, UnicodeError):
                     if encoding:
-                        with open(_path, 'r', encoding=encoding, errors='replace', newline='') as f:
+                        with open(_path, "r", encoding=encoding, errors="replace", newline="") as f:
                             lines = [line.rstrip('\n').rstrip('\r') for line in f]
                         total = len(lines)
                         return '\n'.join(lines), total, total, 0, encoding
                     continue
             lines = []
             total = 0
-            with open(_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
+            with open(_path, "r", encoding="utf-8", errors="replace", newline="") as f:
                 for line in f:
                     if total >= start_line and len(lines) < max_lines:
                         lines.append(line.rstrip('\n').rstrip('\r'))
                     total += 1
             loaded = len(lines)
             truncated = 1 if total > start_line + loaded else 0
-            return '\n'.join(lines), total, loaded, truncated, 'utf-8'
+            return '\n'.join(lines), total, loaded, truncated, "utf-8"
         except Exception:
             logger.exception("带限制读取文件失败")
             return "", 0, 0, -1, ""
 
-    def writeFile(self, file_path: str, content: str, encoding: str = 'utf-8') -> bool:
+    def writeFile(self, file_path: str, content: str, encoding: str = "utf-8") -> bool:
         """写入文件，自动创建父目录"""
         try:
             file_path = Path(file_path)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
-            with open(file_path, 'w', encoding=encoding, newline='') as f:
+            with open(file_path, "w", encoding=encoding, newline="") as f:
                 f.write(content)
             logger.info(f"文件写入成功: {file_path}")
             return True
@@ -219,14 +219,14 @@ class FileOperation(Singleton):
             shutil.copyfile(file_path, backup_path)
             logger.info(f"文件备份成功: {backup_path}")
             
-            self._cleanOldBackups(config)
+            self._cleanBackups(config)
             
             return str(backup_path)
         except Exception:
             logger.exception("备份创建失败")
             return None
 
-    def _cleanOldBackups(self, config=None) -> None:
+    def _cleanBackups(self, config=None) -> None:
         """清理超过指定天数的旧备份文件"""
         try:
             days_to_keep = 7
@@ -262,7 +262,7 @@ class FileOperation(Singleton):
             "extension": file_path.suffix,
         }
 
-    def render_markdown(self, content: str = None, file_path: str = None) -> Optional[str]:
+    def renderMarkdown(self, content: str = None, file_path: str = None) -> Optional[str]:
         """渲染 Markdown 文本为 HTML（从文件读取或直接传内容）"""
         try:
             if file_path:
@@ -275,24 +275,24 @@ class FileOperation(Singleton):
             logger.exception("Markdown渲染失败")
             return None
 
-    def is_image_file(self, file_path: str) -> bool:
+    def isImageFile(self, file_path: str) -> bool:
         """检查是否为图片文件"""
         if not file_path:
             return False
         path = file_path.lower()
         return any(path.endswith(ext) for ext in EXTENSION["IMAGE"])
     
-    def is_tar_file(self, file_path: str) -> bool:
+    def isTarFile(self, file_path: str) -> bool:
         """检查文件扩展名是否为 tar 压缩包格式"""
         path = file_path.lower()
         return any(path.endswith(ext) for ext in EXTENSION["TAR"])
     
-    def is_zip_file(self, file_path: str) -> bool:
+    def isZipFile(self, file_path: str) -> bool:
         """检查文件扩展名是否为 zip 压缩包格式"""
         path = file_path.lower()
         return any(path.endswith(ext) for ext in EXTENSION["ZIP"])
 
-    def list_archive_contents(self, file_path: str) -> list:
+    def listArchive(self, file_path: str) -> list:
         """列出压缩包内部的文件和文件夹"""
         file_path_obj = Path(file_path)
         if not file_path_obj.exists():
@@ -300,15 +300,15 @@ class FileOperation(Singleton):
         
         file_path_lower = file_path.lower()
         if any(file_path_lower.endswith(ext) for ext in EXTENSION["ZIP"]):
-            return self._list_zip_contents(file_path_obj)
+            return self._listZip(file_path_obj)
         elif any(file_path_lower.endswith(ext) for ext in EXTENSION["TAR"]):
-            return self._list_tar_contents(file_path_obj)
+            return self._listTar(file_path_obj)
         return None
 
-    def _list_zip_contents(self, file_path: Path) -> Optional[list]:
+    def _listZip(self, file_path: Path) -> Optional[list]:
         """列出zip文件内容"""
         try:
-            with zipfile.ZipFile(file_path, 'r') as zf:
+            with zipfile.ZipFile(file_path, "r") as zf:
                 items = []
                 for info in zf.infolist():
                     item = {
@@ -323,7 +323,7 @@ class FileOperation(Singleton):
             logger.exception("读取ZIP文件失败")
             return None
 
-    def _list_tar_contents(self, file_path: Path) -> Optional[list]:
+    def _listTar(self, file_path: Path) -> Optional[list]:
         """列出tar文件内容"""
         try:
             with tarfile.open(file_path, 'r:*') as tf:
@@ -341,7 +341,7 @@ class FileOperation(Singleton):
             logger.exception("读取TAR文件失败")
             return None
 
-    def read_archive_file(self, file_path: str, member_name: str) -> Optional[bytes]:
+    def readArchive(self, file_path: str, member_name: str) -> Optional[bytes]:
         """读取压缩包内指定文件的内容"""
         file_path_obj = Path(file_path)
         if not file_path_obj.exists():
@@ -350,7 +350,7 @@ class FileOperation(Singleton):
         file_path_lower = file_path.lower()
         try:
             if any(file_path_lower.endswith(ext) for ext in EXTENSION["ZIP"]):
-                with zipfile.ZipFile(file_path_obj, 'r') as zf:
+                with zipfile.ZipFile(file_path_obj, "r") as zf:
                     return zf.read(member_name)
             elif any(file_path_lower.endswith(ext) for ext in EXTENSION["TAR"]):
                 with tarfile.open(file_path_obj, 'r:*') as tf:
@@ -369,7 +369,7 @@ class FileControl:
     def __init__(self, main_window):
         self.main = main_window
 
-    def open_file(self):
+    def openFile(self):
         """打开文件对话框"""
         file_path = getFilePath(self.main, "打开文件", "所有文件 (*.*);;文本文件 (*.txt *.md)")
         if not file_path:
@@ -377,7 +377,7 @@ class FileControl:
 
         self.main.open_file_path(file_path)
 
-    def open_file_path(self, file_path: str):
+    def openFilePath(self, file_path: str):
         """打开指定路径的文件"""
         if not file_path:
             return
@@ -391,27 +391,27 @@ class FileControl:
 
         if not self.main.config.get("Edit.multi_tab", False):
             editor = self.main.get_current_editor()
-            self._do_open_file(file_path)
+            self._doOpenFile(file_path)
             return
 
         if self.main.tab_widget:
             for i in range(self.main.tab_widget.count()):
                 editor = self.main.tab_widget.widget(i)
-                if isinstance(editor, EditorTab) and editor.get_file_path() == file_path:
+                if isinstance(editor, EditorTab) and editor.file_path == file_path:
                     self.main.tab_widget.setCurrentIndex(i)
                     self.main.statusBar().showMessage(f"文件已在标签页中打开: {file_path}", 3000)
                     return
 
-        self._do_open_file(file_path)
+        self._doOpenFile(file_path)
 
-    def _do_open_file(self, file_path: str):
+    def _doOpenFile(self, file_path: str):
         """实际打开文件的逻辑"""
         if not file_path or not os.path.isfile(file_path):
             messageBox(self.main, "打开失败", f"文件不存在或路径无效: {file_path}", 1)
             return
 
-        for handler in self._file_handlers:
-            if handler.can_handle(file_path):
+        for handler in self._fileHandlers:
+            if handler.canHandle(file_path):
                 handler.open(file_path, self.main)
                 self.main.config.addRecentFile(file_path)
                 return
@@ -422,10 +422,10 @@ class FileControl:
                 self.main.config.addRecentFile(file_path)
                 return
 
-        self._open_text_file(file_path)
+        self._openTextFile(file_path)
 
     @property
-    def _file_handlers(self):
+    def _fileHandlers(self):
         """获取文件处理器列表（惰性初始化）"""
         if not hasattr(self, '_handlers_cache'):
             self._handlers_cache = [
@@ -435,7 +435,7 @@ class FileControl:
             ]
         return self._handlers_cache
 
-    def _open_text_file(self, file_path: str):
+    def _openTextFile(self, file_path: str):
         """打开文本文件（支持大文件翻页截断）"""
         content, encoding = None, None
         total_lines = 0
@@ -451,22 +451,22 @@ class FileControl:
             messageBox(self.main, "打开失败", f"读取文件时发生错误: {e}", 1)
             return
 
-        if self._try_plugin_handling(file_path):
+        if self._tryPlugin(file_path):
             return
 
-        self._setup_text_editor(file_path, content, encoding, total_lines, loaded_lines, truncated)
+        self._setupEditor(file_path, content, encoding, total_lines, loaded_lines, truncated)
 
-    def _try_plugin_handling(self, file_path: str) -> bool:
+    def _tryPlugin(self, file_path: str) -> bool:
         """尝试使用插件处理文件"""
         plugin_manager = getPluginManager(self.main)
         for plugin_name, plugin in plugin_manager.getAllPlugin().items():
             if hasattr(plugin, 'is_supported') and callable(plugin.is_supported) and plugin.is_supported(file_path):
                 logger.info(f"使用插件 {plugin_name} 打开文件: {file_path}")
-                if self._handle_plugin_file(plugin, file_path):
+                if self._handlePlugin(plugin, file_path):
                     return True
         return False
 
-    def _handle_plugin_file(self, plugin, file_path: str) -> bool:
+    def _handlePlugin(self, plugin, file_path: str) -> bool:
         """未设置处理方式的文件尝试使用插件处理"""
         try:
             editor = None
@@ -474,14 +474,14 @@ class FileControl:
                 editor = self.main.add_new_tab(file_path, "")
             else:
                 editor = self.main.single_editor
-                editor.set_content("")
-                editor.set_file_path(file_path)
+                editor.setContent("")
+                editor.setFilePath(file_path)
             return False
         except Exception:
             logger.exception("插件文件处理失败")
             return False
 
-    def _setup_text_editor(self, file_path: str, content, encoding: str,
+    def _setupEditor(self, file_path: str, content, encoding: str,
                            total_lines: int = 0, loaded_lines: int = 0, truncated: int = 0):
         """设置文本编辑器（支持大文件截断信息）"""
         try:
@@ -489,11 +489,11 @@ class FileControl:
                 editor = self.main.add_new_tab(file_path, content)
             else:
                 editor = self.main.single_editor
-                editor.set_content(content)
-                editor.set_file_path(file_path)
-            editor.set_encoding(encoding)
+                editor.setContent(content)
+                editor.setFilePath(file_path)
+            editor.encoding = encoding
             if truncated > 0:
-                editor.set_truncated(total_lines, loaded_lines, file_path, encoding)
+                editor.setTruncated(total_lines, loaded_lines, file_path, encoding)
             self.main.encoding_label.setText(encodingName(encoding) if encoding else "")
             self.main._toc_panel.hide_panel()
             self.main.config.addRecentFile(file_path)
@@ -506,18 +506,18 @@ class FileControl:
             logger.exception("设置编辑器内容时发生错误")
             messageBox(self.main, "打开失败", f"设置编辑器内容时发生错误: {e}", 1)
 
-    def save_file(self) -> bool:
+    def saveFile(self) -> bool:
         """保存当前文件（支持大文件翻页合并保存）"""
         editor = self.main.get_current_editor()
         if not editor:
             return False
 
-        file_path = editor.get_file_path()
+        file_path = editor.file_path
 
-        if not file_path:
-            return self.save_file_as()
+        if editor._is_viewing_archive_image or not file_path:
+            return self.saveFileAs()
 
-        encoding = editor.get_encoding()
+        encoding = editor.encoding
 
         backup_path = None
         if file_path:
@@ -526,15 +526,15 @@ class FileControl:
         try:
             # 大文件翻页模式下：合并各页内容再写出
             if editor._is_truncated:
-                with open(file_path, 'w', encoding=encoding) as f:
-                    f.write(editor._assemble_full_content())
+                with open(file_path, "w", encoding=encoding) as f:
+                    f.write(editor._assembleContent())
             else:
-                with open(file_path, 'w', encoding=encoding) as f:
-                    f.write(editor.get_content())
+                with open(file_path, "w", encoding=encoding) as f:
+                    f.write(editor.text_edit.toPlainText())
 
-            editor.mark_saved()
+            editor.markSaved()
             if self.main.tab_widget:
-                self.main.tab_widget.setTabText(self.main.tab_widget.currentIndex(), editor.get_title())
+                self.main.tab_widget.setTabText(self.main.tab_widget.currentIndex(), editor.getTitle())
 
             if backup_path:
                 self.main.statusBar().showMessage(f"已保存: {file_path} ({encoding}) [已备份]", 3000)
@@ -546,7 +546,7 @@ class FileControl:
             messageBox(self.main, "保存失败", f"保存文件时发生错误: {e}", 1)
             return False
 
-    def save_file_as(self) -> bool:
+    def saveFileAs(self) -> bool:
         """另存为"""
         editor = self.main.get_current_editor()
         if not editor:
@@ -557,18 +557,18 @@ class FileControl:
         if not file_path:
             return False
 
-        editor.set_file_path(file_path)
-        return self.save_file()
+        editor.setFilePath(file_path)
+        return self.saveFile()
 
-    def open_with_encoding(self, encoding: str):
+    def openWithEnc(self, encoding: str):
         """以指定编码打开当前文件"""
         editor = self.main.get_current_editor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return
 
-        file_path = editor.get_file_path()
-        if not file_path:
+        file_path = editor.file_path
+        if editor._is_viewing_archive_image or not file_path:
             self.main.statusBar().showMessage("文件未保存，无法以指定编码打开", 2000)
             return
 
@@ -577,36 +577,36 @@ class FileControl:
         try:
             content, total_lines, loaded_lines, truncated, _ = \
                 self.main.file_op.readFileLimit(file_path, max_lines=50000, start_line=0, encoding=actual_encoding)
-            editor.set_content(content)
-            editor.set_encoding(actual_encoding)
-            if truncated > 0 and hasattr(editor, 'set_truncated'):
-                editor.set_truncated(total_lines, loaded_lines, file_path, actual_encoding)
-            elif hasattr(editor, 'clear_truncated'):
-                editor.clear_truncated()
+            editor.setContent(content)
+            editor.encoding = actual_encoding
+            if truncated > 0 and hasattr(editor, 'setTruncated'):
+                editor.setTruncated(total_lines, loaded_lines, file_path, actual_encoding)
+            elif hasattr(editor, 'clearTruncated'):
+                editor.clearTruncated()
             display = encodingName(actual_encoding)
             self.main.encoding_label.setText(display)
             self.main.statusBar().showMessage(f"已以 {display} 编码重新打开: {file_path}", 3000)
         except Exception as e:
             messageBox(self.main, "打开失败", f"以 {encoding} 编码读取文件失败: {e}", 1)
 
-    def save_with_encoding(self, encoding: str):
+    def saveWithEnc(self, encoding: str):
         """以指定编码保存当前文件"""
         editor = self.main.get_current_editor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return
 
-        file_path = editor.get_file_path()
-        if not file_path:
+        file_path = editor.file_path
+        if editor._is_viewing_archive_image or not file_path:
             self.main.statusBar().showMessage("文件未保存，请先保存文件", 2000)
             return
 
         actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
 
         try:
-            with open(file_path, 'w', encoding=actual_encoding) as f:
-                f.write(editor.get_content())
-            editor.set_encoding(actual_encoding)
+            with open(file_path, "w", encoding=actual_encoding) as f:
+                    f.write(editor.text_edit.toPlainText())
+            editor.encoding = actual_encoding
             display = encodingName(actual_encoding)
             self.main.encoding_label.setText(display)
             self.main.statusBar().showMessage(f"已以 {display} 编码保存: {file_path}", 3000)
@@ -619,31 +619,31 @@ class FileHandler:
     def __init__(self, main):
         self.main = main
 
-    def can_handle(self, file_path: str) -> bool:
+    def canHandle(self, file_path: str) -> bool:
         raise NotImplementedError
 
     def open(self, file_path: str, main):
         raise NotImplementedError
 
-    def _create_editor(self, file_path: str):
+    def _createEditor(self, file_path: str):
         """创建或复用编辑器"""
         if self.main._use_tabs:
             return self.main.add_new_tab(file_path, "")
         else:
             editor = self.main.single_editor
-            editor.set_content("")
-            editor.set_file_path(file_path)
+            editor.setContent("")
+            editor.setFilePath(file_path)
             return editor
 
 
 class _ImageFileHandler(FileHandler):
     """图片文件处理器"""
-    def can_handle(self, file_path: str) -> bool:
-        return self.main.file_op.is_image_file(file_path)
+    def canHandle(self, file_path: str) -> bool:
+        return self.main.file_op.isImageFile(file_path)
 
     def open(self, file_path: str, main):
-        editor = self._create_editor(file_path)
-        if editor.load_image(file_path):
+        editor = self._createEditor(file_path)
+        if editor.loadImage(file_path):
             main.statusBar().showMessage(f"已打开图片: {os.path.abspath(file_path)}", 3000)
         else:
             messageBox(main, "打开失败", "无法读取图片文件", 1)
@@ -651,21 +651,21 @@ class _ImageFileHandler(FileHandler):
 
 class _ArchiveFileHandler(FileHandler):
     """压缩文件处理器（zip/tar）"""
-    def can_handle(self, file_path: str) -> bool:
-        return self.main.file_op.is_zip_file(file_path) or self.main.file_op.is_tar_file(file_path)
+    def canHandle(self, file_path: str) -> bool:
+        return self.main.file_op.isZipFile(file_path) or self.main.file_op.isTarFile(file_path)
 
     def open(self, file_path: str, main):
-        self._create_editor(file_path)
+        self._createEditor(file_path)
         main.statusBar().showMessage(f"已打开: {os.path.abspath(file_path)} (右键进入图库模式)", 3000)
 
 
 class _PdfFileHandler(FileHandler):
     """PDF文件处理器"""
-    def can_handle(self, file_path: str) -> bool:
+    def canHandle(self, file_path: str) -> bool:
         return file_path.lower().endswith('.pdf')
 
     def open(self, file_path: str, main):
-        editor = self._create_editor(file_path)
+        editor = self._createEditor(file_path)
         if pdfView(editor, file_path):
             main.statusBar().showMessage(f"已打开PDF: {os.path.abspath(file_path)}", 3000)
         else:
@@ -729,13 +729,13 @@ class FileSelect(QDialog):
 
         event.acceptProposedAction()
 
-    def get_selected_paths(self) -> list[str]:
+    def getPaths(self) -> list[str]:
         """获取用户输入的路径列表"""
         text = self.path_edit.toPlainText()
         lines = text.splitlines()
         return [line.strip() for line in lines if line.strip()]
 
-    def get_exclude_rules(self) -> list[str]:
+    def getExcludes(self) -> list[str]:
         """获取用户输入的排除规则列表"""
         text = self.exclude_edit.toPlainText()
         lines = text.splitlines()
@@ -751,14 +751,14 @@ class FileSelect(QDialog):
             dialog.exclude_edit.setPlainText('\n'.join(default_exclude_rules))
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:
-            paths = dialog.get_selected_paths()
-            rules = dialog.get_exclude_rules()
-            files = collect_files(paths, rules)
+            paths = dialog.getPaths()
+            rules = dialog.getExcludes()
+            files = collectFiles(paths, rules)
             return files, paths, rules
         return None
 
 
-def _compile_single_rule(rule: str) -> tuple[re.Pattern, bool, bool]:
+def _compileSingleRule(rule: str) -> tuple[re.Pattern, bool, bool]:
     """将单条规则转换为预编译的正则表达式"""
     rule = rule.strip()
     if not rule:
@@ -773,7 +773,7 @@ def _compile_single_rule(rule: str) -> tuple[re.Pattern, bool, bool]:
         return None
 
     fnmatch_pattern = fnmatch.translate(pattern)
-    fnmatch_pattern = fnmatch_pattern.replace('(?s:', '').rstrip(')\\Z')
+    fnmatch_pattern = fnmatch_pattern.replace("(?s:", "").rstrip(")\\Z")
 
     if is_dir:
         fnmatch_pattern = fnmatch_pattern.rstrip('$') + '/?$'
@@ -784,17 +784,17 @@ def _compile_single_rule(rule: str) -> tuple[re.Pattern, bool, bool]:
         return None
 
 
-def compile_rules(rules: list[str]) -> list[tuple[re.Pattern, bool, bool]]:
+def compileRules(rules: list[str]) -> list[tuple[re.Pattern, bool, bool]]:
     """将排除规则列表预编译为正则表达式列表"""
     compiled = []
     for rule in rules:
-        pattern = _compile_single_rule(rule)
+        pattern = _compileSingleRule(rule)
         if pattern is not None:
             compiled.append(pattern)
     return compiled
 
 
-def _match_relative_path(rel_path: str, pattern: re.Pattern, is_dir: bool, root_only: bool = False) -> bool:
+def _matchRelPath(rel_path: str, pattern: re.Pattern, is_dir: bool, root_only: bool = False) -> bool:
     """匹配相对路径与预编译规则"""
     if is_dir and not rel_path.endswith('/'):
         rel_path += '/'
@@ -808,7 +808,7 @@ def _match_relative_path(rel_path: str, pattern: re.Pattern, is_dir: bool, root_
         return pattern.fullmatch(file_name) is not None
 
 
-def is_excluded(file_path: str, base_path: str, exclude_rules: list[tuple[re.Pattern, bool, bool]]) -> bool:
+def isExcluded(file_path: str, base_path: str, exclude_rules: list[tuple[re.Pattern, bool, bool]]) -> bool:
     """判断文件或目录是否应该被排除"""
     file_path = os.path.normpath(file_path)
     base_path = os.path.normpath(base_path)
@@ -825,13 +825,13 @@ def is_excluded(file_path: str, base_path: str, exclude_rules: list[tuple[re.Pat
         if rule_is_dir and not is_dir:
             continue
 
-        if _match_relative_path(rel_path_normalized, pattern, rule_is_dir, root_only):
+        if _matchRelPath(rel_path_normalized, pattern, rule_is_dir, root_only):
             return True
 
     return False
 
 
-def filter_files(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
+def filterFiles(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
     """过滤目录下符合规则的文件"""
     if not os.path.isdir(base_path):
         return []
@@ -839,13 +839,13 @@ def filter_files(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
     result = []
     base_path = os.path.normpath(base_path)
 
-    exclude_rules = compile_rules(exclude_rules_raw)
+    exclude_rules = compileRules(exclude_rules_raw)
 
     for root, dirs, files in os.walk(base_path, onerror=lambda _: None):  # 静默跳过不可访问的目录
         dirs_to_remove = []
         for d in dirs:
             dir_path = os.path.join(root, d)
-            if is_excluded(dir_path, base_path, exclude_rules):
+            if isExcluded(dir_path, base_path, exclude_rules):
                 dirs_to_remove.append(d)
 
         for d in dirs_to_remove:
@@ -853,18 +853,18 @@ def filter_files(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
 
         for f in files:
             file_path = os.path.join(root, f)
-            if not is_excluded(file_path, base_path, exclude_rules):
+            if not isExcluded(file_path, base_path, exclude_rules):
                 result.append(file_path)
 
     return result
 
 
-def collect_files(paths: list[str], rules: list[str]) -> list[str]:
+def collectFiles(paths: list[str], rules: list[str]) -> list[str]:
     """从多个路径收集文件"""
     all_files = []
     for path in paths:
         if os.path.isdir(path):
-            all_files.extend(filter_files(path, rules))
+            all_files.extend(filterFiles(path, rules))
     return all_files
 
 
@@ -880,11 +880,11 @@ class ArchiveFileItem:
         self.children = []
         self.parent = None
     
-    def append_child(self, child):
+    def appendChild(self, child):
         child.parent = self
         self.children.append(child)
     
-    def child_count(self):
+    def childCount(self):
         return len(self.children)
     
     def child(self, row: int):
@@ -903,13 +903,13 @@ class ArchiveItemModel(QAbstractItemModel):
         self.root_item = ArchiveFileItem("", True)
         self.archive_path = ""
     
-    def load_archive(self, archive_path: str):
+    def loadArchive(self, archive_path: str):
         """加载压缩包内容"""
         self.archive_path = archive_path
         self.beginResetModel()
         self.root_item = ArchiveFileItem("", True)
         
-        items = self.file_op.list_archive_contents(archive_path)
+        items = self.file_op.listArchive(archive_path)
         if not items:
             self.endResetModel()
             return
@@ -928,7 +928,7 @@ class ArchiveItemModel(QAbstractItemModel):
             
             if len(parts) == 1:
                 new_item = ArchiveFileItem(parts[0], is_dir, size, "", archive_path)
-                self.root_item.append_child(new_item)
+                self.root_item.appendChild(new_item)
                 name_to_item[name.rstrip("/")] = new_item
             else:
                 parent_name = "/".join(parts[:-1])
@@ -936,7 +936,7 @@ class ArchiveItemModel(QAbstractItemModel):
                 if parent_item is None:
                     parent_item = self.root_item
                 new_item = ArchiveFileItem(parts[-1], is_dir, size, parent_name + "/" if parent_name else "", archive_path)
-                parent_item.append_child(new_item)
+                parent_item.appendChild(new_item)
                 name_to_item[name.rstrip("/")] = new_item
         
         self.endResetModel()
@@ -988,7 +988,7 @@ class ArchiveItemModel(QAbstractItemModel):
             return len(self.root_item.children)
         
         parent_item = parent.internalPointer()
-        return parent_item.child_count() if parent_item else 0
+        return parent_item.childCount() if parent_item else 0
 
 
 # 文件树（支持保存为文件）

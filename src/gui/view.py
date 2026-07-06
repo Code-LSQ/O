@@ -67,10 +67,6 @@ class FolderPanelManager:
         self.archive_model = None
         self._folder_panel_width = 300
     
-    def _init_archive_model(self):
-        """初始化压缩包模型"""
-        self.archive_model = ArchiveItemModel(self.file_op)
-    
     def create(self) -> QWidget:
         """创建文件夹面板"""
         
@@ -82,12 +78,12 @@ class FolderPanelManager:
         self.header.setObjectName("folder_header")
         self.header.setToolTip(tr("点击返回上级文件夹"))
         self.header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.header.mousePressEvent = self._on_header_clicked
+        self.header.mousePressEvent = self._onHeaderClicked
         self.header.hide()
         layout.addWidget(self.header)
         
         self.model = FileSystemModel()
-        self.model.setRootPath('')
+        self.model.setRootPath("")
         self.model.setNameFilters(['*'])
         self.model.setNameFilterDisables(False)
         self.model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
@@ -102,21 +98,21 @@ class FolderPanelManager:
         self.tree.setItemsExpandable(True)
         self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
         
-        self.tree.doubleClicked.connect(self._on_tree_double_clicked)
+        self.tree.doubleClicked.connect(self._onTreeDblClick)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._show_tree_context_menu)
-        self.tree.dragEnterEvent = self._tree_drag_enter
-        self.tree.dragMoveEvent = self._tree_drag_move
-        self.tree.dropEvent = self._tree_drop
+        self.tree.customContextMenuRequested.connect(self._showTreeMenu)
+        self.tree.dragEnterEvent = self._treeDragEnter
+        self.tree.dragMoveEvent = self._treeDragMove
+        self.tree.dropEvent = self._treeDrop
         
         layout.addWidget(self.tree)
         
         return self.panel
     
-    def _on_tree_double_clicked(self, index):
+    def _onTreeDblClick(self, index):
         """文件夹树双击事件"""
         if self.current_archive_path:
-            self._handle_archive_item_double_clicked(index)
+            self._dblClickArc(index)
             return
         
         file_path = self.model.filePath(index)
@@ -126,7 +122,7 @@ class FolderPanelManager:
         
         if os.path.isdir(file_path):
             self.load(file_path)
-        elif self.file_op.is_tar_file(file_path) or self.file_op.is_zip_file(file_path):
+        elif self.file_op.isTarFile(file_path) or self.file_op.isZipFile(file_path):
             self.load(file_path)
         else:
             try:
@@ -134,32 +130,32 @@ class FolderPanelManager:
             except Exception as e:
                 messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
     
-    def _tree_drag_enter(self, event):
+    def _treeDragEnter(self, event):
         if self.current_archive_path:
             event.ignore()
             return
         QTreeView.dragEnterEvent(self.tree, event)
 
-    def _tree_drag_move(self, event):
+    def _treeDragMove(self, event):
         if self.current_archive_path:
             event.ignore()
             return
         QTreeView.dragMoveEvent(self.tree, event)
 
-    def _tree_drop(self, event):
+    def _treeDrop(self, event):
         if self.current_archive_path:
             event.ignore()
             return
         event.ignore()
 
-    def _handle_archive_item_double_clicked(self, index):
+    def _dblClickArc(self, index):
         """压缩包内文件双击事件"""
         item = index.internalPointer()
         if not item:
             return
         
         if item.is_dir:
-            if item.child_count() > 0:
+            if item.childCount() > 0:
                 if self.tree.isExpanded(index):
                     self.tree.collapse(index)
                 else:
@@ -168,7 +164,7 @@ class FolderPanelManager:
             name_lower = item.full_path.lower()
             is_image = any(name_lower.endswith(ext) for ext in EXTENSION["IMAGE"])
             
-            content = self.file_op.read_archive_file(self.current_archive_path, item.full_path)
+            content = self.file_op.readArchive(self.current_archive_path, item.full_path)
             if content is None:
                 messageBox(self.parent, tr("错误"), tr("无法读取压缩包内文件"), 1)
                 return
@@ -179,17 +175,17 @@ class FolderPanelManager:
             if is_image:
                 if self.main_window._use_tabs:
                     editor = self.main_window.add_new_tab(display_path, "")
-                    editor._archive_type = self.file_op.is_zip_file(self.current_archive_path) and 'zip' or 'tar'
+                    editor._archive_type = self.file_op.isZipFile(self.current_archive_path) and 'zip' or 'tar'
                     editor.file_path = self.current_archive_path
-                    editor._load_single_archive_image(item.full_path)
+                    editor._loadSingleImg(item.full_path)
                 else:
                     editor = self.main_window.single_editor
-                    editor._archive_type = self.file_op.is_zip_file(self.current_archive_path) and 'zip' or 'tar'
+                    editor._archive_type = self.file_op.isZipFile(self.current_archive_path) and 'zip' or 'tar'
                     editor.file_path = self.current_archive_path
-                    editor._load_single_archive_image(item.full_path)
+                    editor._loadSingleImg(item.full_path)
             else:
                 try:
-                    content_str = content.decode('utf-8', errors='replace')
+                    content_str = content.decode("utf-8", errors="replace")
                 except Exception:
                     content_str = str(content)
                 
@@ -197,13 +193,13 @@ class FolderPanelManager:
                     editor = self.main_window.add_new_tab(display_path, content_str)
                 else:
                     editor = self.main_window.single_editor
-                    editor.set_content(content_str)
-                    editor.set_file_path(display_path)
+                    editor.setContent(content_str)
+                    editor.setFilePath(display_path)
             
             self.main_window.config.addRecentFile(self.current_archive_path)
             self.main_window.statusBar().showMessage(tr("已打开") + f": {display_path}", 3000)
     
-    def _show_tree_context_menu(self, pos):
+    def _showTreeMenu(self, pos):
         """显示文件夹树右键菜单"""
         menu = QMenu(self.parent)
         
@@ -215,9 +211,9 @@ class FolderPanelManager:
         if index.isValid():
             item_path = self.model.filePath(index)
             if isinstance(item_path, str) and item_path:
-                open_terminal_action = QAction(tr("在终端中打开"), self.parent)
-                open_terminal_action.triggered.connect(partial(self.open_terminal, item_path))
-                menu.addAction(open_terminal_action)
+                openTerminal_action = QAction(tr("在终端中打开"), self.parent)
+                openTerminal_action.triggered.connect(partial(self.openTerminal, item_path))
+                menu.addAction(openTerminal_action)
 
                 show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
                 show_in_explorer_action.triggered.connect(lambda checked=False, fp=item_path: showFile(fp, self.parent))
@@ -226,7 +222,7 @@ class FolderPanelManager:
                 menu.addSeparator()
                 
                 item_path_norm = os.path.normpath(item_path)
-                if self.main_window.config.is_favorite(item_path_norm):
+                if self.main_window.config.isFavorite(item_path_norm):
                     remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
                     remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.remove_from_favorites(fp))
                     menu.addAction(remove_fav_action)
@@ -240,9 +236,9 @@ class FolderPanelManager:
                     move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.moveTrash(fp))
                     menu.addAction(move_to_trash_action)
         elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
-            open_terminal_action = QAction(tr("在终端中打开"), self.parent)
-            open_terminal_action.triggered.connect(partial(self.open_terminal, self.folder_path))
-            menu.addAction(open_terminal_action)
+            openTerminal_action = QAction(tr("在终端中打开"), self.parent)
+            openTerminal_action.triggered.connect(partial(self.openTerminal, self.folder_path))
+            menu.addAction(openTerminal_action)
 
             show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
             show_in_explorer_action.triggered.connect(lambda: showFile(self.folder_path, self.parent))
@@ -251,7 +247,7 @@ class FolderPanelManager:
             menu.addSeparator()
             
             folder_path_norm = os.path.normpath(self.folder_path)
-            if self.main_window.config.is_favorite(folder_path_norm):
+            if self.main_window.config.isFavorite(folder_path_norm):
                 remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
                 remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.remove_from_favorites(fp))
                 menu.addAction(remove_fav_action)
@@ -267,15 +263,11 @@ class FolderPanelManager:
         from src.system import moveTrash as _moveTrash
         if _moveTrash(item_path):
             self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
-            self._on_file_deleted(item_path)
+            self.refreshAfterDelete(item_path)
         else:
             messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
     
-    def _on_file_deleted(self, deleted_path: str):
-        """文件删除后刷新视图"""
-        self.refresh_after_delete(deleted_path)
-    
-    def open_terminal(self, path):
+    def openTerminal(self, path):
         """在终端中打开"""
         try:
             if not isinstance(path, str) or not path:
@@ -287,7 +279,7 @@ class FolderPanelManager:
             logger.exception("打开命令行失败")
             self.parent.statusBar().showMessage(tr("打开命令行失败"), 2000)
     
-    def _on_header_clicked(self, event):
+    def _onHeaderClicked(self, event):
         """点击父文件夹标签时切换到上级目录"""
         if self.current_archive_path:
             parent_path = os.path.dirname(self.current_archive_path)
@@ -298,7 +290,7 @@ class FolderPanelManager:
             if parent_path and parent_path != self.folder_path:
                 self.load(parent_path)
     
-    def ensure_created(self):
+    def ensureCreated(self):
         """确保面板已创建"""
         if self.panel is not None:
             return
@@ -321,14 +313,14 @@ class FolderPanelManager:
         self.panel.show()
 
         if self.main_window:
-            self.set_sizes(self.main_window.width())
+            self.setSizes(self.main_window.width())
     
     def load(self, folder_path: str):
         """加载文件夹"""
-        self.ensure_created()
+        self.ensureCreated()
         
-        if self.file_op.is_tar_file(folder_path) or self.file_op.is_zip_file(folder_path):
-            self._load_archive(folder_path)
+        if self.file_op.isTarFile(folder_path) or self.file_op.isZipFile(folder_path):
+            self._loadArchive(folder_path)
         else:
             self.current_archive_path = None
             self.folder_path = folder_path
@@ -354,15 +346,15 @@ class FolderPanelManager:
             self.parent.statusBar().showMessage(tr("已加载文件夹") + f": {os.path.abspath(folder_path)}", 3000)
         
         if self.main_window:
-            self.set_sizes(self.main_window.width())
+            self.setSizes(self.main_window.width())
     
-    def _load_archive(self, archive_path: str):
+    def _loadArchive(self, archive_path: str):
         """加载压缩包内容"""
         if self.archive_model is None:
-            self._init_archive_model()
+            self.archive_model = ArchiveItemModel(self.file_op)
         
         self.current_archive_path = archive_path
-        self.archive_model.load_archive(archive_path)
+        self.archive_model.loadArchive(archive_path)
         
         self.tree.setModel(self.archive_model)
         
@@ -376,7 +368,7 @@ class FolderPanelManager:
         
         self.parent.statusBar().showMessage(tr("已加载压缩包") + f": {os.path.abspath(archive_path)}", 3000)
     
-    def set_sizes(self, available_width: int):
+    def setSizes(self, available_width: int):
         """设置面板尺寸"""
         if not self.panel:
             return
@@ -426,10 +418,10 @@ class FolderPanelManager:
             if self.splitter.count() > 1:
                 self.splitter.handle(0).setEnabled(False)
     
-    def is_visible(self) -> bool:
+    def isVisible(self) -> bool:
         return self.panel is not None
     
-    def refresh_after_delete(self, deleted_path: str):
+    def refreshAfterDelete(self, deleted_path: str):
         """删除文件后刷新"""
         if self.panel is not None and self.folder_path:
             self.load(self.folder_path)

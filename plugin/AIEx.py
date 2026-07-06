@@ -1020,7 +1020,7 @@ class AIExtendPlugin(PluginBase):
         else:
             content = self._format_export_text(title, messages)
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
         except Exception as e:
             messageBox(self.dock, "导出失败", f"写入文件失败: {e}", 1)
@@ -1238,7 +1238,7 @@ class AIExtendPlugin(PluginBase):
         self._history = {}
         if history_file.exists():
             try:
-                with open(history_file, 'r', encoding='utf-8') as f:
+                with open(history_file, "r", encoding="utf-8") as f:
                     all_data = json.load(f)
                 self._history = {k: v for k, v in all_data.items() if not k.startswith("_")}
             except Exception:
@@ -1263,13 +1263,13 @@ class AIExtendPlugin(PluginBase):
             history_file.parent.mkdir(parents=True, exist_ok=True)
             all_data = {}
             if history_file.exists():
-                with open(history_file, 'r', encoding='utf-8') as f:
+                with open(history_file, "r", encoding="utf-8") as f:
                     existing = json.load(f)
                 for k, v in existing.items():
                     if k.startswith("_"):
                         all_data[k] = v
             all_data.update(self._history)
-            with open(history_file, 'w', encoding='utf-8') as f:
+            with open(history_file, "w", encoding="utf-8") as f:
                 json.dump(all_data, f, ensure_ascii=False, indent=2)
         except Exception:
             logger.exception("保存 AI 历史失败")
@@ -1770,7 +1770,7 @@ class AIThread(QThread):
                     prompt_name=self.prompt_name
                 )
                 if not self.isInterruptionRequested():
-                    self.finished.emit(''.join(full_response))
+                    self.finished.emit("".join(full_response))
             else:
                 text, _, _ = client.chat(messages=self.messages, prompt_name=self.prompt_name)
                 if not self.isInterruptionRequested():
@@ -2159,7 +2159,7 @@ class OCRDialog(QDialog):
         save_path = AI_dir / f"{getTimestamp()}.txt"
 
         try:
-            with open(save_path, 'w', encoding='utf-8') as f:
+            with open(save_path, "w", encoding="utf-8") as f:
                 f.write(self.ocr_result)
 
             self._open_file_with_app(str(save_path))

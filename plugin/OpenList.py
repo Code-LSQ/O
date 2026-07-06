@@ -20,7 +20,7 @@ from PySide6.QtGui import QAction, QColor
 from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
-from src.file import fileTree, filter_files
+from src.file import fileTree, filterFiles
 from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox
 
 """
@@ -430,7 +430,7 @@ class OpenListClient:
     def upload_file(self, local_path: str, remote_path: str, overwrite: bool = True, mtime: int = 0) -> bool:
         """上传文件"""
         try:
-            with open(local_path, 'rb') as f:
+            with open(local_path, "rb") as f:
                 file_data = f.read()
 
             # 对路径进行 URL 编码以支持中文
@@ -916,7 +916,7 @@ class SyncWorker(QThread):
         if self.task.tar_folders:
             tar_folders_list = [os.path.normpath(f.strip()) for f in self.task.tar_folders.splitlines() if f.strip()]
 
-        filtered_files = filter_files(src_path, exclude_rules_raw)
+        filtered_files = filterFiles(src_path, exclude_rules_raw)
 
         for full_path in filtered_files:
             if self._abort:
@@ -963,7 +963,7 @@ class SyncWorker(QThread):
                 try:
                     os.chdir(parent_dir)
                     if exclude_rules_raw:
-                        filtered = filter_files(src_folder, exclude_rules_raw)
+                        filtered = filterFiles(src_folder, exclude_rules_raw)
                         for full_path in filtered:
                             rel = os.path.relpath(full_path, parent_dir).replace("\\", "/")
                             tar.add(rel)

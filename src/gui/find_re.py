@@ -19,23 +19,23 @@ class FindReplaceDialog(QDialog):
         self.setWindowTitle(tr("查找与替换"))
         self.setMinimumWidth(450)
         self.config = config if config is not None else getConfig()
-        self.presets = self._load_presets()
+        self.presets = self._loadPresets()
         self.current_preset_rules = []
-        self.init_ui()
+        self.initUI()
 
-    def _load_presets(self):
+    def _loadPresets(self):
         if self.config:
             presets = self.config.get("Edit.find_presets", [])
             if isinstance(presets, list):
                 return presets
         return []
 
-    def _save_presets(self):
+    def _savePresets(self):
         if self.config:
             self.config.set("Edit.find_presets", self.presets)
             self.config.save()
 
-    def init_ui(self):
+    def initUI(self):
         layout = QVBoxLayout(self)
 
         # 预设规则
@@ -44,13 +44,13 @@ class FindReplaceDialog(QDialog):
 
         self.preset_combo = QComboBox()
         self.preset_combo.addItem(tr("不使用"), "")
-        self._update_preset_combo()
-        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        self._updatePresetCombo()
+        self.preset_combo.currentIndexChanged.connect(self._onPresetChanged)
         preset_layout.addWidget(self.preset_combo)
 
         self.manage_btn = QPushButton(tr("管理"))
         self.manage_btn.setFixedWidth(70)
-        self.manage_btn.clicked.connect(self._manage_presets)
+        self.manage_btn.clicked.connect(self._managePresets)
         preset_layout.addWidget(self.manage_btn)
 
         layout.addLayout(preset_layout)
@@ -81,19 +81,19 @@ class FindReplaceDialog(QDialog):
         button_layout = QHBoxLayout()
 
         self.btn_prev = QPushButton(tr("上一个"))
-        self.btn_prev.clicked.connect(self.on_find_prev)
+        self.btn_prev.clicked.connect(self.onFindPrev)
         button_layout.addWidget(self.btn_prev)
 
         self.btn_next = QPushButton(tr("下一个"))
-        self.btn_next.clicked.connect(self.on_find_next)
+        self.btn_next.clicked.connect(self.onFindNext)
         button_layout.addWidget(self.btn_next)
 
         self.btn_replace = QPushButton(tr("替换"))
-        self.btn_replace.clicked.connect(self.on_replace)
+        self.btn_replace.clicked.connect(self.onReplace)
         button_layout.addWidget(self.btn_replace)
 
         self.btn_replace_all = QPushButton(tr("全部替换"))
-        self.btn_replace_all.clicked.connect(self.on_replace_all)
+        self.btn_replace_all.clicked.connect(self.onReplaceAll)
         button_layout.addWidget(self.btn_replace_all)
 
         layout.addLayout(button_layout)
@@ -101,16 +101,16 @@ class FindReplaceDialog(QDialog):
         # 快捷键
         self.btn_next.setShortcut(QKeySequence("F3"))
         self.btn_prev.setShortcut(QKeySequence("Shift+F3"))
-        self.find_edit.returnPressed.connect(self.on_find_next)
-        self.replace_edit.returnPressed.connect(self.on_replace_all)
+        self.find_edit.returnPressed.connect(self.onFindNext)
+        self.replace_edit.returnPressed.connect(self.onReplaceAll)
 
-    def _update_preset_combo(self):
+    def _updatePresetCombo(self):
         while self.preset_combo.count() > 1:
             self.preset_combo.removeItem(1)
         for preset in self.presets:
             self.preset_combo.addItem(preset["name"], preset["value"])
 
-    def _on_preset_changed(self, index):
+    def _onPresetChanged(self, index):
         if index <= 0:
             self.current_preset_rules = []
             return
@@ -144,7 +144,7 @@ class FindReplaceDialog(QDialog):
             self.replace_edit.clear()
             messageBox(self, tr("格式错误"), tr("预设规则格式不正确") + f":\n{str(e)}\n\n" + tr("正确格式示例") + ":\n" + '["find1","replace1"],["find2","replace2"]', 1)
 
-    def _manage_presets(self):
+    def _managePresets(self):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("管理预设规则"))
         dialog.setMinimumSize(500, 350)
@@ -169,7 +169,7 @@ class FindReplaceDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        def update_buttons():
+        def updateButtons():
             has_selection = pair_list.currentItem() is not None
             edit_btn.setEnabled(has_selection)
             delete_btn.setEnabled(has_selection)
@@ -177,7 +177,7 @@ class FindReplaceDialog(QDialog):
         pair_list.itemSelectionChanged.connect(update_buttons)
         update_buttons()
 
-        def validate_preset_value(value):
+        def validatePresetValue(value):
             try:
                 rules = json.loads(value)
                 if not isinstance(rules, list):
@@ -191,7 +191,7 @@ class FindReplaceDialog(QDialog):
             except Exception as e:
                 return False, tr("验证错误") + f": {str(e)}"
 
-        def add_item():
+        def addItem():
             result = dictDialog(dialog, tr("添加"), name=tr("名称"), value=tr("规则"),
                                 name_text="",
                                 value_text='["find1","replace1"],["find2","replace2"]',
@@ -206,7 +206,7 @@ class FindReplaceDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, saved_value)
                 pair_list.addItem(item)
 
-        def edit_item():
+        def editItem():
             current = pair_list.currentItem()
             if not current:
                 return
@@ -225,7 +225,7 @@ class FindReplaceDialog(QDialog):
                 current.setText(result[0])
                 current.setData(Qt.ItemDataRole.UserRole, saved_value)
 
-        def delete_item():
+        def deleteItem():
             current = pair_list.currentItem()
             if current:
                 row = pair_list.row(current)
@@ -240,24 +240,24 @@ class FindReplaceDialog(QDialog):
             for i in range(pair_list.count()):
                 item = pair_list.item(i)
                 self.presets.append({"name": item.text(), "value": item.data(Qt.ItemDataRole.UserRole)})
-            self._save_presets()
-            self._update_preset_combo()
+            self._savePresets()
+            self._updatePresetCombo()
 
-    def on_find_next(self):
+    def onFindNext(self):
         text = self.find_edit.text()
         if not text:
             return
         self.find_requested.emit(text, self.case_check.isChecked(),
             self.regex_check.isChecked(), True)
 
-    def on_find_prev(self):
+    def onFindPrev(self):
         text = self.find_edit.text()
         if not text:
             return
         self.find_requested.emit(text, self.case_check.isChecked(),
             self.regex_check.isChecked(), False)
 
-    def on_replace(self):
+    def onReplace(self):
         find_text = self.find_edit.text()
         if not find_text:
             return
@@ -265,7 +265,7 @@ class FindReplaceDialog(QDialog):
             self.case_check.isChecked(),
             self.regex_check.isChecked())
 
-    def on_replace_all(self):
+    def onReplaceAll(self):
         if self.current_preset_rules and self.preset_combo.currentIndex() > 0:
             # 应用预设规则中的所有替换规则
             for rule in self.current_preset_rules:
@@ -294,7 +294,7 @@ class FindReplaceDialog(QDialog):
                 self.case_check.isChecked(),
                 self.regex_check.isChecked())
 
-    def set_find_text(self, text: str):
+    def setFindText(self, text: str):
         self.find_edit.setText(text)
     
     def showFindRe(self):

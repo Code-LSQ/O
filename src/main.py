@@ -19,7 +19,7 @@ from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
 from src.core.timer import TimerManager
-from src.gui.control import WindowMouse, WindowControl, show_plugin_dialog
+from src.gui.control import WindowMouse, WindowControl, managePlugins
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -776,13 +776,13 @@ class MainWindow(WindowMouse, QMainWindow):
             theme_file = theme_dir / f"{theme_name}.qss"
             if not theme_file.exists():
                 return
-            with open(theme_file, 'r', encoding='utf-8') as f:
+            with open(theme_file, "r", encoding="utf-8") as f:
                 style = f.read()
             current = window.styleSheet()
             if style != current:
                 window.setStyleSheet(style)
                 if hasattr(window, 'window_control'):
-                    window.window_control.update_icons_for_theme(theme)
+                    window.window_control.updateIcons(theme)
         except Exception:
             logger.exception("应用主题失败")
 
@@ -829,6 +829,7 @@ class MainWindow(WindowMouse, QMainWindow):
         """通过快捷键运行工具"""
         listener = GlobalHotkeyListener()
         tool = listener._pending_tool
+        listener._pending_tool = None
         if not tool:
             return
         tool_type = tool.get("type", "文件")
@@ -952,7 +953,7 @@ class MainWindow(WindowMouse, QMainWindow):
     def _titleDblClick(self, event):
         """标题栏双击"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self._toggle_maximize()
+            self._toggleMax()
 
     def _createGroupBar(self, parent_layout):
         """创建分组按钮栏"""
@@ -1637,7 +1638,7 @@ class MainWindow(WindowMouse, QMainWindow):
             "editor": lambda: self._openEditor(),
             "restart_app": lambda: restartApplication(self),
             "quit_app": QApplication.quit,
-            "plugin_manager": lambda: show_plugin_dialog(self),
+            "plugin_manager": lambda: managePlugins(self),
             "reload_plugins": lambda: getPluginManager().initConfig(getConfig()),
             "openLog": lambda: self._openEditor(str(log_file)),
             "openConfig": lambda: self._openEditor(str(config_file)),

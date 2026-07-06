@@ -26,13 +26,13 @@ class EditorTextEdit(QTextEdit):
         self._cached_block_count = 0
 
         doc = self.document()
-        doc.blockCountChanged.connect(self._on_block_count_changed)
-        doc.contentsChanged.connect(self._on_contents_changed)
-        self.textChanged.connect(self._on_text_changed_for_line_numbers)
-        self.cursorPositionChanged.connect(self._on_cursor_changed)
+        doc.blockCountChanged.connect(self._onBlockCountChanged)
+        doc.contentsChanged.connect(self._onContentsChanged)
+        self.textChanged.connect(self._updateLineNo)
+        self.cursorPositionChanged.connect(self._onCursorChanged)
 
-        self.update_line_number_area_width(0)
-        self.highlight_current_line()
+        self._updateLineNoWidth(0)
+        self.highlightLine()
         
         self._zoom_factor = 1.0
         self._min_zoom = 0.5
@@ -46,44 +46,44 @@ class EditorTextEdit(QTextEdit):
         self._auto_indent_enabled = True
 
         self._shortcut_actions = {}
-        self._reload_shortcuts()
+        self._reloadShortcuts()
 
 
 
-    def set_zoom_callback(self, callback):
+    def setZoomCallback(self, callback):
         self._zoom_callback = callback
     
-    def _on_block_count_changed(self, new_count: int):
+    def _onBlockCountChanged(self, new_count: int):
         """块数量变化时更新缓存"""
         if new_count != self._cached_block_count:
             self._cached_block_count = new_count
-            self.update_line_number_area_width(0)
+            self._updateLineNoWidth(0)
             self.line_number_area.update()
 
-    def _on_contents_changed(self):
+    def _onContentsChanged(self):
         """内容改变时更新行号区域"""
         if self.line_numbers_visible:
-            self.update_line_number_area_width(0)
+            self._updateLineNoWidth(0)
             self.line_number_area.update()
 
-    def _on_text_changed_for_line_numbers(self):
+    def _updateLineNo(self):
         """文本改变时更新行号区域"""
         if self.line_numbers_visible:
-            self.update_line_number_area_width(0)
+            self._updateLineNoWidth(0)
 
     def wheelEvent(self, event):
         modifiers = event.modifiers()
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
             if delta > 0:
-                self.zoom_in()
+                self.zoomIn()
             elif delta < 0:
-                self.zoom_out()
+                self.zoomOut()
             event.accept()
             return
         super().wheelEvent(event)
     
-    def _scroll_to_anchor(self, anchor: str):
+    def _scrollToAnchor(self, anchor: str):
         cursor = self.textCursor()
         doc = self.document()
         if not doc:
@@ -104,23 +104,23 @@ class EditorTextEdit(QTextEdit):
             self.setTextCursor(found)
             self.ensureCursorVisible()
     
-    def zoom_in(self):
+    def zoomIn(self):
         """放大字体"""
         if self._zoom_factor < self._max_zoom:
             self._zoom_factor += 0.1
-            self._apply_zoom()
+            self._applyZoom()
             if self._zoom_callback:
                 self._zoom_callback(self._zoom_factor)
 
-    def zoom_out(self):
+    def zoomOut(self):
         """缩小字体"""
         if self._zoom_factor > self._min_zoom:
             self._zoom_factor -= 0.1
-            self._apply_zoom()
+            self._applyZoom()
             if self._zoom_callback:
                 self._zoom_callback(self._zoom_factor)
 
-    def _apply_zoom(self):
+    def _applyZoom(self):
         """应用缩放"""
         font = self.font()
         current_size = font.pointSize()
@@ -134,7 +134,7 @@ class EditorTextEdit(QTextEdit):
         new_size = max(1, new_size)
         font.setPointSize(new_size)
         self.setFont(font)
-        self.update_line_number_area_width(0)
+        self._updateLineNoWidth(0)
 
     def setHtml(self, text: str):
         """重写setHtml以支持markdown渲染"""
@@ -155,7 +155,7 @@ class EditorTextEdit(QTextEdit):
             _MAX_IMAGE_PIXELS = 2000
             _MAX_BASE64_LEN = 3 * 1024 * 1024
 
-            def add_image_resource(match):
+            def addImageResource(match):
                 attrs = match.group(1)
                 src_match = re.search(r'src\s*=\s*(["\'])(data:image/[^;]+;base64,[^"\'>]+)\1', attrs)
                 if not src_match:
@@ -177,7 +177,7 @@ class EditorTextEdit(QTextEdit):
                     return f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else '')
 
                 try:
-                    image = self._base64_to_image(b64_data, mime_type)
+                    image = self._base64ToImage(b64_data, mime_type)
                     if image.isNull():
                         return match.group(0)
                     if image.width() > _MAX_IMAGE_PIXELS or image.height() > _MAX_IMAGE_PIXELS:
@@ -192,14 +192,14 @@ class EditorTextEdit(QTextEdit):
                 new_attrs = re.sub(r'src\s*=\s*(["\'])[^"\']+\1', '', attrs).strip()
                 return f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else '')
 
-            html = re.sub(img_pattern, add_image_resource, html)
+            html = re.sub(img_pattern, addImageResource, html)
             super().setHtml(html)
             
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         except Exception:
             logger.exception("设置Markdown HTML失败")
     
-    def _base64_to_image(self, base64_data: str, mime_type: str) -> QImage:
+    def _base64ToImage(self, base64_data: str, mime_type: str) -> QImage:
         """将base64数据转换为QImage"""
         try:
             data = base64.b64decode(base64_data)
@@ -260,17 +260,17 @@ class EditorTextEdit(QTextEdit):
             Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down,
             Qt.Key.Key_Home, Qt.Key.Key_End, Qt.Key.Key_PageUp, Qt.Key.Key_PageDown,
         ):
-            self._cancel_multi_cursor()
+            self._cancelMultiCursor()
 
         if self._multi_cursor_active and event.text():
             mods = event.modifiers()
             if mods in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ShiftModifier):
-                self._apply_key_to_multi_cursors(event.text())
+                self._applyKeyToCursors(event.text())
                 event.accept()
                 return
 
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self._handle_enter_key()
+            self._handleEnterKey()
             event.accept()
             return
 
@@ -284,15 +284,15 @@ class EditorTextEdit(QTextEdit):
                 if fmt.isAnchor():
                     href = fmt.anchorHref()
                     if href and href.startswith('#'):
-                        self._scroll_to_anchor(href[1:])
+                        self._scrollToAnchor(href[1:])
                         event.accept()
                         return
             if event.modifiers() & Qt.KeyboardModifier.AltModifier:
-                self._add_alt_click_cursor(event.pos())
+                self._addAltClickCursor(event.pos())
                 event.accept()
                 return
             if self._multi_cursor_active:
-                self._cancel_multi_cursor()
+                self._cancelMultiCursor()
                 self.viewport().update()
             super().mousePressEvent(event)
         else:
@@ -310,35 +310,35 @@ class EditorTextEdit(QTextEdit):
         else:
             super().dropEvent(event)
 
-    def _on_cursor_changed(self):
+    def _onCursorChanged(self):
         if self._multi_cursor_active:
-            self._update_multi_cursor_highlight()
+            self._updateCursors()
         else:
-            self.highlight_current_line()
-        self._check_bracket_match()
-        self._emit_cursor_position()
+            self.highlightLine()
+        self._checkBracket()
+        self._emitCursorPos()
 
-    def _emit_cursor_position(self):
+    def _emitCursorPos(self):
         cursor = self.textCursor()
         line = cursor.blockNumber() + 1
         col = cursor.columnNumber() + 1
         self.cursor_position_changed.emit(line, col)
 
-    def _reload_shortcuts(self):
+    def _reloadShortcuts(self):
         config = getConfig()
         saved = config.get("Edit.shortcuts", {})
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
         self._shortcut_seqs = {}
         self._shortcut_handlers = {
-            "go_to_line": self.go_to_line,
-            "jump_next": self._jump_next,
+            "goToLine": self.goToLine,
+            "jump_next": self._jumpNext,
         }
         for name in self._shortcut_handlers:
             s = saved.get(name, default_shortcuts.get(name, ""))
             if s:
                 self._shortcut_seqs[name] = QKeySequence(s)
 
-    def go_to_line(self):
+    def goToLine(self):
         text = inputDialog(self, tr("跳转到行"), tr("行号"), default="1")
         if text:
             cursor = self.textCursor()
@@ -348,7 +348,7 @@ class EditorTextEdit(QTextEdit):
                 self.setTextCursor(cursor)
                 self.ensureCursorVisible()
 
-    def _handle_enter_key(self):
+    def _handleEnterKey(self):
         cursor = self.textCursor()
         if cursor.hasSelection():
             cursor.removeSelectedText()
@@ -360,10 +360,10 @@ class EditorTextEdit(QTextEdit):
         else:
             cursor.insertText('\n')
 
-    def set_auto_indent(self, enabled: bool):
+    def setAutoIndent(self, enabled: bool):
         self._auto_indent_enabled = enabled
 
-    def _jump_next(self):
+    def _jumpNext(self):
         cursor = self.textCursor()
         if not self._multi_cursor_active and not cursor.hasSelection():
             cursor.select(QTextCursor.SelectionType.WordUnderCursor)
@@ -375,11 +375,11 @@ class EditorTextEdit(QTextEdit):
             self._multi_cursor_active = True
         else:
             if cursor.hasSelection() and cursor.selectedText() != self._multi_base_text:
-                self._cancel_multi_cursor()
+                self._cancelMultiCursor()
                 self._multi_base_text = cursor.selectedText()
                 self._multi_cursors = [(cursor.selectionStart(), cursor.selectionEnd())]
                 self._multi_cursor_active = True
-                self._update_multi_cursor_highlight()
+                self._updateCursors()
                 return
             if not self._multi_base_text:
                 return
@@ -398,9 +398,9 @@ class EditorTextEdit(QTextEdit):
                     return
             self._multi_cursors.append((result.selectionStart(), result.selectionEnd()))
             self.setTextCursor(result)
-        self._update_multi_cursor_highlight()
+        self._updateCursors()
 
-    def _add_alt_click_cursor(self, pos):
+    def _addAltClickCursor(self, pos):
         click_pos = self.cursorForPosition(pos).position()
         if not self._multi_cursor_active:
             cur = self.textCursor()
@@ -413,9 +413,9 @@ class EditorTextEdit(QTextEdit):
         c = QTextCursor(self.document())
         c.setPosition(click_pos)
         self.setTextCursor(c)
-        self._update_multi_cursor_highlight()
+        self._updateCursors()
 
-    def _apply_key_to_multi_cursors(self, text):
+    def _applyKeyToCursors(self, text):
         doc = self.document()
         sorted_cursors = sorted(self._multi_cursors, key=lambda x: x[0], reverse=True)
         for start, end in sorted_cursors:
@@ -430,9 +430,9 @@ class EditorTextEdit(QTextEdit):
             new_cursors.append((s + offset, s + offset))
         self._multi_cursors = new_cursors
         self._multi_base_text = ""
-        self._update_multi_cursor_highlight()
+        self._updateCursors()
 
-    def _update_multi_cursor_highlight(self):
+    def _updateCursors(self):
         self.viewport().update()
 
     def paintEvent(self, event):
@@ -451,15 +451,15 @@ class EditorTextEdit(QTextEdit):
                     p.fillRect(rect, color)
             p.end()
 
-    def _cancel_multi_cursor(self):
+    def _cancelMultiCursor(self):
         self._multi_cursors = []
         self._multi_cursor_active = False
         self._multi_base_text = ""
-        self.highlight_current_line()
+        self.highlightLine()
 
     _BRACKET_PAIRS = {'(': ')', '[': ']', '{': '}', ')': '(', ']': '[', '}': '{'}
 
-    def _check_bracket_match(self):
+    def _checkBracket(self):
         cursor = self.textCursor()
         pos = cursor.position()
         doc = self.document()
@@ -468,16 +468,16 @@ class EditorTextEdit(QTextEdit):
         if pos > 0:
             char = doc.characterAt(pos - 1)
             if char in self._BRACKET_PAIRS:
-                self._highlight_matching_bracket(pos - 1, char)
+                self._highlightBracket(pos - 1, char)
                 return
         if pos < doc.characterCount():
             char = doc.characterAt(pos)
             if char in self._BRACKET_PAIRS:
-                self._highlight_matching_bracket(pos, char)
+                self._highlightBracket(pos, char)
                 return
-        self.highlight_current_line()
+        self.highlightLine()
 
-    def _highlight_matching_bracket(self, pos, char):
+    def _highlightBracket(self, pos, char):
         rev = {')': '(', ']': '[', '}': '{'}
         fwd = {'(': ')', '[': ']', '{': '}'}
         if char in fwd:
@@ -572,7 +572,7 @@ class EditorTextEdit(QTextEdit):
         # 删除
         action_delete = QAction(tr("删除"), self)
         action_delete.setShortcut(QKeySequence("Del"))
-        action_delete.triggered.connect(self.delete_selected)
+        action_delete.triggered.connect(self.deleteSelected)
         action_delete.setEnabled(self.textCursor().hasSelection())
         menu.addAction(action_delete)
         
@@ -581,11 +581,11 @@ class EditorTextEdit(QTextEdit):
         # 打开网址
         selected_text = self.textCursor().selectedText().strip()
         if selected_text:
-            urls = self._extract_urls(selected_text)
+            urls = self._extractUrls(selected_text)
             if urls:
-                action_open_url = QAction(len(urls) + tr("个网址"), self)
-                action_open_url.triggered.connect(lambda checked, urls=urls: self._open_urls(urls))
-                menu.addAction(action_open_url)
+                action_openUrl = QAction(len(urls) + tr("个网址"), self)
+                action_openUrl.triggered.connect(lambda checked, urls=urls: self._openUrls(urls))
+                menu.addAction(action_openUrl)
                 menu.addSeparator()
         
         # 搜索引擎功能
@@ -596,7 +596,7 @@ class EditorTextEdit(QTextEdit):
                 if search_engines:
                     for name, url in search_engines.items():
                         action = QAction(tr("使用") + " " + name + " " + tr("搜索"), self)
-                        action.triggered.connect(lambda checked, u=url, t=selected_text: self._search_with_engine(u, t))
+                        action.triggered.connect(lambda checked, u=url, t=selected_text: self._searchWith(u, t))
                         menu.addAction(action)
                     menu.addSeparator()
             except Exception:
@@ -612,25 +612,25 @@ class EditorTextEdit(QTextEdit):
         if hasattr(self, '_parent_tab') and self._parent_tab and self._parent_tab.file_path:
             menu.addSeparator()
             action_reload = QAction(tr("重新加载"), self)
-            action_reload.triggered.connect(self._reload_file)
+            action_reload.triggered.connect(self._reloadFile)
             menu.addAction(action_reload)
         
         menu.exec(event.globalPos())
 
-    def delete_selected(self):
+    def deleteSelected(self):
         """删除选中的文本"""
         cursor = self.textCursor()
         if cursor.hasSelection():
             cursor.removeSelectedText()
             self.setTextCursor(cursor)
 
-    def _reload_file(self):
+    def _reloadFile(self):
         """重新加载当前文件（委托给父标签页的完整重载逻辑）"""
         if not hasattr(self, '_parent_tab') or not self._parent_tab:
             return
-        self._parent_tab.reload_file()
+        self._parent_tab.reloadFile()
 
-    def _extract_urls(self, text: str) -> list:
+    def _extractUrls(self, text: str) -> list:
         """从文本中提取所有网址"""
         urls = []
         lines = text.split('\n')
@@ -647,30 +647,30 @@ class EditorTextEdit(QTextEdit):
                     urls.append(url)
         return urls
 
-    def _open_urls(self, urls: list):
+    def _openUrls(self, urls: list):
         """用浏览器打开多个URL"""
         for url in urls:
             webbrowser.open(url)
 
-    def _search_with_engine(self, url_template: str, query: str):
+    def _searchWith(self, url_template: str, query: str):
         """使用搜索引擎搜索"""
         encoded_query = parse.quote_plus(query)
         search_url = url_template.replace("{query}", encoded_query)
         webbrowser.open(search_url)
 
-    def _open_url(self, url: str):
-        self._open_urls([url])
+    def _openUrl(self, url: str):
+        self._openUrls([url])
 
     def setLineNumbersVisible(self, visible: bool):
         """设置行号是否可见"""
         self.line_numbers_visible = visible
         self.line_number_area.setVisible(visible)
-        self.update_line_number_area_width(0)
+        self._updateLineNoWidth(0)
 
     def isLineNumbersVisible(self) -> bool:
         return self.line_numbers_visible
 
-    def line_number_area_width(self):
+    def _lineNoWidth(self):
         """计算行号区域宽度（带缓存）"""
         if not self.line_numbers_visible:
             return 0
@@ -686,11 +686,11 @@ class EditorTextEdit(QTextEdit):
             self._cached_block_count = current_block_count
         return self._cached_line_number_width
 
-    def update_line_number_area_width(self, _):
+    def _updateLineNoWidth(self, _):
         """更新行号区域宽度"""
-        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+        self.setViewportMargins(self._lineNoWidth(), 0, 0, 0)
 
-    def update_line_number_area(self, rect, dy):
+    def _updateLineNoArea(self, rect, dy):
         """更新行号区域"""
         if not self.line_numbers_visible:
             return
@@ -699,7 +699,7 @@ class EditorTextEdit(QTextEdit):
         else:
             self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
         if rect.contains(self.viewport().rect()):
-            self.update_line_number_area_width(0)
+            self._updateLineNoWidth(0)
 
     def scrollContentsBy(self, dx, dy):
         """滚动内容时同步行号区域"""
@@ -711,9 +711,9 @@ class EditorTextEdit(QTextEdit):
         """窗口大小改变事件"""
         super().resizeEvent(event)
         cr = self.contentsRect()
-        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self._lineNoWidth(), cr.height()))
 
-    def highlight_current_line(self):
+    def highlightLine(self):
         """高亮当前行"""
         extra_selections = []
         if not self.isReadOnly():
@@ -808,7 +808,7 @@ class ImageLabel(QLabel):
         self._gallery_scroll_value = 0
         self._gallery_scrollbar = None
     
-    def set_file_path(self, path: str, scroll_area=None):
+    def setFilePath(self, path: str, scroll_area=None):
         """设置当前文件路径"""
         self._current_file_path = path
         self._scroll_area_ref = scroll_area
@@ -832,9 +832,9 @@ class ImageLabel(QLabel):
                 self._zoom_factor = max(self._min_zoom, min(self._max_zoom, self._zoom_factor))
 
                 if self._comic_view_enabled:
-                    self._comic_refresh()
+                    self._refreshComic()
                 else:
-                    self._apply_zoom()
+                    self._applyZoom()
 
                 if self._zoom_callback:
                     self._zoom_callback(self._zoom_factor)
@@ -847,26 +847,26 @@ class ImageLabel(QLabel):
         menu = QMenu(self)
         
         action_comic_view = QAction(tr("图库模式"), self)
-        action_comic_view.triggered.connect(self._toggle_comic_view)
+        action_comic_view.triggered.connect(self._toggleComicView)
         menu.addAction(action_comic_view)
         
         menu.exec(event.globalPos())
     
-    def _toggle_comic_view(self):
+    def _toggleComicView(self):
         """切换图库模式"""
         if self._comic_view_enabled:
-            self._exit_comic_view()
+            self._exitComicView()
         elif self._archive_comic:
-            self._enter_archive_comic_view()
+            self._enterArchiveView()
         else:
-            self._enter_comic_view()
+            self._enterComicView()
     
-    def set_archive_images(self, images_data: list):
+    def setArchiveImages(self, images_data: list):
         """设置压缩包图片数据"""
         self._archive_comic = True
         self._archive_images_data = images_data
     
-    def _enter_archive_comic_view(self):
+    def _enterArchiveView(self):
         """进入压缩包图库模式 - 懒加载"""
         if not self._archive_images_data:
             return
@@ -900,7 +900,7 @@ class ImageLabel(QLabel):
                     size = QSize(800, 600)
             except Exception:
                 size = QSize(800, 600)
-            self._gallery_image_heights.append(self._calc_scaled_height(size))
+            self._gallery_image_heights.append(self._calcHeight(size))
         
         self._gallery_label_tops = []
         cum_y = 0
@@ -933,24 +933,24 @@ class ImageLabel(QLabel):
         self._archive_comic_base_width = self._comic_base_width
         
         if scroll_area and isinstance(scroll_area, QScrollArea):
-            QTimer.singleShot(0, lambda: self._setup_comic_container(container))
+            QTimer.singleShot(0, lambda: self._setupComicContainer(container))
         
         # 安装滚动监听实现懒加载
         self._gallery_scrollbar = scroll_area.verticalScrollBar()
-        self._gallery_scrollbar.valueChanged.connect(self._on_gallery_scroll)
+        self._gallery_scrollbar.valueChanged.connect(self._onGalleryScroll)
         
-        QTimer.singleShot(0, self._gallery_update_window)
+        QTimer.singleShot(0, self._updateGallery)
     
-    def _setup_comic_container(self, container):
+    def _setupComicContainer(self, container):
         scroll_area = getattr(self, '_scroll_area_ref', None) or self.parent()
         if not scroll_area or not isinstance(scroll_area, QScrollArea):
             return
         scroll_area.takeWidget()
         scroll_area.setWidget(container)
         container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        container.customContextMenuRequested.connect(self._show_comic_context_menu)
+        container.customContextMenuRequested.connect(self._showComicMenu)
     
-    def _enter_comic_view(self):
+    def _enterComicView(self):
         """进入图库模式 - 懒加载，只加载当前窗口周围图片"""
         if not self._current_file_path or not os.path.exists(self._current_file_path):
             return
@@ -959,7 +959,7 @@ class ImageLabel(QLabel):
         if not folder:
             return
         
-        image_files = self._get_folder_images(folder)
+        image_files = self._getFolderImages(folder)
         if not image_files:
             return
         
@@ -986,7 +986,7 @@ class ImageLabel(QLabel):
             size = reader.size()
             if not size.isValid():
                 size = QSize(800, 600)
-            self._gallery_image_heights.append(self._calc_scaled_height(size))
+            self._gallery_image_heights.append(self._calcHeight(size))
         
         self._gallery_label_tops = []
         cum_y = 0
@@ -1017,28 +1017,28 @@ class ImageLabel(QLabel):
         scroll_area.setWidget(self._comic_container)
         
         self._comic_container.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._comic_container.customContextMenuRequested.connect(lambda pos: self._show_comic_context_menu(pos))
+        self._comic_container.customContextMenuRequested.connect(lambda pos: self._showComicMenu(pos))
         
         scroll_area.viewport().installEventFilter(self)
         
         # 安装滚动监听实现懒加载
         self._gallery_scrollbar = scroll_area.verticalScrollBar()
-        self._gallery_scrollbar.valueChanged.connect(self._on_gallery_scroll)
+        self._gallery_scrollbar.valueChanged.connect(self._onGalleryScroll)
         
-        QTimer.singleShot(0, self._gallery_update_window)
+        QTimer.singleShot(0, self._updateGallery)
     
-    def _show_comic_context_menu(self, pos):
+    def _showComicMenu(self, pos):
         """图库模式右键菜单"""
         menu = QMenu(self._comic_container)
         
         action_comic_view = QAction(tr("图库模式"), self)
-        action_comic_view.triggered.connect(self._toggle_comic_view)
+        action_comic_view.triggered.connect(self._toggleComicView)
         menu.addAction(action_comic_view)
         
         global_pos = self._comic_container.mapToGlobal(pos)
         menu.exec(global_pos)
     
-    def _handle_comic_wheel(self, event):
+    def _handleComicWheel(self, event):
         """图库模式滚轮缩放"""
         modifiers = event.modifiers()
         if modifiers & Qt.KeyboardModifier.ControlModifier:
@@ -1049,24 +1049,24 @@ class ImageLabel(QLabel):
                 self._zoom_factor -= 0.1
 
             self._zoom_factor = max(self._min_zoom, min(self._max_zoom, self._zoom_factor))
-            self._comic_refresh()
+            self._refreshComic()
             if self._zoom_callback:
                 self._zoom_callback(self._zoom_factor)
             event.accept()
             return True
         return False
     
-    def _comic_refresh(self):
+    def _refreshComic(self):
         """刷新图库显示"""
         if not self._comic_view_enabled:
             return
         
         if self._archive_comic:
-            self._archive_comic_refresh()
+            self._refreshArchive()
         elif self._comic_container:
-            self._comic_folder_refresh()
+            self._refreshFolder()
     
-    def _archive_comic_refresh(self):
+    def _refreshArchive(self):
         """缩放后刷新压缩包图库"""
         if not self._archive_comic or not self._archive_comic_container:
             return
@@ -1081,7 +1081,7 @@ class ImageLabel(QLabel):
 
         # 清除已加载图片
         for idx in list(self._gallery_loaded):
-            self._gallery_unload_image(idx)
+            self._unloadGallery(idx)
         self._gallery_current_center = -1
 
         # 重新计算高度
@@ -1097,7 +1097,7 @@ class ImageLabel(QLabel):
                     size = QSize(800, 600)
             except Exception:
                 size = QSize(800, 600)
-            self._gallery_image_heights.append(self._calc_scaled_height(size))
+            self._gallery_image_heights.append(self._calcHeight(size))
 
         self._gallery_label_tops = []
         cum_y = 0
@@ -1114,9 +1114,9 @@ class ImageLabel(QLabel):
 
         self._archive_comic_container.setMinimumHeight(self._gallery_total_height)
 
-        self._gallery_update_window()
+        self._updateGallery()
 
-    def _comic_folder_refresh(self):
+    def _refreshFolder(self):
         """缩放后刷新文件夹图库"""
         if not self._current_file_path or not os.path.exists(self._current_file_path):
             return
@@ -1125,7 +1125,7 @@ class ImageLabel(QLabel):
         if not folder:
             return
 
-        image_files = self._get_folder_images(folder)
+        image_files = self._getFolderImages(folder)
         if not image_files:
             return
 
@@ -1135,7 +1135,7 @@ class ImageLabel(QLabel):
 
         # 清除已加载图片
         for idx in list(self._gallery_loaded):
-            self._gallery_unload_image(idx)
+            self._unloadGallery(idx)
         self._gallery_current_center = -1
 
         # 重新计算高度
@@ -1145,7 +1145,7 @@ class ImageLabel(QLabel):
             size = reader.size()
             if not size.isValid():
                 size = QSize(800, 600)
-            self._gallery_image_heights.append(self._calc_scaled_height(size))
+            self._gallery_image_heights.append(self._calcHeight(size))
 
         self._gallery_label_tops = []
         cum_y = 0
@@ -1162,9 +1162,9 @@ class ImageLabel(QLabel):
 
         self._comic_container.setMinimumHeight(self._gallery_total_height)
 
-        self._gallery_update_window()
+        self._updateGallery()
     
-    def _exit_comic_view(self):
+    def _exitComicView(self):
         """退出图库模式"""
         self._comic_view_enabled = False
         self._archive_comic = False
@@ -1172,7 +1172,7 @@ class ImageLabel(QLabel):
         # 断开滚动监听
         if self._gallery_scrollbar:
             try:
-                self._gallery_scrollbar.valueChanged.disconnect(self._on_gallery_scroll)
+                self._gallery_scrollbar.valueChanged.disconnect(self._onGalleryScroll)
             except (TypeError, RuntimeError):
                 pass
             self._gallery_scrollbar = None
@@ -1214,7 +1214,7 @@ class ImageLabel(QLabel):
         self._pixmap = None
         self.setCursor(Qt.CursorShape.ArrowCursor)
     
-    def _calc_scaled_height(self, img_size):
+    def _calcHeight(self, img_size):
         """计算图片缩放后的显示高度"""
         if img_size.width() <= 0:
             return 100
@@ -1222,7 +1222,7 @@ class ImageLabel(QLabel):
         scale = base_width * self._zoom_factor / img_size.width()
         return max(1, int(img_size.height() * scale))
 
-    def _gallery_load_image(self, idx: int):
+    def _loadGallery(self, idx: int):
         """懒加载指定索引的图片"""
         try:
             label = self._comic_layout.itemAt(idx).widget()
@@ -1256,7 +1256,7 @@ class ImageLabel(QLabel):
         except Exception:
             logger.exception(f"懒加载图片失败 index={idx}")
 
-    def _gallery_unload_image(self, idx: int):
+    def _unloadGallery(self, idx: int):
         """卸载指定索引的图片（释放内存）"""
         try:
             label = self._comic_layout.itemAt(idx).widget()
@@ -1266,7 +1266,7 @@ class ImageLabel(QLabel):
         except Exception:
             logger.exception(f"卸载图片失败 index={idx}")
 
-    def _gallery_update_window(self):
+    def _updateGallery(self):
         """根据当前滚动位置更新加载窗口"""
         if not self._comic_view_enabled or self._gallery_item_count == 0:
             return
@@ -1300,23 +1300,23 @@ class ImageLabel(QLabel):
         # 卸载窗口外的图片
         for idx in list(self._gallery_loaded):
             if idx < window_start or idx > window_end:
-                self._gallery_unload_image(idx)
+                self._unloadGallery(idx)
 
         # 加载窗口内的图片
         for idx in range(window_start, window_end + 1):
             if idx not in self._gallery_loaded:
-                self._gallery_load_image(idx)
+                self._loadGallery(idx)
 
-    def _on_gallery_scroll(self, value):
+    def _onGalleryScroll(self, value):
         """滚动时更新懒加载窗口"""
         self._gallery_scroll_value = value
-        self._gallery_update_window()
+        self._updateGallery()
 
     def comicClick(self, img_path: str):
         """图库模式中点击图片，无行为，防止崩溃"""
         pass
     
-    def _get_folder_images(self, folder: str) -> list:
+    def _getFolderImages(self, folder: str) -> list:
         """获取文件夹中的所有图片，按名字排序"""
         try:
             image_files = []
@@ -1326,19 +1326,19 @@ class ImageLabel(QLabel):
                     ext = f.lower()
                     if any(ext.endswith(img_ext) for img_ext in EXTENSION["IMAGE"]):
                         image_files.append(fpath)
-            return sorted(image_files, key=lambda x: self._natural_sort_key(x))
+            return sorted(image_files, key=lambda x: self._sortKey(x))
         except Exception:
             logger.exception("获取文件夹图片失败")
             return []
     
     @staticmethod
-    def _natural_sort_key(path):
+    def _sortKey(path):
         """自然排序key：提取文件名中的数字用于排序"""
         basename = os.path.basename(path)
         parts = re.split(r'(\d+)', basename)
         return [int(p) if p.isdigit() else p for p in parts]
     
-    def set_zoom_callback(self, callback):
+    def setZoomCallback(self, callback):
         """设置缩放回调"""
         self._zoom_callback = callback
     
@@ -1359,14 +1359,14 @@ class ImageLabel(QLabel):
                 self._zoom_factor -= 0.1
 
             self._zoom_factor = max(self._min_zoom, min(self._max_zoom, self._zoom_factor))
-            self._apply_zoom()
+            self._applyZoom()
             if self._zoom_callback:
                 self._zoom_callback(self._zoom_factor)
             event.accept()
             return
         super().wheelEvent(event)
     
-    def _apply_zoom(self):
+    def _applyZoom(self):
         """应用缩放"""
         if self._pixmap and not self._pixmap.isNull():
             new_width = int(self._pixmap.width() * self._zoom_factor)

@@ -178,14 +178,14 @@ class HTTPTool:
                     self.send_response(200)
                     self.send_header("Content-Type", "application/octet-stream")
                     filename = os.path.basename(translated_path)
-                    ascii_fallback = filename.encode('ascii', errors='replace').decode('ascii')
+                    ascii_fallback = filename.encode("ascii", errors="replace").decode("ascii")
                     url_encoded = parse.quote(filename, safe='')
                     disposition = f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{url_encoded}'
                     self.send_header("Content-Disposition", disposition)
                     file_size = os.path.getsize(translated_path)
                     self.send_header("Content-Length", str(file_size))
                     self.end_headers()
-                    with open(translated_path, 'rb') as f:
+                    with open(translated_path, "rb") as f:
                         self.copyfile(f, self.wfile)
                 except ConnectionResetError:
                     raise
@@ -197,7 +197,7 @@ class HTTPTool:
                 if self.path == "/send_data":
                     try:
                         content_length = int(self.headers.get('Content-Length', 0))
-                        body = self.rfile.read(content_length).decode('utf-8')
+                        body = self.rfile.read(content_length).decode("utf-8")
                         self._handle_send_data(body)
                     except Exception:
                         logger.exception("处理send_data请求失败")
@@ -226,7 +226,7 @@ class HTTPTool:
                 fn_end = part.find(b'"', fn_start)
                 if fn_end <= fn_start:
                     return None
-                filename = part[fn_start:fn_end].decode('utf-8', errors='replace')
+                filename = part[fn_start:fn_end].decode("utf-8", errors="replace")
                 fs = part.find(b'\r\n\r\n')
                 if fs <= 0:
                     return None
@@ -583,7 +583,7 @@ class HTTPTool:
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(html.encode('utf-8'))
+                self.wfile.write(html.encode("utf-8"))
 
             def _handle_send_data(self, body):
                 try:

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QMetaObject, QEvent, QObject, Signal
 from src.util import logger, Singleton
 
 # 需要注意，PySide6 6.10.3 与 pynput 1.8.0 冲突。
+# 如果需要全局快捷键并抑制其传给系统和其他程序， Windows 使用 win32_event_filter ，macOS 使用 darwin_intercept 。 Linux 似乎暂时没有好办法。
 
 
 def copy_selection():
@@ -45,8 +46,7 @@ class GlobalHotkeyListener(Singleton):
         0x46: 'f', 0x47: 'g', 0x48: 'h', 0x49: 'i', 0x4A: 'j',
         0x4B: 'k', 0x4C: 'l', 0x4D: 'm', 0x4E: 'n', 0x4F: 'o',
         0x50: 'p', 0x51: 'q', 0x52: 'r', 0x53: 's', 0x54: 't',
-        0x55: 'u', 0x56: 'v', 0x57: 'w', 0x58: 'x', 0x59: 'y',
-        0x5A: 'z',
+        0x55: 'u', 0x56: 'v', 0x57: 'w', 0x58: 'x', 0x59: 'y', 0x5A: 'z',
         0x30: '0', 0x31: '1', 0x32: '2', 0x33: '3', 0x34: '4',
         0x35: '5', 0x36: '6', 0x37: '7', 0x38: '8', 0x39: '9',
         0xA2: 'ctrl_l', 0xA3: 'ctrl_r',
@@ -70,7 +70,7 @@ class GlobalHotkeyListener(Singleton):
     def _get_key_name(key):
         key_name = None
         key_char = getattr(key, 'char', None)
-        key_name_attr = getattr(key, 'name', None)
+        key_name_attr = getattr(key, "name", None)
         key_vk = getattr(key, 'vk', None)
 
         if key_char is not None and isinstance(key_char, str) and len(key_char) == 1 and ord(key_char) >= 32:
@@ -128,7 +128,7 @@ class GlobalHotkeyListener(Singleton):
                     last_ctrl_press_time = current_time
                     ctrl_was_held = True
                 
-                if hotkey_config:
+                if hotkey_config and not self._hotkey_triggered:
                     with self._lock:
                         if self._check_hotkey(pressed_keys_copy, hotkey_config):
                             self._hotkey_triggered = True
@@ -210,7 +210,7 @@ class GlobalHotkeyListener(Singleton):
                             self._mouse_listener.suppress_event()
 
                 self._mouse_listener = mouse.Listener(
-                    on_click=on_mouse_click,
+                    on_click=None,
                     suppress=False,
                     win32_event_filter=mouse_win32_filter
                     )
@@ -344,7 +344,7 @@ class GlobalHotkeyListener(Singleton):
         for hotkey_str, tool in self._tool_hotkeys.items():
             hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
             if hotkey_keys and self._check_hotkey(pressed_keys, hotkey_keys):
-                logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get('name', '')}")
+                logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
                 self._pending_tool = tool
                 self._pending_hotkey = hotkey_str
                 
@@ -358,7 +358,7 @@ class GlobalHotkeyListener(Singleton):
         with self._lock:
             self._tool_hotkeys[hotkey_str] = tool
             self._tool_hotkeys_cache[hotkey_str] = self._parse_hotkey(hotkey_str)
-        logger.info(f"注册工具快捷键: {hotkey_str} -> {tool.get('name', '')}")
+        logger.info(f"注册工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
     
     def clear_tool_hotkeys(self):
         """清除所有工具快捷键"""

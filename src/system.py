@@ -277,7 +277,7 @@ elif sys.platform == "linux":
     X-GNOME-Autostart-enabled=true
     """
             try:
-                desktop_file.write_text(desktop_content, encoding='utf-8')
+                desktop_file.write_text(desktop_content, encoding="utf-8")
                 return True
             except Exception:
                 logger.exception("设置 Linux 开机启动失败")
@@ -365,7 +365,7 @@ elif sys.platform == "darwin":
     </dict>
     </plist>"""
             try:
-                plist_path.write_text(plist_content, encoding='utf-8')
+                plist_path.write_text(plist_content, encoding="utf-8")
                 subprocess.run(["launchctl", "load", str(plist_path)], check=False)
                 return True
             except Exception:

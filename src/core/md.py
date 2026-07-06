@@ -176,7 +176,7 @@ def _convertImageToDataUri(file_path: str, image_path: str) -> Optional[str]:
             logger.warning(f"图片文件不存在: {image_file}")
             return None
 
-        with open(image_file, 'rb') as f:
+        with open(image_file, "rb") as f:
             image_data = f.read()
 
         mime_types = {
@@ -192,7 +192,7 @@ def _convertImageToDataUri(file_path: str, image_path: str) -> Optional[str]:
 
         ext = image_file.suffix.lower()
         mime_type = mime_types.get(ext, 'application/octet-stream')
-        b64_data = base64.b64encode(image_data).decode('utf-8')
+        b64_data = base64.b64encode(image_data).decode("utf-8")
 
         return f"data:{mime_type};base64,{b64_data}"
     except Exception:

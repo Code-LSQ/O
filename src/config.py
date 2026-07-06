@@ -112,7 +112,7 @@ class ConfigManager(Singleton):
         """加载配置文件"""
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, "r", encoding="utf-8") as f:
                     loaded_config = json.load(f)
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
                 self.config = self._deepUpdate(self.config, loaded_config)
@@ -148,7 +148,7 @@ class ConfigManager(Singleton):
         tmp = None
         try:
             fd, tmp = tempfile.mkstemp(suffix='.tmp', prefix='config_', dir=self.config_path.parent)
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(fd)
@@ -196,24 +196,24 @@ class ConfigManager(Singleton):
         recent.insert(0, file_path)
         self.set("Edit.recent", recent[:10])
 
-    def get_favorites(self) -> list:
+    def getFavorites(self) -> list:
         return self.get("Edit.favorites", [])
 
-    def add_favorite(self, file_path: str):
+    def addFavorite(self, file_path: str):
         file_path = os.path.normpath(file_path)
         favorites = self.get("Edit.favorites", [])
         if file_path not in favorites:
             favorites.insert(0, file_path)
             self.set("Edit.favorites", favorites)
 
-    def remove_favorite(self, file_path: str):
+    def removeFavorite(self, file_path: str):
         file_path = os.path.normpath(file_path)
         favorites = self.get("Edit.favorites", [])
         if file_path in favorites:
             favorites.remove(file_path)
             self.set("Edit.favorites", favorites)
 
-    def is_favorite(self, file_path: str) -> bool:
+    def isFavorite(self, file_path: str) -> bool:
         file_path = os.path.normpath(file_path)
         return file_path in self.get("Edit.favorites", [])
 
@@ -242,9 +242,9 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(tr("设置"))
         self.setMinimumSize(500, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.init_ui()
+        self.initUI()
 
-    def init_ui(self):
+    def initUI(self):
         layout = QVBoxLayout(self)
 
         content_layout = QHBoxLayout()
@@ -257,9 +257,9 @@ class SettingsDialog(QDialog):
         layout.addLayout(content_layout)
 
         tabs = [
-            (self.init_options_tab(), tr("选项")),
-            (self.init_edit_tab(), tr("编辑")),
-            (self.init_shortcuts_tab(), tr("快捷键")),
+            (self.initOptions(), tr("选项")),
+            (self.initEdit(), tr("编辑")),
+            (self.initShortcuts(), tr("快捷键")),
         ]
         for widget, name in tabs:
             scroll = QScrollArea()
@@ -295,7 +295,7 @@ class SettingsDialog(QDialog):
                 themes.append(file.stem)
         return sorted(themes)
 
-    def init_options_tab(self):
+    def initOptions(self):
         """选项设置"""
         tab = QWidget()
         layout = QFormLayout(tab)
@@ -305,7 +305,7 @@ class SettingsDialog(QDialog):
         self.language_combo.addItem("简体中文", "简体中文")
         for file in sorted(lang_dir.glob("*.json")):
             try:
-                data = json.loads(file.read_text(encoding='utf-8'))
+                data = json.loads(file.read_text(encoding="utf-8"))
                 name = data.get("翻译")
                 if name:
                     self.language_combo.addItem(name, file.stem)
@@ -397,7 +397,7 @@ class SettingsDialog(QDialog):
         self.launcher_hotkey_edit.setText(launcher_config.get("hotkey", ""))
         self.launcher_hotkey_edit.setPlaceholderText("点击输入快捷键")
         self.launcher_key_capture_filter = KeyCaptureFilter(self)
-        self.launcher_key_capture_filter.key_captured.connect(self._on_launcher_key_captured)
+        self.launcher_key_capture_filter.key_captured.connect(self._onHotkeyCapture)
         self.launcher_hotkey_edit.installEventFilter(self.launcher_key_capture_filter)
         layout.addRow("快捷键", self.launcher_hotkey_edit)
 
@@ -485,7 +485,7 @@ class SettingsDialog(QDialog):
         self._launcher_config = launcher_config
         return tab
 
-    def init_edit_tab(self):
+    def initEdit(self):
         """编辑器设置"""
         tab = QWidget()
         layout = QFormLayout(tab)
@@ -538,11 +538,11 @@ class SettingsDialog(QDialog):
         layout.addRow("自动保存", auto_save_layout)
 
         # 搜索引擎管理
-        self._init_search_engines_section(layout)
+        self._initEngines(layout)
 
         return tab
 
-    def _init_search_engines_section(self, layout):
+    def _initEngines(self, layout):
         """搜索引擎管理"""
         self.search_engines_list = QListWidget()
         self.search_engines_list.setMaximumHeight(80)
@@ -555,21 +555,21 @@ class SettingsDialog(QDialog):
 
         engine_btn_layout = QHBoxLayout()
         self.add_engine_btn = QPushButton(tr("添加"))
-        self.add_engine_btn.clicked.connect(self._add_search_engine)
+        self.add_engine_btn.clicked.connect(self._addEngine)
         engine_btn_layout.addWidget(self.add_engine_btn)
 
         self.edit_engine_btn = QPushButton(tr("编辑"))
-        self.edit_engine_btn.clicked.connect(self._edit_search_engine)
+        self.edit_engine_btn.clicked.connect(self._editEngine)
         engine_btn_layout.addWidget(self.edit_engine_btn)
 
         self.remove_engine_btn = QPushButton(tr("删除"))
-        self.remove_engine_btn.clicked.connect(self._remove_search_engine)
+        self.remove_engine_btn.clicked.connect(self._delEngine)
         engine_btn_layout.addWidget(self.remove_engine_btn)
 
         engine_btn_layout.addStretch(1)
         layout.setLayout(11, QFormLayout.ItemRole.SpanningRole, engine_btn_layout)
 
-    def _engine_dialog(self, title: str, name: str = "", url: str = ""):
+    def _engineDialog(self, title: str, name: str = "", url: str = ""):
         """搜索引擎编辑对话框，返回 (名称, URL) 或 (None, None)"""
         while True:
             dialog = QDialog(self)
@@ -601,30 +601,30 @@ class SettingsDialog(QDialog):
                     return n, u
             return None, None
 
-    def _add_search_engine(self):
-        name, url = self._engine_dialog("添加搜索引擎")
+    def _addEngine(self):
+        name, url = self._engineDialog("添加搜索引擎")
         if name and url:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, url)
             self.search_engines_list.addItem(item)
 
-    def _edit_search_engine(self):
+    def _editEngine(self):
         current_item = self.search_engines_list.currentItem()
         if not current_item:
             messageBox(self, "警告", "请先选择一个要编辑的搜索引擎", 1)
             return
-        name, url = self._engine_dialog("编辑搜索引擎", current_item.text(), current_item.data(Qt.ItemDataRole.UserRole))
+        name, url = self._engineDialog("编辑搜索引擎", current_item.text(), current_item.data(Qt.ItemDataRole.UserRole))
         if name and url:
             current_item.setText(name)
             current_item.setData(Qt.ItemDataRole.UserRole, url)
 
-    def _remove_search_engine(self):
+    def _delEngine(self):
         """删除搜索引擎"""
         current_row = self.search_engines_list.currentRow()
         if current_row >= 0:
             self.search_engines_list.takeItem(current_row)
 
-    def init_shortcuts_tab(self):
+    def initShortcuts(self):
         """快捷键设置"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -660,18 +660,18 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(self.shortcuts_table)
         
-        self.shortcuts_table.cellDoubleClicked.connect(self._on_shortcuts_cell_double_clicked)
+        self.shortcuts_table.cellDoubleClicked.connect(self._onCellDblClick)
         self.shortcuts_table.viewport().installEventFilter(self)
         
         reset_btn = QPushButton("重置为默认值")
-        reset_btn.clicked.connect(self._reset_shortcuts_to_default)
+        reset_btn.clicked.connect(self._setDefaults)
         layout.addWidget(reset_btn)
         
         self._shortcuts_capturing = False
         self._capturing_row = -1
         return tab
     
-    def _on_shortcuts_cell_double_clicked(self, row, column):
+    def _onCellDblClick(self, row, column):
         """双击快捷键列时开始捕获"""
         if column == 1:
             self._shortcuts_capturing = True
@@ -684,13 +684,13 @@ class SettingsDialog(QDialog):
             if editor:
                 self._shortcut_editor = editor
                 self._shortcut_key_filter = KeyCaptureFilter(self)
-                self._shortcut_key_filter.key_captured.connect(lambda seq: self._on_shortcut_key_captured(seq, row))
-                self._shortcut_key_filter.capture_cancelled.connect(lambda: self._on_shortcut_cancelled(row))
+                self._shortcut_key_filter.key_captured.connect(lambda seq: self._onKeyCapture(seq, row))
+                self._shortcut_key_filter.capture_cancelled.connect(lambda: self._onCancelCapture(row))
                 editor.installEventFilter(self._shortcut_key_filter)
                 editor.installEventFilter(self)
                 editor.setFocus()
 
-    def _on_shortcut_key_captured(self, seq, row):
+    def _onKeyCapture(self, seq, row):
         """处理快捷键捕获"""
         key_item = self.shortcuts_table.item(row, 1)
         if key_item:
@@ -699,11 +699,11 @@ class SettingsDialog(QDialog):
             self._shortcut_editor.setText(seq)
             self._shortcut_editor.selectAll()
 
-    def _on_shortcut_cancelled(self, row):
+    def _onCancelCapture(self, row):
         """取消快捷键捕获"""
-        self._cleanup_shortcut_editor(row)
+        self._closeEditor(row)
 
-    def _cleanup_shortcut_editor(self, row):
+    def _closeEditor(self, row):
         """清理快捷键编辑器"""
         key_item = self.shortcuts_table.item(row, 1)
         if key_item:
@@ -719,7 +719,7 @@ class SettingsDialog(QDialog):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.FocusOut and self._shortcuts_capturing \
                 and obj is getattr(self, '_shortcut_editor', None):
-            self._cleanup_shortcut_editor(self._capturing_row)
+            self._closeEditor(self._capturing_row)
             return True
         if event.type() == QEvent.Type.KeyPress and self._shortcuts_capturing and obj == self.shortcuts_table.viewport():
                 key = event.key()
@@ -737,11 +737,11 @@ class SettingsDialog(QDialog):
                 return True
         return super().eventFilter(obj, event)
 
-    def _on_launcher_key_captured(self, seq):
+    def _onHotkeyCapture(self, seq):
         """处理启动器快捷键捕获"""
         self.launcher_hotkey_edit.setText(seq)
 
-    def _reset_shortcuts_to_default(self):
+    def _setDefaults(self):
         """重置快捷键为默认值"""
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
         self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
