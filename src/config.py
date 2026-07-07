@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBox
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
 from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
-from src.core.input import translate_key_to_str, KeyCaptureFilter
+from src.core.input import eventToKey, KeyCaptureFilter
 from src.system import setAutoStart
 
 DEFAULT_CONFIG = {
@@ -727,7 +727,7 @@ class SettingsDialog(QDialog):
                     self._shortcuts_capturing = False
                     self._capturing_row = -1
                     return True
-                seq = translate_key_to_str(event)
+                seq = eventToKey(event)
                 if seq:
                     key_item = self.shortcuts_table.item(self._capturing_row, 1)
                     if key_item:

@@ -18,29 +18,29 @@ class TimerManager(Singleton):
         self._timers = []
         self._one_shot_timers = []
     
-    def create_timer(self, parent=None) -> QTimer:
+    def createTimer(self, parent=None) -> QTimer:
         """创建并注册计时器"""
         timer = QTimer(parent)
         self._timers.append(timer)
         return timer
     
-    def create_one_shot(self, interval: int, callback: Callable, parent=None) -> QTimer:
+    def createOneShot(self, interval: int, callback: Callable, parent=None) -> QTimer:
         """创建单次触发的计时器"""
         timer = QTimer(parent)
         timer.setSingleShot(True)
-        timer.timeout.connect(lambda: (callback(), self._remove_one_shot(timer)))
+        timer.timeout.connect(lambda: (callback(), self._removeOneShot(timer)))
         timer.start(interval)
         self._one_shot_timers.append(timer)
         return timer
     
-    def _remove_one_shot(self, timer: QTimer):
+    def _removeOneShot(self, timer: QTimer):
         """移除单次计时器"""
         if timer in self._one_shot_timers:
             self._one_shot_timers.remove(timer)
         if timer in self._timers:
             self._timers.remove(timer)
     
-    def stop_all(self):
+    def stopAll(self):
         """停止并清理所有计时器"""
         for timer in self._timers[:]:
             if timer.isActive():
@@ -63,7 +63,7 @@ class WeakCallbackSet:
     def add(self, callback: Callable) -> bool:
         """添加回调，返回是否添加成功"""
         try:
-            wr = weakref.ref(callback, lambda ref: self._remove_dead(ref))
+            wr = weakref.ref(callback, lambda ref: self._removeDead(ref))
             if wr not in self._weak_refs:
                 self._callbacks.append(callback)
                 self._weak_refs.append(wr)
@@ -83,7 +83,7 @@ class WeakCallbackSet:
         except (ValueError, TypeError):
             pass
     
-    def _remove_dead(self, ref):
+    def _removeDead(self, ref):
         """移除已失效的弱引用"""
         try:
             if ref in self._weak_refs:
@@ -135,15 +135,15 @@ class LRUCache:
         return len(self._cache)
 
 
-def single_shot(interval: int, callback: Callable, parent=None):
+def singleShot(interval: int, callback: Callable, parent=None):
     """便捷函数：单次定时执行"""
     manager = TimerManager()
-    return manager.create_one_shot(interval, callback, parent)
+    return manager.createOneShot(interval, callback, parent)
 
 
-def delayed_call(interval: int, callback: Callable, parent=None) -> QTimer:
-    """延迟执行回调（与 single_shot 等效）"""
-    return single_shot(interval, callback, parent)
+def delayedCall(interval: int, callback: Callable, parent=None) -> QTimer:
+    """延迟执行回调（与 singleShot 等效）"""
+    return singleShot(interval, callback, parent)
 
 
 class _CronField:
@@ -183,7 +183,7 @@ class _CronField:
     def match(self, v: int) -> bool:
         return v in self._values
 
-    def next_match(self, v: int) -> Optional[int]:
+    def nextMatch(self, v: int) -> Optional[int]:
         for candidate in sorted(self._values):
             if candidate >= v:
                 return candidate
@@ -208,7 +208,7 @@ class _CronExpr:
         if 7 in self._days_of_week._values:
             self._days_of_week._values.add(0)
 
-    def next_match(self, after: datetime) -> datetime:
+    def nextMatch(self, after: datetime) -> datetime:
         y, mo, d = after.year, after.month, after.day
         h, mi = after.hour, after.minute + 1
 
@@ -226,7 +226,7 @@ class _CronExpr:
             if mo > 12:
                 mo = 1; y += 1
 
-            nm = self._months.next_match(mo)
+            nm = self._months.nextMatch(mo)
             if nm is None:
                 y += 1; mo = 1; d = 1; h = 0; mi = 0
                 continue
@@ -240,12 +240,12 @@ class _CronExpr:
                 if dom_all and dow_all:
                     match = True
                 elif dom_all:
-                    match = self._days_of_week.match(_cron_weekday(y, mo, try_d))
+                    match = self._days_of_week.match(_cronWeekday(y, mo, try_d))
                 elif dow_all:
                     match = self._days_of_month.match(try_d)
                 else:
                     match = (self._days_of_month.match(try_d)
-                             or self._days_of_week.match(_cron_weekday(y, mo, try_d)))
+                             or self._days_of_week.match(_cronWeekday(y, mo, try_d)))
                 if match and try_d > d:
                     d = try_d; h = 0; mi = 0
                     day_ok = True
@@ -254,7 +254,7 @@ class _CronExpr:
                 mo += 1; d = 1; h = 0; mi = 0
                 continue
 
-            nh = self._hours.next_match(h)
+            nh = self._hours.nextMatch(h)
             if nh is None:
                 d += 1; h = 0; mi = 0
                 continue
@@ -262,7 +262,7 @@ class _CronExpr:
                 h = nh; mi = 0
                 continue
 
-            nm = self._minutes.next_match(mi)
+            nm = self._minutes.nextMatch(mi)
             if nm is None:
                 h += 1; mi = 0
                 continue
@@ -273,7 +273,7 @@ class _CronExpr:
             return datetime(y, mo, d, h, mi)
 
 
-def _cron_weekday(year: int, month: int, day: int) -> int:
+def _cronWeekday(year: int, month: int, day: int) -> int:
     """cron 星期约定：0=周日, 6=周六"""
     return (datetime(year, month, day).weekday() + 1) % 7
 
@@ -314,19 +314,19 @@ class CronTask:
             self._running = True
             self._stop_event.clear()
             self._thread = threading.Thread(
-                target=self._run_loop, daemon=self._daemon, name=self._name
+                target=self._runLoop, daemon=self._daemon, name=self._name
             )
             self._thread.start()
 
     def stop(self):
-        self.stop_nowait()
+        self.stopNowait()
         thread = None
         with self._lock:
             thread = self._thread
         if thread and thread.is_alive() and not self._daemon:
             thread.join()
 
-    def stop_nowait(self):
+    def stopNowait(self):
         with self._lock:
             if not self._running:
                 return
@@ -338,14 +338,14 @@ class CronTask:
     def running(self) -> bool:
         return self._running
 
-    def is_running(self) -> bool:
+    def isRunning(self) -> bool:
         return self._running
 
-    def _run_loop(self):
+    def _runLoop(self):
         while self._running:
             try:
                 now = datetime.now()
-                next_time = self._expr.next_match(now)
+                next_time = self._expr.nextMatch(now)
                 delay = (next_time - datetime.now()).total_seconds()
                 if delay < 0:
                     delay = 0
@@ -367,7 +367,7 @@ class CronTask:
                     break
 
 
-def cron_schedule(cron_expr: str, callback: Callable, *args, **kwargs) -> CronTask:
+def cronSchedule(cron_expr: str, callback: Callable, *args, **kwargs) -> CronTask:
     """创建并启动一个 cron 定时任务
 
     参数:
@@ -380,7 +380,7 @@ def cron_schedule(cron_expr: str, callback: Callable, *args, **kwargs) -> CronTa
         已启动的 CronTask 实例（可调用 stop() 停止）
 
     用法:
-        task = cron_schedule(\"*/5 * * * *\", my_func)
+        task = cronSchedule(\"*/5 * * * *\", my_func)
         task.stop()
     """
     task = CronTask(cron_expr, callback, *args, **kwargs)

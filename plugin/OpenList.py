@@ -9,7 +9,6 @@ import subprocess
 import webbrowser
 from pathlib import Path
 from urllib.parse import quote
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 
@@ -216,7 +215,7 @@ class OpenListPlugin(PluginBase):
         self.username = self.settings.get("username", "")
         self.password = self.settings.get("password", "")
         self.selected_task_name = self.settings.get("selected_task", "")
-        self.tasks = [TaskConfig.from_dict(t) for t in self.settings.get("tasks", [])]
+        self.tasks = [TaskConfig.fromDict(t) for t in self.settings.get("tasks", [])]
 
     def saveConfig(self) -> dict:
         self.settings.update({
@@ -225,7 +224,7 @@ class OpenListPlugin(PluginBase):
             "username": self.username,
             "password": self.password,
             "selected_task": self.selected_task_name,
-            "tasks": [t.to_dict() for t in self.tasks]
+            "tasks": [t.toDict() for t in self.tasks]
         })
         return super().saveConfig()
 
@@ -235,10 +234,10 @@ class OpenListPlugin(PluginBase):
 
     def getAction(self):
         action = QAction(self.description, self.main_window)
-        action.triggered.connect(self.show_settings)
+        action.triggered.connect(self.showSettings)
         return action
 
-    def show_settings(self):
+    def showSettings(self):
         self.initialize()
         dialog = QDialog(self.main_window)
         dialog.setWindowTitle("OpenList")
@@ -248,10 +247,10 @@ class OpenListPlugin(PluginBase):
         widget = OpenListWidget(self.main_window, self)
         layout.addWidget(widget)
         dialog.setMinimumSize(600, 500)
-        dialog.finished.connect(lambda: (widget._save_settings(), widget._cleanup_timer()))
+        dialog.finished.connect(lambda: (widget._saveSettings(), widget._cleanupTimer()))
         dialog.show()
 
-    def get_client(self):
+    def getClient(self):
         """获取 API 客户端"""
         if self.client is None:
             self.client = OpenListClient(f"http://{self.port}")
@@ -260,7 +259,7 @@ class OpenListPlugin(PluginBase):
 
     def login(self) -> bool:
         """登录 OpenList"""
-        client = self.get_client()
+        client = self.getClient()
         if client:
             return client.login(self.username, self.password)
         return False
@@ -274,20 +273,23 @@ class OpenListPlugin(PluginBase):
         self.saveConfig()
 
 
-@dataclass
 class TaskConfig:
     """任务配置"""
-    name: str = ""
-    src_path: str = ""          # 源目录（本地）
-    dst_path: str = ""          # 目标目录（OpenList）
-    exclude_rules: str = ""     # 排除规则（每行一项，支持通配符和根路径 / 前缀）
-    mode: str = MODE_BACKUP     # 同步模式
-    confirm_before_sync: bool = False  # 同步前确认
-    use_cloud_cache: bool = False      # 使用云缓存
-    tar_folders: str = ""        # 打包成 tar 的文件夹（每行一项，绝对路径）
-    tree_folders: str = ""       # 上传文件树的文件夹（每行一项，绝对路径）
 
-    def to_dict(self) -> dict:
+    def __init__(self, name="", src_path="", dst_path="", exclude_rules="",
+                 mode=MODE_BACKUP, confirm_before_sync=False, use_cloud_cache=False,
+                 tar_folders="", tree_folders=""):
+        self.name = name
+        self.src_path = src_path          # 源目录（本地）
+        self.dst_path = dst_path          # 目标目录（OpenList）
+        self.exclude_rules = exclude_rules # 排除规则
+        self.mode = mode                  # 同步模式
+        self.confirm_before_sync = confirm_before_sync
+        self.use_cloud_cache = use_cloud_cache
+        self.tar_folders = tar_folders    # 打包成 tar 的文件夹
+        self.tree_folders = tree_folders  # 上传文件树的文件夹
+
+    def toDict(self) -> dict:
         return {
             "name": self.name,
             "src_path": self.src_path,
@@ -301,7 +303,7 @@ class TaskConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'TaskConfig':
+    def fromDict(cls, data: dict) -> 'TaskConfig':
         return cls(
             name=data.get("name", ""),
             src_path=data.get("src_path", ""),
@@ -315,37 +317,29 @@ class TaskConfig:
         )
 
 
-@dataclass
 class TaskResult:
     """任务执行结果"""
-    total_files: int = 0
-    upload_success: int = 0
-    upload_failed: int = 0
-    delete_success: int = 0
-    delete_failed: int = 0
-    rename_success: int = 0
-    rename_failed: int = 0
-    total_size: int = 0
-    uploaded_size: int = 0
-    duration: float = 0.0
-    status: str = ""
-    error_msg: str = ""
-    upload_success_files: List[str] = None
-    upload_failed_files: List[str] = None
-    delete_success_files: List[str] = None
-    delete_failed_files: List[str] = None
 
-    def __post_init__(self):
-        if self.upload_success_files is None:
-            self.upload_success_files = []
-        if self.upload_failed_files is None:
-            self.upload_failed_files = []
-        if self.delete_success_files is None:
-            self.delete_success_files = []
-        if self.delete_failed_files is None:
-            self.delete_failed_files = []
+    def __init__(self, **kwargs):
+        self.total_files = 0
+        self.upload_success = 0
+        self.upload_failed = 0
+        self.delete_success = 0
+        self.delete_failed = 0
+        self.rename_success = 0
+        self.rename_failed = 0
+        self.total_size = 0
+        self.uploaded_size = 0
+        self.duration = 0.0
+        self.status = ""
+        self.error_msg = ""
+        self.upload_success_files = []
+        self.upload_failed_files = []
+        self.delete_success_files = []
+        self.delete_failed_files = []
+        self.__dict__.update(kwargs)
 
-    def to_dict(self) -> dict:
+    def toDict(self) -> dict:
         return {
             "total_files": self.total_files,
             "upload_success": self.upload_success,
@@ -396,7 +390,7 @@ class OpenListClient:
             logger.exception("登录失败")
             return False
 
-    def list_dir(self, path: str) -> List[dict]:
+    def listDir(self, path: str) -> List[dict]:
         """获取目录列表"""
         try:
             resp = self.session.post(
@@ -427,7 +421,7 @@ class OpenListClient:
             logger.exception("创建目录失败")
             return False
 
-    def upload_file(self, local_path: str, remote_path: str, overwrite: bool = True, mtime: int = 0) -> bool:
+    def uploadFile(self, local_path: str, remote_path: str, overwrite: bool = True, mtime: int = 0) -> bool:
         """上传文件"""
         try:
             with open(local_path, "rb") as f:
@@ -496,9 +490,9 @@ class FileConfirmDialog(QDialog):
         self.mode = mode
         self.setWindowTitle("确认同步操作")
         self.setMinimumSize(600, 500)
-        self._init_ui()
+        self._initUi()
 
-    def _init_ui(self):
+    def _initUi(self):
         layout = QVBoxLayout(self)
 
         # 统计信息
@@ -517,7 +511,7 @@ class FileConfirmDialog(QDialog):
         self.upload_tree = QTreeWidget()
         self.upload_tree.setHeaderLabels(["文件路径", "大小"])
         self.upload_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self._build_tree(self.upload_tree, self.to_upload)
+        self._buildTree(self.upload_tree, self.to_upload)
         layout.addWidget(self.upload_tree)
 
         if self.mode == MODE_SYNC and self.to_delete:
@@ -525,13 +519,13 @@ class FileConfirmDialog(QDialog):
             self.delete_tree = QTreeWidget()
             self.delete_tree.setHeaderLabels(["文件路径", "大小"])
             self.delete_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            self._build_tree(self.delete_tree, self.to_delete)
+            self._buildTree(self.delete_tree, self.to_delete)
             layout.addWidget(self.delete_tree)
 
         # 按钮
         dialogBox(layout, self, show=False)
 
-    def _build_tree(self, tree: QTreeWidget, files: dict):
+    def _buildTree(self, tree: QTreeWidget, files: dict):
         """构建树状文件结构"""
         # 构建目录节点缓存
         dir_items = {}
@@ -576,9 +570,9 @@ class SyncResultDialog(QDialog):
         self.result = result
         self.setWindowTitle("同步结果")
         self.setMinimumSize(600, 500)
-        self._init_ui()
+        self._initUi()
 
-    def _init_ui(self):
+    def _initUi(self):
         layout = QVBoxLayout(self)
 
         status = self.result.get("status", "unknown")
@@ -619,7 +613,7 @@ class SyncResultDialog(QDialog):
             tree = QTreeWidget()
             tree.setHeaderLabels(["文件路径", "状态"])
             tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            self._build_tree(tree, upload_success_files, "成功")
+            self._buildTree(tree, upload_success_files, "成功")
             tree.setMaximumHeight(150)
             layout.addWidget(tree)
 
@@ -630,7 +624,7 @@ class SyncResultDialog(QDialog):
             tree = QTreeWidget()
             tree.setHeaderLabels(["文件路径", "状态"])
             tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            self._build_tree(tree, upload_failed_files, "失败")
+            self._buildTree(tree, upload_failed_files, "失败")
             tree.setMaximumHeight(150)
             layout.addWidget(tree)
 
@@ -641,7 +635,7 @@ class SyncResultDialog(QDialog):
             tree = QTreeWidget()
             tree.setHeaderLabels(["文件路径", "状态"])
             tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            self._build_tree(tree, delete_success_files, "成功")
+            self._buildTree(tree, delete_success_files, "成功")
             tree.setMaximumHeight(150)
             layout.addWidget(tree)
 
@@ -652,14 +646,14 @@ class SyncResultDialog(QDialog):
             tree = QTreeWidget()
             tree.setHeaderLabels(["文件路径", "状态"])
             tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-            self._build_tree(tree, delete_failed_files, "失败")
+            self._buildTree(tree, delete_failed_files, "失败")
             tree.setMaximumHeight(150)
             layout.addWidget(tree)
 
         # 关闭按钮
         dialogBox(layout, self, num=1, show=False)
 
-    def _build_tree(self, tree: QTreeWidget, files: list, status: str):
+    def _buildTree(self, tree: QTreeWidget, files: list, status: str):
         """构建树状文件结构"""
         dir_items = {}
 
@@ -736,13 +730,13 @@ class SyncWorker(QThread):
         self._upload_start = 0
 
         try:
-            self._do_sync()
+            self._doSync()
         except Exception as e:
             self.result.status = TASK_STATUS_FAILED
             self.result.error_msg = str(e)
             self.log(f"任务执行失败: {e}", "error")
         finally:
-            self.clean_tar()
+            self.cleanTar()
 
         self.result.duration = (time.time() - self._upload_start) if self._upload_start > 0 else 0
         if self.result.status == TASK_STATUS_RUNNING:
@@ -762,13 +756,13 @@ class SyncWorker(QThread):
 
         self.finished.emit(self.result.__dict__)
 
-    def _do_sync(self):
+    def _doSync(self):
         self.log(f"开始执行 OpenList 任务: {self.task.name}\n源目录: {self.task.src_path}，目标目录: {self.task.dst_path}，模式: {'同步' if self.task.mode == MODE_SYNC else '备份'}")
 
         # 扫描本地目录
         scan_start = time.time()
         self.log_queue.put("正在扫描本地目录...")
-        local_files = self._scan_local()
+        local_files = self._scanLocal()
         self.result.total_files = len(local_files)
         self.log(f"本地文件数: {len(local_files)}")
 
@@ -777,7 +771,7 @@ class SyncWorker(QThread):
 
         # 获取云目录
         self.log_queue.put("正在获取远程目录...")
-        remote_files = self._get_remote_files()
+        remote_files = self._getRemoteFiles()
         self.log(f"远程文件数: {len(remote_files)}")
         self.log(f"扫描完成，耗时: {time.time() - scan_start:.2f}s，"
                  f"本地 {len(local_files)} 个文件，远程 {len(remote_files)} 个文件")
@@ -786,12 +780,12 @@ class SyncWorker(QThread):
             return
 
         # 处理 tar 和 tree 文件夹（需要远程文件信息判断是否需要重建）
-        self._process_tar_folders(local_files, remote_files)
-        self._process_tree_folders(local_files, remote_files)
+        self._processTarFolders(local_files, remote_files)
+        self._processTreeFolders(local_files, remote_files)
 
         # 对比差异
         self.log_queue.put("正在对比文件差异...")
-        to_upload, to_delete = self._compare_files(local_files, remote_files)
+        to_upload, to_delete = self._compareFiles(local_files, remote_files)
         self.log(f"需要上传: {len(to_upload)} 个文件")
         if self.task.mode == MODE_SYNC:
             self.log(f"需要删除: {len(to_delete)} 个文件")
@@ -836,16 +830,16 @@ class SyncWorker(QThread):
                     self.result.rename_failed += 1
                     self.log(f"  旧文件备份失败（可能已被删除），继续上传")
 
-            self._emit_progress(f"上传: {rel_path}", i + 1, total)
+            self._emitProgress(f"上传: {rel_path}", i + 1, total)
             self.log_queue.put(f"[{i+1}/{total}] 上传: {rel_path}")
 
             # 确保目标目录存在
             remote_dir = os.path.dirname(remote_file)
-            self._ensure_remote_dir(remote_dir)
+            self._ensureRemoteDir(remote_dir)
 
             # 上传文件（自动重试3次）
             mtime = file_info.get("mtime", 0) * 1000
-            success = self._upload_file_with_retry(local_file, remote_file, rel_path, mtime=mtime)
+            success = self._uploadFileWithRetry(local_file, remote_file, rel_path, mtime=mtime)
             if success:
                 self.result.upload_success += 1
                 self.result.uploaded_size += file_info["size"]
@@ -864,16 +858,16 @@ class SyncWorker(QThread):
         # 同步模式删除多余文件
         if self.task.mode == MODE_SYNC and not self._abort:
             self.log_queue.put("开始删除多余文件...")
-            self._delete_remote_files(to_delete)
+            self._deleteRemoteFiles(to_delete)
             self.log(f"删除完成: 成功 {self.result.delete_success}，失败 {self.result.delete_failed}")
 
-    def _upload_file_with_retry(self, local_file: str, remote_file: str,
+    def _uploadFileWithRetry(self, local_file: str, remote_file: str,
                                 rel_path: str = "", max_retries: int = 3, mtime: int = 0) -> bool:
         """上传单个文件，失败自动重试（指数退避）"""
         for attempt in range(1, max_retries + 1):
             if self._abort:
                 return False
-            success = self.client.upload_file(local_file, remote_file, mtime=mtime)
+            success = self.client.uploadFile(local_file, remote_file, mtime=mtime)
             if success:
                 return True
             if attempt < max_retries:
@@ -884,7 +878,7 @@ class SyncWorker(QThread):
         logger.error(f"OpenList 上传失败，已重试{max_retries}次: {rel_path}")
         return False
 
-    def _delete_file_with_retry(self, remote_dir: str, file_name: str,
+    def _deleteFileWithRetry(self, remote_dir: str, file_name: str,
                                 file_path: str = "", max_retries: int = 3) -> bool:
         """删除远程文件，失败自动重试（指数退避）"""
         for attempt in range(1, max_retries + 1):
@@ -901,7 +895,7 @@ class SyncWorker(QThread):
         logger.error(f"OpenList 删除失败，已重试{max_retries}次: {file_path}")
         return False
 
-    def _scan_local(self) -> dict:
+    def _scanLocal(self) -> dict:
         """扫描本地目录，返回 {相对路径: {size, mtime}}"""
         files = {}
         src_path = self.task.src_path
@@ -947,7 +941,7 @@ class SyncWorker(QThread):
 
         return files
 
-    def _create_tar(self, src_folder: str, tar_path: Path) -> bool:
+    def _createTar(self, src_folder: str, tar_path: Path) -> bool:
         """创建 tar 打包文件（应用排除规则）"""
         try:
             folder_name = os.path.basename(src_folder)
@@ -976,7 +970,7 @@ class SyncWorker(QThread):
             self.log(f"打包失败: {e}", "error")
             return False
 
-    def _fileTree_file(self, folder_path: str) -> Path:
+    def _fileTreeFile(self, folder_path: str) -> Path:
         """生成树形文本文件"""
         folder_name = os.path.basename(folder_path)
         tree_filename = f"{folder_name}_tree.txt"
@@ -994,7 +988,7 @@ class SyncWorker(QThread):
             self.log(f"生成树形文件失败: {e}", "error")
             return None
 
-    def clean_tar(self):
+    def cleanTar(self):
         """清理临时目录"""
         try:
             tar_dir = temp_dir / "tar"
@@ -1004,7 +998,7 @@ class SyncWorker(QThread):
         except Exception as e:
             self.log_queue.put(f"清理临时文件失败: {e}")
 
-    def _process_tar_folders(self, files: dict, remote_files: dict):
+    def _processTarFolders(self, files: dict, remote_files: dict):
         """处理需要打包成 tar 的文件夹"""
         if not self.task.tar_folders:
             return
@@ -1037,7 +1031,7 @@ class SyncWorker(QThread):
                     continue
 
             self.log_queue.put(f"需要重新打包: {folder_name}")
-            if not self._create_tar(folder_path, tar_path):
+            if not self._createTar(folder_path, tar_path):
                 continue
 
             # 添加到上传列表
@@ -1055,7 +1049,7 @@ class SyncWorker(QThread):
                 except Exception as e:
                     self.log_queue.put(f"添加 tar 文件失败: {e}")
 
-    def _process_tree_folders(self, files: dict, remote_files: dict):
+    def _processTreeFolders(self, files: dict, remote_files: dict):
         """处理需要生成文件树的文件夹"""
         if not self.task.tree_folders:
             return
@@ -1082,7 +1076,7 @@ class SyncWorker(QThread):
                     self.log_queue.put(f"跳过未变化的树形文件: {tree_filename}")
                     continue
 
-            tree_path = self._fileTree_file(folder_path)
+            tree_path = self._fileTreeFile(folder_path)
             if tree_path and tree_path.exists():
                 try:
                     stat = tree_path.stat()
@@ -1098,7 +1092,7 @@ class SyncWorker(QThread):
                 except Exception as e:
                     self.log_queue.put(f"添加树形文件失败: {e}")
 
-    def _get_remote_files(self) -> dict:
+    def _getRemoteFiles(self) -> dict:
         """获取远程文件列表"""
         task_name = self.task.name
 
@@ -1116,16 +1110,16 @@ class SyncWorker(QThread):
         self.log_queue.put("正在扫描远程目录...")
         remote_files = {}
         self._cache_flush_count = 0
-        self._scan_remote_dir(self.task.dst_path, "", remote_files)
+        self._scanRemoteDir(self.task.dst_path, "", remote_files)
 
         # 启用云缓存 → 最终写入缓存
         if self.task.use_cloud_cache:
-            self._save_cache_progress(task_name, remote_files)
+            self._saveCacheProgress(task_name, remote_files)
             self.log_queue.put("远程文件列表已缓存")
 
         return remote_files
 
-    def _save_cache_progress(self, task_name: str, remote_files: dict):
+    def _saveCacheProgress(self, task_name: str, remote_files: dict):
         """写入云缓存到文件"""
         try:
             all_caches = {}
@@ -1136,12 +1130,12 @@ class SyncWorker(QThread):
         all_caches[task_name] = remote_files
         cache_file.write_text(json.dumps(all_caches, ensure_ascii=False), encoding="utf-8")
 
-    def _scan_remote_dir(self, full_path: str, rel_path: str, result: dict):
+    def _scanRemoteDir(self, full_path: str, rel_path: str, result: dict):
         """递归扫描远程目录"""
         if self._abort:
             return
 
-        items = self.client.list_dir(full_path)
+        items = self.client.listDir(full_path)
         for item in items:
             if self._abort:
                 break
@@ -1151,7 +1145,7 @@ class SyncWorker(QThread):
             item_rel = f"{rel_path}/{name}" if rel_path else name
 
             if is_dir:
-                self._scan_remote_dir(f"{full_path}/{name}", item_rel, result)
+                self._scanRemoteDir(f"{full_path}/{name}", item_rel, result)
             else:
                 result[item_rel] = {
                     "size": item.get("size", 0),
@@ -1160,10 +1154,10 @@ class SyncWorker(QThread):
                 if self.task.use_cloud_cache:
                     self._cache_flush_count += 1
                     if self._cache_flush_count % 1000 == 0:
-                        self._save_cache_progress(self.task.name, result)
+                        self._saveCacheProgress(self.task.name, result)
                         self.log_queue.put(f"缓存已写入 ({self._cache_flush_count} 个文件)")
 
-    def _compare_files(self, local: dict, remote: dict) -> tuple:
+    def _compareFiles(self, local: dict, remote: dict) -> tuple:
         """对比文件差异，返回待上传和待删除的文件"""
         to_upload = {}
         to_delete = {}
@@ -1192,14 +1186,14 @@ class SyncWorker(QThread):
 
         return to_upload, to_delete
 
-    def _emit_progress(self, message: str, current: int, total: int):
+    def _emitProgress(self, message: str, current: int, total: int):
         try:
             self.progress_queue.get_nowait()
         except queue.Empty:
             pass
         self.progress_queue.put_nowait((message, current, total))
 
-    def _ensure_remote_dir(self, remote_dir: str):
+    def _ensureRemoteDir(self, remote_dir: str):
         """确保远程目录存在"""
         if not remote_dir or remote_dir in self._created_dirs:
             return
@@ -1217,7 +1211,7 @@ class SyncWorker(QThread):
                     self._created_dirs.add(current)
         self._created_dirs.add(remote_dir)
 
-    def _delete_remote_files(self, to_delete: dict):
+    def _deleteRemoteFiles(self, to_delete: dict):
         """删除远程多余文件"""
         # 按目录分组
         dir_files = {}
@@ -1241,10 +1235,10 @@ class SyncWorker(QThread):
 
                 count += 1
                 file_path = f"{dir_path}/{file_name}" if dir_path else file_name
-                self._emit_progress(f"删除: {file_path}", count, total)
+                self._emitProgress(f"删除: {file_path}", count, total)
                 self.log_queue.put(f"[{count}/{total}] 删除: {file_path}")
 
-                success = self._delete_file_with_retry(remote_dir, file_name, file_path)
+                success = self._deleteFileWithRetry(remote_dir, file_name, file_path)
                 if success:
                     self.result.delete_success += 1
                     self.result.delete_success_files.append(file_path)
@@ -1265,10 +1259,10 @@ class TaskEditDialog(QDialog):
         self.task = task or TaskConfig()
         self.setWindowTitle("编辑任务" if task else "新建任务")
         self.setMinimumSize(500, 400)
-        self._init_ui()
-        self._load_task()
+        self._initUi()
+        self._loadTask()
 
-    def _init_ui(self):
+    def _initUi(self):
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
@@ -1293,7 +1287,7 @@ class TaskEditDialog(QDialog):
         self.dst_edit.setPlaceholderText("OpenList 目录")
         dst_layout.addWidget(self.dst_edit)
         dst_btn = QPushButton("浏览")
-        dst_btn.clicked.connect(self._browse_remote)
+        dst_btn.clicked.connect(self._browseRemote)
         dst_layout.addWidget(dst_btn)
         form.addRow("目标目录", dst_layout)
 
@@ -1361,7 +1355,7 @@ class TaskEditDialog(QDialog):
         # 按钮
         dialogBox(layout, self, show=False)
 
-    def _load_task(self):
+    def _loadTask(self):
         if self.task:
             self.name_edit.setText(self.task.name)
             self.src_edit.setText(self.task.src_path)
@@ -1383,7 +1377,7 @@ class TaskEditDialog(QDialog):
             self.cache_check.setChecked(self.task.use_cloud_cache)
             self.confirm_check.setChecked(self.task.confirm_before_sync)
 
-    def _browse_remote(self):
+    def _browseRemote(self):
         """浏览远程目录"""
         if not self.client.token:
             plugin = getattr(self.parent(), 'plugin', None)
@@ -1391,7 +1385,7 @@ class TaskEditDialog(QDialog):
                 self.client.login(plugin.username, plugin.password)
         dialog = RemoteDirDialog(self, self.client)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            path = dialog.get_selected_path()
+            path = dialog.getSelectedPath()
             if path:
                 self.dst_edit.setText(path)
 
@@ -1441,7 +1435,7 @@ class TaskEditDialog(QDialog):
         )
         super().accept()
 
-    def get_task(self) -> TaskConfig:
+    def getTask(self) -> TaskConfig:
         return self.task
 
     def done(self, code):
@@ -1458,16 +1452,16 @@ class RemoteDirDialog(QDialog):
         self.selected_path = "/"
         self.setWindowTitle("选择远程目录")
         self.setMinimumSize(400, 500)
-        self._init_ui()
-        self._load_dir("/")
+        self._initUi()
+        self._loadDir("/")
 
-    def _init_ui(self):
+    def _initUi(self):
         layout = QVBoxLayout(self)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["目录"])
         self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.tree.itemExpanded.connect(self._on_expand)
+        self.tree.itemExpanded.connect(self._onExpand)
         layout.addWidget(self.tree)
 
         # 当前路径
@@ -1477,11 +1471,11 @@ class RemoteDirDialog(QDialog):
         # 按钮
         dialogBox(layout, self, show=False)
 
-        self.tree.currentItemChanged.connect(self._on_select)
+        self.tree.currentItemChanged.connect(self._onSelect)
 
-    def _load_dir(self, path: str, parent_item: QTreeWidgetItem = None):
+    def _loadDir(self, path: str, parent_item: QTreeWidgetItem = None):
         """加载目录"""
-        items = self.client.list_dir(path)
+        items = self.client.listDir(path)
         dirs = [item for item in items if item.get("is_dir", False)]
 
         for d in dirs:
@@ -1493,20 +1487,20 @@ class RemoteDirDialog(QDialog):
             else:
                 self.tree.addTopLevelItem(item)
 
-    def _on_expand(self, item: QTreeWidgetItem):
+    def _onExpand(self, item: QTreeWidgetItem):
         """展开目录时加载子目录"""
         if item.childCount() == 0:
             path = item.data(0, Qt.ItemDataRole.UserRole)
-            self._load_dir(path, item)
+            self._loadDir(path, item)
 
-    def _on_select(self, item: QTreeWidgetItem):
+    def _onSelect(self, item: QTreeWidgetItem):
         """选择目录"""
         if item:
             path = item.data(0, Qt.ItemDataRole.UserRole)
             self.selected_path = path
             self.path_label.setText(f"当前选择: {path}")
 
-    def get_selected_path(self) -> str:
+    def getSelectedPath(self) -> str:
         return self.selected_path
 
 class OpenListWidget(QWidget):
@@ -1520,11 +1514,11 @@ class OpenListWidget(QWidget):
         self.main_window = main_window
         self.plugin = plugin
         self.sync_worker = None
-        self._init_ui()
-        self._load_settings()
-        self.log_signal.connect(self._append_log)
+        self._initUi()
+        self._loadSettings()
+        self.log_signal.connect(self._appendLog)
 
-    def _init_ui(self):
+    def _initUi(self):
         layout = QVBoxLayout(self)
 
         # OpenList 路径配置
@@ -1569,7 +1563,7 @@ class OpenListWidget(QWidget):
         self.port_edit.setPlaceholderText("127.0.0.1:5244")
         port_layout.addWidget(self.port_edit)
         self.open_browser_btn = QPushButton("打开")
-        self.open_browser_btn.clicked.connect(self._open_in_browser)
+        self.open_browser_btn.clicked.connect(self._openInBrowser)
         self.open_browser_btn.setFixedWidth(70)
         port_layout.addWidget(self.open_browser_btn)
         server_layout.addLayout(port_layout, 0, 1)
@@ -1601,23 +1595,23 @@ class OpenListWidget(QWidget):
         task_top.addWidget(self.task_combo)
 
         self.new_btn = QPushButton("新建")
-        self.new_btn.clicked.connect(self._new_task)
+        self.new_btn.clicked.connect(self._newTask)
         task_top.addWidget(self.new_btn)
 
         self.edit_btn = QPushButton("编辑")
-        self.edit_btn.clicked.connect(self._edit_task)
+        self.edit_btn.clicked.connect(self._editTask)
         task_top.addWidget(self.edit_btn)
 
         self.delete_btn = QPushButton("删除")
-        self.delete_btn.clicked.connect(self._delete_task)
+        self.delete_btn.clicked.connect(self._deleteTask)
         task_top.addWidget(self.delete_btn)
 
         self.run_btn = QPushButton("运行")
-        self.run_btn.clicked.connect(self._run_task)
+        self.run_btn.clicked.connect(self._runTask)
         task_top.addWidget(self.run_btn)
 
         self.stop_btn = QPushButton("停止")
-        self.stop_btn.clicked.connect(self._stop_task)
+        self.stop_btn.clicked.connect(self._stopTask)
         self.stop_btn.setEnabled(False)
         task_top.addWidget(self.stop_btn)
 
@@ -1639,19 +1633,19 @@ class OpenListWidget(QWidget):
         layout.addWidget(self.log_text)
 
         # 启动状态检测定时器
-        self._start_status_timer()
+        self._startStatusTimer()
 
-    def _load_settings(self):
+    def _loadSettings(self):
         """加载设置"""
         self.path_edit.setText(self.plugin.openlist_path)
         self.port_edit.setText(self.plugin.port)
         self.username_edit.setText(self.plugin.username)
         self.password_edit.setText(self.plugin.password)
-        self._refresh_task_combo()
+        self._refreshTaskCombo()
 
-    def _cleanup_timer(self):
+    def _cleanupTimer(self):
         """清理定时器、线程、客户端连接"""
-        self._stop_queue_polling()
+        self._stopQueuePolling()
         if hasattr(self, 'status_timer'):
             self.status_timer.stop()
         if self.sync_worker is not None:
@@ -1663,7 +1657,7 @@ class OpenListWidget(QWidget):
             self.plugin.client.close()
             self.plugin.client = None
 
-    def _refresh_task_combo(self):
+    def _refreshTaskCombo(self):
         """刷新任务下拉框"""
         self.task_combo.clear()
         for task in self.plugin.tasks:
@@ -1674,7 +1668,7 @@ class OpenListWidget(QWidget):
             if index >= 0:
                 self.task_combo.setCurrentIndex(index)
 
-    def _save_settings(self):
+    def _saveSettings(self):
         """保存设置"""
         self.plugin.openlist_path = self.path_edit.text().strip()
         self.plugin.port = self.port_edit.text().strip()
@@ -1684,13 +1678,13 @@ class OpenListWidget(QWidget):
         self.plugin.saveConfig()
         self._log("配置已保存")
 
-    def _open_in_browser(self):
+    def _openInBrowser(self):
         """在浏览器中打开地址"""
         port = self.port_edit.text().strip()
         url = f"http://{port}"
         webbrowser.open(url)
 
-    def _get_current_task(self) -> Optional[TaskConfig]:
+    def _getCurrentTask(self) -> Optional[TaskConfig]:
         """获取当前选中的任务"""
         name = self.task_combo.currentText()
         for task in self.plugin.tasks:
@@ -1698,44 +1692,44 @@ class OpenListWidget(QWidget):
                 return task
         return None
 
-    def _new_task(self):
+    def _newTask(self):
         """新建任务"""
-        self._save_settings()
+        self._saveSettings()
 
         dialog = TaskEditDialog(self, OpenListClient(f"http://{self.plugin.port}"))
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            task = dialog.get_task()
+            task = dialog.getTask()
             self.plugin.tasks.append(task)
             self.plugin.saveConfig()
-            self._refresh_task_combo()
+            self._refreshTaskCombo()
             self.task_combo.setCurrentText(task.name)
             self._log(f"任务 '{task.name}' 已创建")
 
-    def _edit_task(self):
+    def _editTask(self):
         """编辑任务"""
-        task = self._get_current_task()
+        task = self._getCurrentTask()
         if not task:
             messageBox(self, "警告", "请先选择要编辑的任务", 1)
             return
 
-        self._save_settings()
+        self._saveSettings()
 
         dialog = TaskEditDialog(self, OpenListClient(f"http://{self.plugin.port}"), task)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_task = dialog.get_task()
+            new_task = dialog.getTask()
             # 更新任务
             for i, t in enumerate(self.plugin.tasks):
                 if t.name == task.name:
                     self.plugin.tasks[i] = new_task
                     break
             self.plugin.saveConfig()
-            self._refresh_task_combo()
+            self._refreshTaskCombo()
             self.task_combo.setCurrentText(new_task.name)
             self._log(f"任务 '{new_task.name}' 已更新")
 
-    def _delete_task(self):
+    def _deleteTask(self):
         """删除任务"""
-        task = self._get_current_task()
+        task = self._getCurrentTask()
         if not task:
             messageBox(self, "警告", "请先选择要删除的任务", 1)
             return
@@ -1743,28 +1737,28 @@ class OpenListWidget(QWidget):
         if not messageBox(self, "确认删除", f"确定要删除任务 '{task.name}' 吗?", 2):
             self.plugin.tasks = [t for t in self.plugin.tasks if t.name != task.name]
             self.plugin.saveConfig()
-            self._refresh_task_combo()
+            self._refreshTaskCombo()
             self._log(f"任务 '{task.name}' 已删除")
 
-    def _ensure_connected(self) -> bool:
+    def _ensureConnected(self) -> bool:
         """确保已连接"""
         if not self.plugin.login():
             messageBox(self, "警告", "无法连接到 OpenList，请检查配置", 1)
             return False
         return True
 
-    def _start_queue_polling(self):
+    def _startQueuePolling(self):
         self._poll_timer = QTimer(self)
-        self._poll_timer.timeout.connect(self._drain_queues)
+        self._poll_timer.timeout.connect(self._drainQueues)
         self._poll_timer.start(50)
 
-    def _drain_queues(self):
+    def _drainQueues(self):
         worker = self.sync_worker
         if not worker:
             return
         for _ in range(100):
             try:
-                self._append_log(worker.log_queue.get_nowait())
+                self._appendLog(worker.log_queue.get_nowait())
             except queue.Empty:
                 break
         latest = None
@@ -1774,21 +1768,21 @@ class OpenListWidget(QWidget):
             except queue.Empty:
                 break
         if latest:
-            self._on_progress(*latest)
+            self._onProgress(*latest)
 
-    def _stop_queue_polling(self):
+    def _stopQueuePolling(self):
         if hasattr(self, '_poll_timer'):
             self._poll_timer.stop()
 
-    def _run_task(self):
+    def _runTask(self):
         """运行任务"""
-        task = self._get_current_task()
+        task = self._getCurrentTask()
         if not task:
             messageBox(self, "警告", "请先选择要运行的任务", 1)
             return
 
-        self._save_settings()
-        if not self._ensure_connected():
+        self._saveSettings()
+        if not self._ensureConnected():
             return
 
         # 禁用按钮
@@ -1809,15 +1803,15 @@ class OpenListWidget(QWidget):
             self.sync_worker = None
 
         # 启动同步线程
-        self.sync_worker = SyncWorker(self.plugin.get_client(), task)
-        self.sync_worker.finished.connect(self._on_finished)
-        self.sync_worker.need_confirm.connect(self._on_need_confirm)
+        self.sync_worker = SyncWorker(self.plugin.getClient(), task)
+        self.sync_worker.finished.connect(self._onFinished)
+        self.sync_worker.need_confirm.connect(self._onNeedConfirm)
         self.sync_worker.start()
-        self._start_queue_polling()
+        self._startQueuePolling()
 
-    def _on_need_confirm(self, to_upload: dict, to_delete: dict):
+    def _onNeedConfirm(self, to_upload: dict, to_delete: dict):
         """需要用户确认"""
-        task = self._get_current_task()
+        task = self._getCurrentTask()
         mode = task.mode if task else MODE_BACKUP
 
         dialog = FileConfirmDialog(self, to_upload, to_delete, mode)
@@ -1826,22 +1820,22 @@ class OpenListWidget(QWidget):
         else:
             self.sync_worker.confirm(False)
 
-    def _stop_task(self):
+    def _stopTask(self):
         """停止任务"""
         if self.sync_worker:
             self.sync_worker.abort()
             self._log("正在停止任务...")
 
-    def _on_progress(self, message: str, current: int, total: int):
+    def _onProgress(self, message: str, current: int, total: int):
         """进度更新"""
         self.progress_label.setText(message)
         if total > 0:
             percent = int(current / total * 100)
             self.progress_bar.setValue(percent)
 
-    def _on_finished(self, result: dict):
+    def _onFinished(self, result: dict):
         """任务完成"""
-        self._stop_queue_polling()
+        self._stopQueuePolling()
         self.run_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
 
@@ -1881,7 +1875,7 @@ class OpenListWidget(QWidget):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_signal.emit(f"[{timestamp}] {message}")
 
-    def _append_log(self, message: str):
+    def _appendLog(self, message: str):
         """追加日志到文本框"""
         self.log_text.append(message)
         # 自动滚动到底部
@@ -1890,7 +1884,7 @@ class OpenListWidget(QWidget):
 
     def startOpenList(self):
         """启动OpenList"""
-        self._save_settings()
+        self._saveSettings()
         openlist_path = self.plugin.openlist_path
         if not openlist_path:
             messageBox(self, "警告", "请先选择 OpenList 路径", 1)
@@ -1938,14 +1932,14 @@ class OpenListWidget(QWidget):
             logger.exception("获取进程状态失败")
         return "未运行"
 
-    def _start_status_timer(self):
+    def _startStatusTimer(self):
         """启动状态检测定时器"""
         self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.timeout.connect(self._updateStatus)
         self.status_timer.start(3000)
-        self._update_status()
+        self._updateStatus()
 
-    def _update_status(self):
+    def _updateStatus(self):
         """更新运行状态"""
         status = self.getStatus()
         self.run_status_label.setText(status)

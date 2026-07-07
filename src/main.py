@@ -17,7 +17,7 @@ from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, r
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
-from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copy_selection
+from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copySelection
 from src.core.timer import TimerManager
 from src.gui.control import WindowMouse, WindowControl, managePlugins
 
@@ -154,7 +154,7 @@ class ServiceProcess:
         ServiceProcess._active_pids |= pids
         self._initial_pids = pids.copy()
         self.monitored_pids = pids.copy()
-        self._timer = TimerManager().create_timer()
+        self._timer = TimerManager().createTimer()
         self._timer.setInterval(10000)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
@@ -760,7 +760,7 @@ class MainWindow(WindowMouse, QMainWindow):
             self._editor_window.destroyed.connect(lambda: setattr(self, '_editor_window', None))
             getPluginManager().setMainWindow(self._editor_window)
         elif file_path:
-            self._editor_window.open_file_path(file_path)
+            self._editor_window.openFilePath(file_path)
         self._editor_window.show()
         self._editor_window.raise_()
         self._editor_window.activateWindow()
@@ -1961,13 +1961,13 @@ class MainWindow(WindowMouse, QMainWindow):
             self.runItem(t)
 
         clipboard.dataChanged.connect(grab)
-        copy_selection()
+        copySelection()
         QTimer.singleShot(500, grab)
     
     def registerHotkeys(self):
         """注册所有工具快捷键"""
         listener = GlobalHotkeyListener()
-        listener.clear_tool_hotkeys()
+        listener.clearToolHotkeys()
         
         all_tools = [t for g in self._tools.values() for t in g]
         for tool in all_tools:

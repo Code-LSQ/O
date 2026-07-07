@@ -169,15 +169,15 @@ class FindReplaceDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        def updateButtons():
+        def updateButton():
             has_selection = pair_list.currentItem() is not None
             edit_btn.setEnabled(has_selection)
             delete_btn.setEnabled(has_selection)
 
-        pair_list.itemSelectionChanged.connect(update_buttons)
-        update_buttons()
+        pair_list.itemSelectionChanged.connect(updateButton)
+        updateButton()
 
-        def validatePresetValue(value):
+        def checkValue(value):
             try:
                 rules = json.loads(value)
                 if not isinstance(rules, list):
@@ -198,7 +198,7 @@ class FindReplaceDialog(QDialog):
                                 textedit=True)
             if result[0]:
                 saved_value = f"[{result[1]}]"
-                is_valid, message = validate_preset_value(saved_value)
+                is_valid, message = checkValue(saved_value)
                 if not is_valid:
                     messageBox(dialog, tr("格式错误"), tr("预设规则格式不正确") + f":\n{message}", 1)
                     return
@@ -218,7 +218,7 @@ class FindReplaceDialog(QDialog):
                                 textedit=True)
             if result[0]:
                 saved_value = f"[{result[1]}]"
-                is_valid, message = validate_preset_value(saved_value)
+                is_valid, message = checkValue(saved_value)
                 if not is_valid:
                     messageBox(dialog, tr("格式错误"), tr("预设规则格式不正确") + f":\n{message}", 1)
                     return
@@ -231,9 +231,9 @@ class FindReplaceDialog(QDialog):
                 row = pair_list.row(current)
                 pair_list.takeItem(row)
 
-        add_btn.clicked.connect(add_item)
-        edit_btn.clicked.connect(edit_item)
-        delete_btn.clicked.connect(delete_item)
+        add_btn.clicked.connect(addItem)
+        edit_btn.clicked.connect(editItem)
+        delete_btn.clicked.connect(deleteItem)
 
         if dialogBox(layout, dialog):
             self.presets = []

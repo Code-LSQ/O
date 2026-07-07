@@ -13,7 +13,6 @@ if sys.platform == "win32":
     from ctypes import windll
 from pathlib import Path
 from datetime import datetime
-from email.utils import parsedate_to_datetime
 from logging.handlers import RotatingFileHandler
 
 import requests
@@ -280,6 +279,7 @@ def getScreen(app: QApplication, logic=False):
 def getDevice(app: QApplication):
     try:
         getDisk()
+        getNet()
         getScreen(app)
     except Exception:
         logger.exception("获取设备信息失败")
@@ -820,13 +820,34 @@ def formatFileSize(size: int) -> str:
         return f"{size / (1024 ** 4):.2f} TB"
 
 
-def lastModify(url):
-    response = requests.get(url)
-    last_modified = response.headers.get("Last-Modified")
-    if last_modified:
-        dt = parsedate_to_datetime(last_modified)
-        return dt.timestamp()
-    return 0
+def download(url: str):
+    """下载文件
+    从 HTTP 响应获取文件的最后修改时间，作为 os.utime() 的参数，格式为 Unix 时间戳"""
+    try:
+        response = requests.get(url)
+        disposition = response.headers.get("Content-Disposition")
+        size = response.headers.get("Content-Length")
+        last_modified = response.headers.get("Last-Modified")
+
+        if "filename=" in disposition:
+            name = disposition.split("filename=")[1].strip("'\"")
+
+        path = data_dir / name
+
+        # with open(path) as f:
+        #     f.write()
+
+        if last_modified:
+            dt = datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z")
+            timestamp = dt.timestamp()
+            os.utime(path, [timestamp, timestamp])
+            time_info = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+            logger.info(f"{path} 的最后修改时间为 {time_info}")
+        else:
+            logger.info("服务器未返回最后修改时间")
+    
+    except Exception:
+        logger.exception("下载错误")
 
 
 def folderLastModified(path):

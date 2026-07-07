@@ -43,18 +43,18 @@ class HttpsPlugin(PluginBase):
 
     def getAction(self):
         action = QAction(self.description, self.main_window)
-        action.triggered.connect(self.show_dialog)
+        action.triggered.connect(self.showDialog)
         return action
 
-    def show_dialog(self):
+    def showDialog(self):
         self.initialize()
-        self.http_tool.show_dialog()
+        self.http_tool.showDialog()
 
     def cleanup(self):
         if not self._initialized:
             return
         self.saveConfig()
-        self.http_tool.stop_server()
+        self.http_tool.stopServer()
 
 class HTTPTool:
     def __init__(self, main_window=None, settings=None, plugin=None):
@@ -73,13 +73,13 @@ class HTTPTool:
         self._data_lock = threading.Lock()
         self._server_shutdown = threading.Event()
 
-    def show_dialog(self):
+    def showDialog(self):
         dialog = HTTPDialog(self.main_window, self)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.setModal(False)
         dialog.show()
 
-    def stop_server(self):
+    def stopServer(self):
         """停止 HTTP 服务器，清理线程和端口"""
         if not self.running:
             return
@@ -97,7 +97,7 @@ class HTTPTool:
                 logger.exception("关闭HTTP服务器失败")
             self.server = None
 
-    def start_server(self):
+    def startServer(self):
         """启动 HTTP 服务器（新线程）"""
         if self.running and self.server:
             return
@@ -640,7 +640,7 @@ class HTTPDialog(QDialog):
         self._init_ui()
         self._update_status()
         if not self.tool.running:
-            self.tool.start_server()
+            self.tool.startServer()
             self._update_status()
 
     def showEvent(self, event):
@@ -792,12 +792,12 @@ class HTTPDialog(QDialog):
     def _toggle_server(self):
         """切换服务器启动 / 停止状态"""
         if self.tool.running:
-            self.tool.stop_server()
+            self.tool.stopServer()
             self.start_btn.setText("启动服务")
             self.status_label.setText("已停止")
         else:
             self._save_to_settings(self.tool.settings)
-            self.tool.start_server()
+            self.tool.startServer()
             self._update_status()
 
     def _save_to_settings(self, settings: dict):
@@ -824,5 +824,5 @@ class HTTPDialog(QDialog):
             self.tool.plugin.saveConfig()
         self.recv_timer.stop()
         if self.tool.running and not self.background_check.isChecked():
-            self.tool.stop_server()
+            self.tool.stopServer()
         super().closeEvent(event)

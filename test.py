@@ -1303,7 +1303,7 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(cfg.tar_folders, "")
         self.assertEqual(cfg.tree_folders, "")
 
-    def test_to_dict_roundtrip(self):
+    def test_toDict_roundtrip(self):
         from plugin.OpenList import TaskConfig
 
         cfg = TaskConfig(
@@ -1316,19 +1316,19 @@ class TestTaskConfig(unittest.TestCase):
             tar_folders="/data/tar",
             tree_folders="/data/tree",
         )
-        d = cfg.to_dict()
+        d = cfg.toDict()
         self.assertEqual(d["name"], "test_task")
         self.assertEqual(d["mode"], "sync")
         self.assertTrue(d["confirm_before_sync"])
-        restored = TaskConfig.from_dict(d)
+        restored = TaskConfig.fromDict(d)
         self.assertEqual(restored.name, "test_task")
         self.assertEqual(restored.mode, "sync")
         self.assertTrue(restored.confirm_before_sync)
 
-    def test_from_dict_missing_keys(self):
+    def test_fromDict_missing_keys(self):
         from plugin.OpenList import TaskConfig
 
-        cfg = TaskConfig.from_dict({"name": "minimal"})
+        cfg = TaskConfig.fromDict({"name": "minimal"})
         self.assertEqual(cfg.name, "minimal")
         self.assertEqual(cfg.mode, "backup")
         self.assertEqual(cfg.src_path, "")
@@ -1336,7 +1336,7 @@ class TestTaskConfig(unittest.TestCase):
     def test_backup_mode_default(self):
         from plugin.OpenList import TaskConfig
 
-        cfg = TaskConfig.from_dict({"name": "backup_task"})
+        cfg = TaskConfig.fromDict({"name": "backup_task"})
         self.assertEqual(cfg.mode, "backup")
 
 
@@ -1387,7 +1387,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("new.txt", to_upload)
         self.assertEqual(len(to_delete), 0)
 
@@ -1396,7 +1396,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("old.txt", to_delete)
 
     def test_backup_mode_no_delete(self):
@@ -1404,7 +1404,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("backup")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertEqual(len(to_delete), 0)
 
     def test_identical_files_no_sync_needed(self):
@@ -1414,7 +1414,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertNotIn("match.txt", to_upload)
 
     def test_file_content_changed_needs_update(self):
@@ -1423,7 +1423,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("changed.txt", to_upload)
 
     def test_nested_folder_structure(self):
@@ -1433,7 +1433,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertTrue(any("deep.txt" in k for k in to_upload))
 
     def test_bidirectional_diff(self):
@@ -1446,7 +1446,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
         worker = self._make_worker("sync")
-        to_upload, to_delete = worker._compare_files(local, remote)
+        to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("only_local.txt", to_upload)
         self.assertIn("only_remote.txt", to_delete)
         self.assertIn("both_diff.txt", to_upload)

@@ -35,7 +35,7 @@ class ResolutionPlugin(PluginBase):
         if not super().initialize():
             return
 
-    def _save_settings(self):
+    def _saveSettings(self):
         self.settings["Resolution"] = self.resolutions
         self.saveConfig()
 
@@ -43,61 +43,61 @@ class ResolutionPlugin(PluginBase):
         menu = QMenu()
 
         settings_action = QAction("设置", self.main_window)
-        settings_action.triggered.connect(self._show_settings)
+        settings_action.triggered.connect(self._showSettings)
         menu.addAction(settings_action)
         menu.addSeparator()
 
         for res_str in self.resolutions:
-            parsed = parse_resolution(res_str)
+            parsed = parseResolution(res_str)
             if parsed is None:
                 continue
             w, h = parsed
             action = QAction(res_str, self.main_window)
-            action.triggered.connect(lambda checked, w=w, h=h: self._switch_resolution(w, h))
+            action.triggered.connect(lambda checked, w=w, h=h: self._switchResolution(w, h))
             menu.addAction(action)
 
         return menu
 
-    def _show_settings(self):
+    def _showSettings(self):
         self.initialize()
         dialog = ResolutionSettingsDialog(self.main_window, self.resolutions)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.resolutions = dialog.resolutions
-            self._save_settings()
+            self._saveSettings()
             logger.info(f"分辨率列表已更新: {self.resolutions}")
 
-    def _switch_resolution(self, w, h):
+    def _switchResolution(self, w, h):
         self.initialize()
-        ok, err = test_resolution(w, h)
+        ok, err = testResolution(w, h)
         if not ok:
             messageBox(self.main_window, "不支持", f"分辨率 {w}×{h} 不可用：{err}", 1)
             return
 
         try:
-            self._original_devmode = get_current_devmode()
+            self._original_devmode = getDevmode()
         except RuntimeError as e:
             messageBox(self.main_window, "错误", f"备份当前分辨率失败：{e}", 1)
             return
 
-        if not apply_resolution(w, h):
+        if not applyResolution(w, h):
             messageBox(self.main_window, "错误", f"应用分辨率 {w}×{h} 失败", 1)
             return
 
-        self._confirm_keep_resolution(w, h)
+        self._confirmResolution(w, h)
 
-    def _confirm_keep_resolution(self, w, h):
+    def _confirmResolution(self, w, h):
         msg = f"分辨率已临时更改为 {w}×{h}\n是否保留此分辨率？"
         if messageBox(self.main_window, "分辨率已更改", msg, 2):
-            apply_resolution(w, h, permanent=True)
+            applyResolution(w, h, permanent=True)
             logger.info(f"分辨率已永久更改为 {w}×{h}")
         else:
-            self._restore_resolution()
+            self._restoreResolution()
 
-    def _restore_resolution(self):
+    def _restoreResolution(self):
         if self._original_devmode is None:
             return
         try:
-            devmode = get_current_devmode()
+            devmode = getDevmode()
         except RuntimeError:
             return
         devmode.dmPelsWidth = self._original_devmode.dmPelsWidth
@@ -148,16 +148,16 @@ class DEVMODE(Structure):
 
 user32 = WinDLL('user32', use_last_error=True)
 
-def get_current_devmode():
+def getDevmode():
     devmode = DEVMODE()
     devmode.dmSize = sizeof(DEVMODE)
     if not user32.EnumDisplaySettingsW(None, ENUM_CURRENT_SETTINGS, byref(devmode)):
         raise RuntimeError("无法获取当前显示设置")
     return devmode
 
-def test_resolution(width, height):
+def testResolution(width, height):
     try:
-        devmode = get_current_devmode()
+        devmode = getDevmode()
     except RuntimeError as e:
         return False, str(e)
     devmode.dmPelsWidth = width
@@ -176,15 +176,15 @@ def test_resolution(width, height):
     }
     return False, error_map.get(result, f"未知错误 {result}")
 
-def apply_resolution(width, height, permanent=False):
-    devmode = get_current_devmode()
+def applyResolution(width, height, permanent=False):
+    devmode = getDevmode()
     devmode.dmPelsWidth = width
     devmode.dmPelsHeight = height
     devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT
     flags = CDS_UPDATEREGISTRY if permanent else 0
     return user32.ChangeDisplaySettingsW(byref(devmode), flags) == DISP_CHANGE_SUCCESSFUL
 
-def parse_resolution(text: str) -> Optional[Tuple[int, int]]:
+def parseResolution(text: str) -> Optional[Tuple[int, int]]:
     try:
         parts = text.strip().split("×")
         if len(parts) != 2:
@@ -203,9 +203,9 @@ class ResolutionSettingsDialog(QDialog):
         self.setWindowTitle("分辨率设置")
         self.setMinimumSize(350, 300)
         self.resolutions = resolutions[:]
-        self._init_ui()
+        self._initUI()
 
-    def _init_ui(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         label = QLabel("每行一个分辨率，格式如 1920×1080")
@@ -216,9 +216,9 @@ class ResolutionSettingsDialog(QDialog):
 
         dialogBox(layout, self, show=False)
 
-        self._load_data()
+        self._loadData()
 
-    def _load_data(self):
+    def _loadData(self):
         self.edit.setPlainText("\n".join(self.resolutions))
 
     def accept(self):
@@ -228,7 +228,7 @@ class ResolutionSettingsDialog(QDialog):
             line = line.strip()
             if not line:
                 continue
-            if parse_resolution(line) is None:
+            if parseResolution(line) is None:
                 messageBox(self, "格式错误", f"无效格式：{line}\n应为 1920×1080", 1)
                 return
             resolutions.append(line)

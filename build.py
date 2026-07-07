@@ -7,7 +7,7 @@ import PyInstaller.__main__
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.util import APP_NAME, logo_ico, logo_png, logo_icn
+from src.util import APP_NAME, VERSION, logo_ico, logo_png, logo_icn
 
 root = Path(__file__).resolve().parent
 dist = root / ".." / "dist"
@@ -32,7 +32,7 @@ def pycache(path: Path):
 
 def pluginLib():
     """扫描 /plugin 内所有 .py 文件，解析 PluginLib 得到额外依赖"""
-    # 原本准备研究 PyInstaller 怎么打包库，并对文件复制或打包进行模仿，把库的文件放到 /plugin 文件夹并在插件类的 file 中定义，插件自身也从 /plugin 下导入库，从而做到删除插件就删除库，但是过于复杂了，我不行了……暂时放弃……
+    # 原本准备研究 PyInstaller 怎么打包库，并对文件复制或打包进行模仿，把库的文件放到 /plugin 文件夹（或者直接用 pip 局部安装），在插件类的 file 中定义，插件自身也从 /plugin 下导入库，从而做到删除插件就删除库，但是过于复杂了，感觉没必要……暂时放弃……
     import ast
 
     plugin_dir = root / "plugin"

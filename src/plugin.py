@@ -118,8 +118,8 @@ class PluginBase(ABC):
     
     def getSelect(self, callback):
         """异步获取当前选中文本，完成后回调 callback(text)"""
-        from src.core.input import copy_selection
-        copy_selection()
+        from src.core.input import copySelection
+        copySelection()
         QTimer.singleShot(300, lambda: callback(QApplication.clipboard().text() or ""))
 
     def onFileOpen(self, file_path: str):

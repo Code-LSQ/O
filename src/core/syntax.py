@@ -11,9 +11,9 @@ class BaseHighlighter(QSyntaxHighlighter):
         super().__init__(parent)
         self.highlighting_rules = []
         self._compiled_patterns = []
-        self.setup_rules()
+        self.setupRules()
 
-    def add_rule(self, pattern, format):
+    def addRule(self, pattern, format):
         if not pattern:
             return
         self.highlighting_rules.append((pattern, format))
@@ -63,13 +63,13 @@ class BaseHighlighter(QSyntaxHighlighter):
     def _kws(self, words, color, bold=True):
         fmt = self._fmt(color, bold=bold)
         for w in words:
-            self.add_rule(f"\\b{w}\\b", fmt)
+            self.addRule(f"\\b{w}\\b", fmt)
 
 
 class PythonHighlighter(BaseHighlighter):
     """Python语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "and", "as", "assert", "break", "class", "continue", "def",
             "del", "elif", "else", "except", "False", "finally", "for",
@@ -79,20 +79,20 @@ class PythonHighlighter(BaseHighlighter):
         ], "#0000FF")
 
         sf = self._fmt("#008000")
-        self.add_rule(r'\".*?\"', sf)
-        self.add_rule(r'\'.*?\'', sf)
-        self.add_rule(r'\"\"\".*?\"\"\"', sf)
-        self.add_rule(r'\'\'\'.*?\'\'\'', sf)
+        self.addRule(r'\".*?\"', sf)
+        self.addRule(r'\'.*?\'', sf)
+        self.addRule(r'\"\"\".*?\"\"\"', sf)
+        self.addRule(r'\'\'\'.*?\'\'\'', sf)
 
-        self.add_rule(r'#.*', self._fmt("#808080"))
-        self.add_rule(r'\b\d+\b', self._fmt("#FF00FF"))
-        self.add_rule(r'\bdef\s+(\w+)', self._fmt("#000080"))
+        self.addRule(r'#.*', self._fmt("#808080"))
+        self.addRule(r'\b\d+\b', self._fmt("#FF00FF"))
+        self.addRule(r'\bdef\s+(\w+)', self._fmt("#000080"))
 
 
 class CppHighlighter(BaseHighlighter):
     """C++语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand",
             "bitor", "bool", "break", "case", "catch", "char", "char8_t",
@@ -113,68 +113,68 @@ class CppHighlighter(BaseHighlighter):
         ], "#0000FF")
 
         sf = self._fmt("#008000")
-        self.add_rule(r'\".*?\"', sf)
-        self.add_rule(r'\'.*?\'', sf)
+        self.addRule(r'\".*?\"', sf)
+        self.addRule(r'\'.*?\'', sf)
 
-        self.add_rule(r'//.*', self._fmt("#808080"))
-        self.add_rule(r'/\*.*?\*/', self._fmt("#808080"))
-        self.add_rule(r'\b\d+\b', self._fmt("#FF00FF"))
-        self.add_rule(r'^#.*', self._fmt("#800080"))
+        self.addRule(r'//.*', self._fmt("#808080"))
+        self.addRule(r'/\*.*?\*/', self._fmt("#808080"))
+        self.addRule(r'\b\d+\b', self._fmt("#FF00FF"))
+        self.addRule(r'^#.*', self._fmt("#800080"))
 
 
 class CmdHighlighter(BaseHighlighter):
     """Windows批处理语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "echo", "set", "if", "else", "for", "in", "do", "goto", "call",
             "start", "exit", "pause", "rem", "dir", "cd", "md", "rd", "del",
             "copy", "move", "ren", "type", "cls", "chdir", "mkdir", "rmdir"
         ], "#0000FF")
 
-        self.add_rule(r'^\s*:\w+', self._fmt("#800000"))
-        self.add_rule(r'%[^%]+%', self._fmt("#008080"))
-        self.add_rule(r'^\s*rem\s+.*', self._fmt("#808080"))
-        self.add_rule(r'^\s*::.*', self._fmt("#808080"))
-        self.add_rule(r'\".*?\"', self._fmt("#008000"))
+        self.addRule(r'^\s*:\w+', self._fmt("#800000"))
+        self.addRule(r'%[^%]+%', self._fmt("#008080"))
+        self.addRule(r'^\s*rem\s+.*', self._fmt("#808080"))
+        self.addRule(r'^\s*::.*', self._fmt("#808080"))
+        self.addRule(r'\".*?\"', self._fmt("#008000"))
 
 
 class JsonHighlighter(BaseHighlighter):
     """JSON语法高亮器"""
 
-    def setup_rules(self):
-        self.add_rule(r'"[^"]+"(?=\s*:)', self._fmt("#0451A5"))
-        self.add_rule(r':\s*"[^"]*"', self._fmt("#A31515"))
-        self.add_rule(r'\b-?\d+\.?\d*([eE][+-]?\d+)?\b', self._fmt("#098658"))
-        self.add_rule(r'\b(true|false|null)\b', self._fmt("#0000FF"))
-        self.add_rule(r'[\[\]{}]', self._fmt("#000000"))
+    def setupRules(self):
+        self.addRule(r'"[^"]+"(?=\s*:)', self._fmt("#0451A5"))
+        self.addRule(r':\s*"[^"]*"', self._fmt("#A31515"))
+        self.addRule(r'\b-?\d+\.?\d*([eE][+-]?\d+)?\b', self._fmt("#098658"))
+        self.addRule(r'\b(true|false|null)\b', self._fmt("#0000FF"))
+        self.addRule(r'[\[\]{}]', self._fmt("#000000"))
 
 
 class MarkdownHighlighter(BaseHighlighter):
     """Markdown语法高亮器"""
 
-    def setup_rules(self):
-        self.add_rule(r'^#{1,6}\s+.*', self._fmt("#1F4E79", bold=True))
-        self.add_rule(r'\*\*[^*]+\*\*', self._fmt(bold=True))
-        self.add_rule(r'__[^_]+__', self._fmt(bold=True))
-        self.add_rule(r'\*[^*]+\*', self._fmt(italic=True))
-        self.add_rule(r'_[^_]+_', self._fmt(italic=True))
-        self.add_rule(r'`[^`]+`', self._fmt("#A31515", bg="#F5F5F5"))
-        self.add_rule(r'^```[\s\S]*?```', self._fmt("#A31515", bg="#F5F5F5"))
-        self.add_rule(r'^```.*', self._fmt("#A31515", bg="#F5F5F5"))
-        self.add_rule(r'\[.+?\]\(.+?\)', self._fmt("#0066CC"))
-        self.add_rule(r'!\[[^\]]*\]\(.+?\)', self._fmt("#0066CC"))
-        self.add_rule(r'<img\s+[^>]+>', self._fmt("#0066CC"))
-        self.add_rule(r'^[\s]*[-*+]\s+', self._fmt("#6800D4"))
-        self.add_rule(r'^[\s]*\d+\.\s+', self._fmt("#6800D4"))
-        self.add_rule(r'^>\s*.*', self._fmt("#6A9955"))
-        self.add_rule(r'^[-*_]{3,}$', self._fmt("#C0C0C0"))
+    def setupRules(self):
+        self.addRule(r'^#{1,6}\s+.*', self._fmt("#1F4E79", bold=True))
+        self.addRule(r'\*\*[^*]+\*\*', self._fmt(bold=True))
+        self.addRule(r'__[^_]+__', self._fmt(bold=True))
+        self.addRule(r'\*[^*]+\*', self._fmt(italic=True))
+        self.addRule(r'_[^_]+_', self._fmt(italic=True))
+        self.addRule(r'`[^`]+`', self._fmt("#A31515", bg="#F5F5F5"))
+        self.addRule(r'^```[\s\S]*?```', self._fmt("#A31515", bg="#F5F5F5"))
+        self.addRule(r'^```.*', self._fmt("#A31515", bg="#F5F5F5"))
+        self.addRule(r'\[.+?\]\(.+?\)', self._fmt("#0066CC"))
+        self.addRule(r'!\[[^\]]*\]\(.+?\)', self._fmt("#0066CC"))
+        self.addRule(r'<img\s+[^>]+>', self._fmt("#0066CC"))
+        self.addRule(r'^[\s]*[-*+]\s+', self._fmt("#6800D4"))
+        self.addRule(r'^[\s]*\d+\.\s+', self._fmt("#6800D4"))
+        self.addRule(r'^>\s*.*', self._fmt("#6A9955"))
+        self.addRule(r'^[-*_]{3,}$', self._fmt("#C0C0C0"))
 
 
 class ShellHighlighter(BaseHighlighter):
     """Shell(Bash/Zsh/Fish等)语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "if", "then", "else", "elif", "fi", "case", "esac", "for",
             "while", "until", "do", "done", "in", "function", "select",
@@ -192,31 +192,31 @@ class ShellHighlighter(BaseHighlighter):
             "wc", "head", "tail", "cut", "tr", "tee", "test", "true", "false",
             "jobs", "fg", "bg", "wait", "kill", "nohup", "xargs", "which"
         ]:
-            self.add_rule(f"\\b{b}\\b", bf)
+            self.addRule(f"\\b{b}\\b", bf)
         for b in [
             "set", "contains", "count", "argparse", "complete", "functions",
             "status", "bind", "string", "math", "random", "fish_config"
         ]:
-            self.add_rule(f"\\b{b}\\b", bf)
+            self.addRule(f"\\b{b}\\b", bf)
 
         sf = self._fmt("#A31515")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r"'[^']*'", sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r"'[^']*'", sf)
 
         vf = self._fmt("#001080")
-        self.add_rule(r'\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?', vf)
-        self.add_rule(r'\$[0-9@#?$!*]', vf)
-        self.add_rule(r'\$\{[^}]+\}', vf)
+        self.addRule(r'\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?', vf)
+        self.addRule(r'\$[0-9@#?$!*]', vf)
+        self.addRule(r'\$\{[^}]+\}', vf)
 
-        self.add_rule(r'#.*', self._fmt("#808080"))
-        self.add_rule(r'\b\d+\b', self._fmt("#098658"))
-        self.add_rule(r'[|&;<>]', self._fmt("#000000"))
+        self.addRule(r'#.*', self._fmt("#808080"))
+        self.addRule(r'\b\d+\b', self._fmt("#098658"))
+        self.addRule(r'[|&;<>]', self._fmt("#000000"))
 
 
 class GoHighlighter(BaseHighlighter):
     """Go语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "break", "case", "chan", "const", "continue", "default",
             "defer", "else", "fallthrough", "for", "func", "go", "goto",
@@ -231,23 +231,23 @@ class GoHighlighter(BaseHighlighter):
         ], "#0000FF")
 
         sf = self._fmt("#008000")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r'`[^`]*`', sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r'`[^`]*`', sf)
 
-        self.add_rule(r'//.*', self._fmt("#808080"))
-        self.add_rule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
+        self.addRule(r'//.*', self._fmt("#808080"))
+        self.addRule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F]+\b', nf)
+        self.addRule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F]+\b', nf)
 
-        self.add_rule(r'\bfunc\s+(\w+)', self._fmt("#795E26"))
+        self.addRule(r'\bfunc\s+(\w+)', self._fmt("#795E26"))
 
 
 class JavaHighlighter(BaseHighlighter):
     """Java语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "abstract", "assert", "boolean", "break", "byte", "case", "catch",
             "char", "class", "const", "continue", "default", "do", "double",
@@ -260,25 +260,25 @@ class JavaHighlighter(BaseHighlighter):
             "null", "var", "record", "sealed", "permits", "yield", "instance"
         ], "#0000FF")
 
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', self._fmt("#008000"))
-        self.add_rule(r'//.*', self._fmt("#808080"))
-        self.add_rule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', self._fmt("#008000"))
+        self.addRule(r'//.*', self._fmt("#808080"))
+        self.addRule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\.?\d*([eE][+-]?\d+)?[fFdDlL]?\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F]+[lL]?\b', nf)
+        self.addRule(r'\b\d+\.?\d*([eE][+-]?\d+)?[fFdDlL]?\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F]+[lL]?\b', nf)
 
-        self.add_rule(r'@[a-zA-Z_]\w*', self._fmt("#808000"))
+        self.addRule(r'@[a-zA-Z_]\w*', self._fmt("#808000"))
 
         cf = self._fmt("#2B91AF")
-        self.add_rule(r'\bclass\s+(\w+)', cf)
-        self.add_rule(r'\b(public|private|protected)\s+(static\s+)?class\s+(\w+)', cf)
+        self.addRule(r'\bclass\s+(\w+)', cf)
+        self.addRule(r'\b(public|private|protected)\s+(static\s+)?class\s+(\w+)', cf)
 
 
 class JavaScriptHighlighter(BaseHighlighter):
     """JavaScript语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "async", "await", "break", "case", "catch", "class", "const",
             "continue", "debugger", "default", "delete", "do", "else",
@@ -290,48 +290,48 @@ class JavaScriptHighlighter(BaseHighlighter):
         ], "#0000FF")
 
         sf = self._fmt("#A31515")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r"'[^'\\]*(\\.[^'\\]*)*'", sf)
-        self.add_rule(r'`[^`]*`', sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r"'[^'\\]*(\\.[^'\\]*)*'", sf)
+        self.addRule(r'`[^`]*`', sf)
 
         cf = self._fmt("#008000")
-        self.add_rule(r'//.*', cf)
-        self.add_rule(r'/\*[\s\S]*?\*/', cf)
+        self.addRule(r'//.*', cf)
+        self.addRule(r'/\*[\s\S]*?\*/', cf)
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F]+\b', nf)
+        self.addRule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F]+\b', nf)
 
         ff = self._fmt("#795E26")
-        self.add_rule(r'\bfunction\s+(\w+)', ff)
-        self.add_rule(r'\b(\w+)\s*\(', ff)
+        self.addRule(r'\bfunction\s+(\w+)', ff)
+        self.addRule(r'\b(\w+)\s*\(', ff)
 
-        self.add_rule(r'/\w+/[gimsuy]*', self._fmt("#FF0000"))
-        self.add_rule(r'=>', self._fmt("#0000FF"))
+        self.addRule(r'/\w+/[gimsuy]*', self._fmt("#FF0000"))
+        self.addRule(r'=>', self._fmt("#0000FF"))
 
 
 class HTMLHighlighter(BaseHighlighter):
     """HTML/XML语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         tf = self._fmt("#800000")
-        self.add_rule(r'</?[a-zA-Z][a-zA-Z0-9]*', tf)
-        self.add_rule(r'/?>', tf)
+        self.addRule(r'</?[a-zA-Z][a-zA-Z0-9]*', tf)
+        self.addRule(r'/?>', tf)
 
-        self.add_rule(r'\b[a-zA-Z-]+(?==)', self._fmt("#FF0000"))
+        self.addRule(r'\b[a-zA-Z-]+(?==)', self._fmt("#FF0000"))
 
         vf = self._fmt("#0000FF")
-        self.add_rule(r'"[^"]*"', vf)
-        self.add_rule(r"'[^']*'", vf)
+        self.addRule(r'"[^"]*"', vf)
+        self.addRule(r"'[^']*'", vf)
 
-        self.add_rule(r'<!--[\s\S]*?-->', self._fmt("#808080"))
-        self.add_rule(r'<!DOCTYPE[^>]*>', self._fmt("#0000FF"))
+        self.addRule(r'<!--[\s\S]*?-->', self._fmt("#808080"))
+        self.addRule(r'<!DOCTYPE[^>]*>', self._fmt("#0000FF"))
 
 
 class TypeScriptHighlighter(BaseHighlighter):
     """TypeScript语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "async", "await", "break", "case", "catch", "class", "const",
             "continue", "debugger", "default", "delete", "do", "else",
@@ -348,34 +348,34 @@ class TypeScriptHighlighter(BaseHighlighter):
         ], "#0000FF")
 
         sf = self._fmt("#A31515")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r"'[^'\\]*(\\.[^'\\]*)*'", sf)
-        self.add_rule(r'`[^`]*`', sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r"'[^'\\]*(\\.[^'\\]*)*'", sf)
+        self.addRule(r'`[^`]*`', sf)
 
         cf = self._fmt("#008000")
-        self.add_rule(r'//.*', cf)
-        self.add_rule(r'/\*[\s\S]*?\*/', cf)
+        self.addRule(r'//.*', cf)
+        self.addRule(r'/\*[\s\S]*?\*/', cf)
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F]+\b', nf)
-        self.add_rule(r'\b0b[01]+\b', nf)
-        self.add_rule(r'\b0o[0-7]+\b', nf)
+        self.addRule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F]+\b', nf)
+        self.addRule(r'\b0b[01]+\b', nf)
+        self.addRule(r'\b0o[0-7]+\b', nf)
 
         ff = self._fmt("#795E26")
-        self.add_rule(r'\bfunction\s+(\w+)', ff)
-        self.add_rule(r'\b(\w+)\s*\(', ff)
+        self.addRule(r'\bfunction\s+(\w+)', ff)
+        self.addRule(r'\b(\w+)\s*\(', ff)
 
-        self.add_rule(r':\s*(string|number|boolean|any|void|never|unknown|object|Array|Promise|Record|Partial|Required|Readonly|Pick|Omit|Record)', self._fmt("#267F99"))
-        self.add_rule(r'@[a-zA-Z_]\w*', self._fmt("#808000"))
-        self.add_rule(r'/\w+/[gimsuy]*', self._fmt("#FF0000"))
-        self.add_rule(r'=>', self._fmt("#0000FF"))
+        self.addRule(r':\s*(string|number|boolean|any|void|never|unknown|object|Array|Promise|Record|Partial|Required|Readonly|Pick|Omit|Record)', self._fmt("#267F99"))
+        self.addRule(r'@[a-zA-Z_]\w*', self._fmt("#808000"))
+        self.addRule(r'/\w+/[gimsuy]*', self._fmt("#FF0000"))
+        self.addRule(r'=>', self._fmt("#0000FF"))
 
 
 class RustHighlighter(BaseHighlighter):
     """Rust语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "as", "async", "await", "break", "const", "continue", "crate",
             "dyn", "else", "enum", "extern", "false", "fn", "for", "if",
@@ -394,30 +394,30 @@ class RustHighlighter(BaseHighlighter):
         ], "#267F99", bold=False)
 
         sf = self._fmt("#A31515")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r'r#*"[^"]*"#*', sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r'r#*"[^"]*"#*', sf)
 
-        self.add_rule(r'//.*', self._fmt("#808080"))
-        self.add_rule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
+        self.addRule(r'//.*', self._fmt("#808080"))
+        self.addRule(r'/\*[\s\S]*?\*/', self._fmt("#808080"))
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F_]+\b', nf)
-        self.add_rule(r'\b0b[01_]+\b', nf)
-        self.add_rule(r'\b0o[0-7_]+\b', nf)
+        self.addRule(r'\b\d+\.?\d*([eE][+-]?\d+)?\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F_]+\b', nf)
+        self.addRule(r'\b0b[01_]+\b', nf)
+        self.addRule(r'\b0o[0-7_]+\b', nf)
 
         ff = self._fmt("#795E26")
-        self.add_rule(r'\bfn\s+(\w+)', ff)
-        self.add_rule(r'\b(\w+)\s*\(', ff)
+        self.addRule(r'\bfn\s+(\w+)', ff)
+        self.addRule(r'\b(\w+)\s*\(', ff)
 
-        self.add_rule(r'\b[a-z_][a-zA-Z0-9_]*!', self._fmt("#DCDCAA"))
-        self.add_rule(r'#\[.*?\]', self._fmt("#808000"))
+        self.addRule(r'\b[a-z_][a-zA-Z0-9_]*!', self._fmt("#DCDCAA"))
+        self.addRule(r'#\[.*?\]', self._fmt("#808000"))
 
 
 class PowerShellHighlighter(BaseHighlighter):
     """PowerShell语法高亮器"""
 
-    def setup_rules(self):
+    def setupRules(self):
         self._kws([
             "begin", "break", "catch", "class", "continue", "data",
             "define", "do", "dynamicparam", "else", "elseif", "end",
@@ -437,7 +437,7 @@ class PowerShellHighlighter(BaseHighlighter):
             "Register-", "Unregister-", "Enable-", "Disable-",
             "Test-", "Debug-", "Trace-"
         ]:
-            self.add_rule(f"{cmdlet}[a-zA-Z]+", cef)
+            self.addRule(f"{cmdlet}[a-zA-Z]+", cef)
         for cmdlet in [
             "Write-Host", "Write-Output", "Write-Error", "Write-Warning",
             "Write-Verbose", "Write-Debug", "Write-Information",
@@ -447,29 +447,29 @@ class PowerShellHighlighter(BaseHighlighter):
             "Pop-Location", "Get-Process", "Stop-Process", "Start-Process",
             "Get-Service", "Stop-Service", "Start-Service", "Restart-Service"
         ]:
-            self.add_rule(f"\\b{cmdlet}\\b", cef)
+            self.addRule(f"\\b{cmdlet}\\b", cef)
 
         vf = self._fmt("#001080")
-        self.add_rule(r'\$[a-zA-Z_][a-zA-Z0-9_]*', vf)
-        self.add_rule(r'\$\{[^}]+\}', vf)
-        self.add_rule(r'\$[0-9]+', vf)
+        self.addRule(r'\$[a-zA-Z_][a-zA-Z0-9_]*', vf)
+        self.addRule(r'\$\{[^}]+\}', vf)
+        self.addRule(r'\$[0-9]+', vf)
 
         sf = self._fmt("#A31515")
-        self.add_rule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
-        self.add_rule(r"'[^']*'", sf)
-        self.add_rule(r'@".*?"@', sf)
+        self.addRule(r'"[^"\\]*(\\.[^"\\]*)*"', sf)
+        self.addRule(r"'[^']*'", sf)
+        self.addRule(r'@".*?"@', sf)
 
         cf = self._fmt("#008000")
-        self.add_rule(r'#.*', cf)
-        self.add_rule(r'<#[\s\S]*?#>', cf)
+        self.addRule(r'#.*', cf)
+        self.addRule(r'<#[\s\S]*?#>', cf)
 
         nf = self._fmt("#098658")
-        self.add_rule(r'\b\d+\b', nf)
-        self.add_rule(r'\b0x[0-9a-fA-F]+\b', nf)
+        self.addRule(r'\b\d+\b', nf)
+        self.addRule(r'\b0x[0-9a-fA-F]+\b', nf)
 
         of = self._fmt("#000000")
-        self.add_rule(r'[-+*/%=]', of)
-        self.add_rule(r'-eq|-ne|-gt|-lt|-le|-ge|-like|-notlike|-match|-notmatch|-contains|-notcontains|-in|-notin|-replace', of)
+        self.addRule(r'[-+*/%=]', of)
+        self.addRule(r'-eq|-ne|-gt|-lt|-le|-ge|-like|-notlike|-match|-notmatch|-contains|-notcontains|-in|-notin|-replace', of)
 
 
 def createHighlighter(file_path: str, parent=None):

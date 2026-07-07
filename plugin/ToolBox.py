@@ -56,20 +56,20 @@ class ToolBox(PluginBase):
             return
         self._scroll_timer = _AutoScrollTimer(self.main_window)
         self._copy_mgr = _AutoCopyManager()
-        self._copy_mgr.init_monitor(self.main_window)
+        self._copy_mgr.initMonitor(self.main_window)
         self._search_mgr = _AutoSearchManager(self.main_window)
-        self._search_mgr.init_monitor(self.main_window)
+        self._search_mgr.initMonitor(self.main_window)
         self._click_mgr = _AutoClickManager(self.main_window)
 
     def cleanup(self):
         if self._scroll_timer:
             self._scroll_timer.stop()
         if self._copy_mgr:
-            self._copy_mgr.set_enabled(False)
+            self._copy_mgr.setEnabled(False)
         if self._search_mgr:
-            self._search_mgr.set_enabled(False)
+            self._search_mgr.setEnabled(False)
         if self._click_mgr:
-            self._click_mgr.set_enabled(False)
+            self._click_mgr.setEnabled(False)
 
     def getAction(self):
         menu = QMenu(self.description, self.main_window)
@@ -79,7 +79,7 @@ class ToolBox(PluginBase):
         menu.addAction(tr("搜索"), self._open_search)
         menu.addAction("快速文本", self._quick_text)
         menu.addAction("批量重命名", self._batch_rename)
-        menu.addAction("查找重复文件", self._find_duplicates)
+        menu.addAction("查找重复文件", self._findDuplicates)
         menu.addAction("快速粘贴", self._quick_paste)
 
         menu.addAction("自动滑动", self._toggle_scroll)
@@ -102,24 +102,24 @@ class ToolBox(PluginBase):
     def _toggle_copy(self):
         self.initialize()
         if self._copy_mgr.enabled:
-            self._copy_mgr.set_enabled(False)
+            self._copy_mgr.setEnabled(False)
             logger.info("自动复制已停止")
         else:
             self._copy_mgr.target_file = self.settings.get("copy.target_file", "data/copy.txt")
-            self._copy_mgr.set_enabled(True)
+            self._copy_mgr.setEnabled(True)
             logger.info("自动复制已启动")
 
     def _toggle_search(self):
         self.initialize()
         if self._search_mgr.enabled:
-            self._search_mgr.set_enabled(False)
+            self._search_mgr.setEnabled(False)
             logger.info("自动搜索已停止")
         else:
             self._search_mgr.search_paths = self.settings.get("search.paths", [])
             self._search_mgr.case_sensitive = self.settings.get("search.case_sensitive", False)
             self._search_mgr.regex = self.settings.get("search.regex", False)
             self._search_mgr.close_delay = self.settings.get("search.close_delay", 3)
-            self._search_mgr.set_enabled(True)
+            self._search_mgr.setEnabled(True)
             if not self._search_mgr.search_paths:
                 logger.info("自动搜索已启动（未设置搜索路径）")
             else:
@@ -128,19 +128,19 @@ class ToolBox(PluginBase):
     def _toggle_click(self):
         self.initialize()
         if self._click_mgr.enabled:
-            self._click_mgr.set_enabled(False)
+            self._click_mgr.setEnabled(False)
             logger.info("自动点击已停止")
         else:
             self._click_mgr.interval = self.settings.get("click.interval", 3)
             self._click_mgr._digit_control = True
-            self._click_mgr.set_enabled(True)
+            self._click_mgr.setEnabled(True)
             logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
 
     def _batch_rename(self):
         dialog = BatchRenameDialog(self.main_window)
         dialog.exec()
 
-    def _find_duplicates(self):
+    def _findDuplicates(self):
         editor = self._ensure_editor()
         if not editor:
             return
@@ -178,9 +178,9 @@ class ToolBox(PluginBase):
             return
         folder_mgr = getattr(editor, '_folder_panel_manager', None)
         mgr = DuplicatePanelManager(editor, editor.splitter, None, editor, folder_mgr)
-        mgr.show_duplicates(duplicates)
-        fw = folder_mgr._folder_panel_width if folder_mgr and folder_mgr.is_visible() else 0
-        mgr.set_sizes(editor.width(), fw)
+        mgr.showDuplicates(duplicates)
+        fw = folder_mgr._folder_panel_width if folder_mgr and folder_mgr.isVisible() else 0
+        mgr.setSizes(editor.width(), fw)
         self._duplicate_mgr = mgr
 
     def _quick_paste(self):
@@ -190,7 +190,7 @@ class ToolBox(PluginBase):
         mw = self.main_window
         activate = getattr(mw, 'activateWindow', None)
         raise_fn = getattr(mw, 'raise_', None)
-        get_ed = getattr(mw, 'get_current_editor', None)
+        get_ed = getattr(mw, 'getCurrentEditor', None)
         if not get_ed:
             return
         if activate:
@@ -243,7 +243,7 @@ class ToolBox(PluginBase):
 
     def _ensure_editor(self):
         mw = self.main_window
-        if hasattr(mw, 'get_current_editor'):
+        if hasattr(mw, 'getCurrentEditor'):
             return mw
         if hasattr(mw, '_editor_window') and mw._editor_window:
             return mw._editor_window
@@ -376,7 +376,7 @@ class FileSearcher:
         self.case_sensitive = case_sensitive
         self.regex = regex
 
-    def search_files(self, paths: List[str], abort_check=None) -> List[dict]:
+    def searchFiles(self, paths: List[str], abort_check=None) -> List[dict]:
         results = []
         for path in paths:
             if abort_check and abort_check():
@@ -457,7 +457,7 @@ class SearchWorkerThread(QThread):
 
     def run(self):
         try:
-            results = self._searcher.search_files(
+            results = self._searcher.searchFiles(
                 self.search_paths, abort_check=self.isInterruptionRequested
             )
             if not self.isInterruptionRequested():
@@ -475,7 +475,7 @@ class RenameItem:
         self._extension = os.path.splitext(self.original_name)[1] if not self.is_directory else ""
         self._name_without_ext = os.path.splitext(self.original_name)[0] if not self.is_directory else self.original_name
 
-    def apply_find_replace(self, find_text: str, replace_text: str, case_sensitive: bool = True):
+    def applyFindReplace(self, find_text: str, replace_text: str, case_sensitive: bool = True):
         if not find_text:
             return
         name = self.original_name if self.is_directory else self._name_without_ext
@@ -486,19 +486,19 @@ class RenameItem:
         if not self.is_directory:
             self.new_name += self._extension
 
-    def apply_prefix(self, prefix: str):
+    def applyPrefix(self, prefix: str):
         if self.is_directory:
             self.new_name = prefix + self.original_name
         else:
             self.new_name = prefix + self._name_without_ext + self._extension
 
-    def apply_suffix(self, suffix: str):
+    def applySuffix(self, suffix: str):
         if self.is_directory:
             self.new_name = self.original_name + suffix
         else:
             self.new_name = self._name_without_ext + suffix + self._extension
 
-    def apply_numbering(self, start: int = 1, step: int = 1, position: str = "prefix", padding: int = 3):
+    def applyNumbering(self, start: int = 1, step: int = 1, position: str = "prefix", padding: int = 3):
         num_str = str(start).zfill(padding)
         if self.is_directory:
             if position == "prefix":
@@ -514,7 +514,7 @@ class RenameItem:
                 self.new_name = f"{num_str}{self._extension}"
         return step
 
-    def get_new_path(self) -> str:
+    def getNewPath(self) -> str:
         return os.path.join(os.path.dirname(self.original_path), self.new_name)
 
 
@@ -526,19 +526,19 @@ class BatchRenameDialog(QDialog):
         self._preview_timer = QTimer()
         self._preview_timer.setSingleShot(True)
         self._preview_timer.timeout.connect(self._do_preview)
-        self.init_ui()
+        self.initUI()
         self.setMinimumSize(700, 500)
 
-    def init_ui(self):
+    def initUI(self):
         self.setWindowTitle("批量重命名")
         layout = QVBoxLayout(self)
 
         folder_layout = QHBoxLayout()
 
         self.folder_label = FileDrop()
-        self.folder_label.folderDropped.connect(self.on_folder_dropped)
-        self.folder_label.fileDropped.connect(self.on_file_dropped)
-        self.folder_label.filesDropped.connect(self.on_files_dropped)
+        self.folder_label.folderDropped.connect(self.onFolderDropped)
+        self.folder_label.fileDropped.connect(self.onFileDropped)
+        self.folder_label.filesDropped.connect(self.onFilesDropped)
         self.folder_label.resetStyle()
         folder_layout.addWidget(self.folder_label, 1)
         self.file_count_label = QLabel("文件数: 0   ")
@@ -559,7 +559,7 @@ class BatchRenameDialog(QDialog):
         mode_layout.addWidget(QLabel("模式"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["查找替换", "数字排序", "固定前缀", "固定后缀"])
-        self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
+        self.mode_combo.currentTextChanged.connect(self.onModeChanged)
         mode_layout.addWidget(self.mode_combo)
 
         self.mode_options_stack = QStackedWidget()
@@ -630,81 +630,81 @@ class BatchRenameDialog(QDialog):
         layout.addLayout(mode_layout)
 
         btn_layout = QHBoxLayout()
-        self.select_folder_btn = QPushButton("选择文件夹")
-        self.select_folder_btn.clicked.connect(self.select_folder)
-        btn_layout.addWidget(self.select_folder_btn)
+        self.selectFolder_btn = QPushButton("选择文件夹")
+        self.selectFolder_btn.clicked.connect(self.selectFolder)
+        btn_layout.addWidget(self.selectFolder_btn)
         self.execute_btn = QPushButton("执行重命名")
-        self.execute_btn.clicked.connect(self.execute_rename)
+        self.execute_btn.clicked.connect(self.executeRename)
         self.execute_btn.setEnabled(False)
         btn_layout.addWidget(self.execute_btn)
         self.clear_btn = QPushButton("清空")
-        self.clear_btn.clicked.connect(self.clear_items)
+        self.clear_btn.clicked.connect(self.clearItems)
         btn_layout.addWidget(self.clear_btn)
         self.close_btn = QPushButton("关闭")
         self.close_btn.clicked.connect(self.close)
         btn_layout.addWidget(self.close_btn)
         layout.addLayout(btn_layout)
 
-        self.on_mode_changed("查找替换")
-        self.find_edit.textChanged.connect(self.apply_preview)
-        self.replace_edit.textChanged.connect(self.apply_preview)
-        self.case_sensitive_check.stateChanged.connect(self.apply_preview)
-        self.start_spin.valueChanged.connect(self.apply_preview)
-        self.step_spin.valueChanged.connect(self.apply_preview)
-        self.position_combo.currentTextChanged.connect(self.apply_preview)
-        self.padding_spin.valueChanged.connect(self.apply_preview)
-        self.prefix_edit.textChanged.connect(self.apply_preview)
-        self.suffix_edit.textChanged.connect(self.apply_preview)
+        self.onModeChanged("查找替换")
+        self.find_edit.textChanged.connect(self.applyPreview)
+        self.replace_edit.textChanged.connect(self.applyPreview)
+        self.case_sensitive_check.stateChanged.connect(self.applyPreview)
+        self.start_spin.valueChanged.connect(self.applyPreview)
+        self.step_spin.valueChanged.connect(self.applyPreview)
+        self.position_combo.currentTextChanged.connect(self.applyPreview)
+        self.padding_spin.valueChanged.connect(self.applyPreview)
+        self.prefix_edit.textChanged.connect(self.applyPreview)
+        self.suffix_edit.textChanged.connect(self.applyPreview)
 
-    def on_folder_dropped(self, folder_path: str):
+    def onFolderDropped(self, folder_path: str):
         self.folder_path = folder_path
         self.folder_label.setFolderPath(folder_path)
-        self.load_folder(folder_path)
+        self.loadFolder(folder_path)
 
-    def on_file_dropped(self, file_path: str):
+    def onFileDropped(self, file_path: str):
         self.folder_path = os.path.dirname(file_path)
         self.folder_label.setFolderPath(self.folder_path)
         self.rename_items = [RenameItem(file_path)]
         self.file_count_label.setText("文件数: 1")
-        self.apply_preview()
+        self.applyPreview()
         self.execute_btn.setEnabled(True)
 
-    def on_files_dropped(self, files: list):
+    def onFilesDropped(self, files: list):
         self.folder_path = os.path.dirname(files[0])
         self.folder_label.setFolderPath(self.folder_path)
         self.rename_items = [RenameItem(f) for f in files]
         self.file_count_label.setText(f"文件数: {len(files)}")
-        self.apply_preview()
+        self.applyPreview()
         self.execute_btn.setEnabled(len(self.rename_items) > 0)
 
-    def select_folder(self):
+    def selectFolder(self):
         folder = getFilePath(self, "选择文件夹", mode="dir")
         if folder:
             self.folder_path = folder
             self.folder_label.setFolderPath(folder)
-            self.load_folder(folder)
+            self.loadFolder(folder)
 
-    def load_folder(self, folder_path: str):
+    def loadFolder(self, folder_path: str):
         self.rename_items = []
         for root_dir, dirs, files in os.walk(folder_path):
             for f in files:
                 self.rename_items.append(RenameItem(os.path.join(root_dir, f)))
         self.file_count_label.setText(f"文件数: {len(self.rename_items)}")
-        self.apply_preview()
+        self.applyPreview()
         self.execute_btn.setEnabled(len(self.rename_items) > 0)
 
-    def on_mode_changed(self, mode: str):
+    def onModeChanged(self, mode: str):
         idx = {"查找替换": 0, "数字排序": 1, "固定前缀": 2, "固定后缀": 3}.get(mode, 0)
         self.mode_options_stack.setCurrentIndex(idx)
         if self.rename_items:
-            self.apply_preview()
+            self.applyPreview()
 
-    def apply_preview(self):
+    def applyPreview(self):
         self._preview_timer.start(150)
 
     def _do_preview(self):
         if not self.rename_items:
-            self.update_list()
+            self.updateList()
             return
         mode = self.mode_combo.currentText()
         for item in self.rename_items:
@@ -714,7 +714,7 @@ class BatchRenameDialog(QDialog):
             rt = self.replace_edit.text()
             cs = self.case_sensitive_check.isChecked()
             for item in self.rename_items:
-                item.apply_find_replace(ft, rt, cs)
+                item.applyFindReplace(ft, rt, cs)
         elif mode == "数字排序":
             start = self.start_spin.value()
             step = self.step_spin.value()
@@ -723,19 +723,19 @@ class BatchRenameDialog(QDialog):
             padding = self.padding_spin.value()
             num = start
             for item in self.rename_items:
-                item.apply_numbering(num, step, pos, padding)
+                item.applyNumbering(num, step, pos, padding)
                 num += step
         elif mode == "固定前缀":
             pf = self.prefix_edit.text()
             for item in self.rename_items:
-                item.apply_prefix(pf)
+                item.applyPrefix(pf)
         elif mode == "固定后缀":
             sf = self.suffix_edit.text()
             for item in self.rename_items:
-                item.apply_suffix(sf)
-        self.update_list()
+                item.applySuffix(sf)
+        self.updateList()
 
-    def update_list(self):
+    def updateList(self):
         while self.items_layout.count() > 1:
             w = self.items_layout.takeAt(0).widget()
             if w:
@@ -756,7 +756,7 @@ class BatchRenameDialog(QDialog):
             row_layout.addWidget(edit, 1)
             self.items_layout.insertWidget(self.items_layout.count() - 1, row)
 
-    def execute_rename(self):
+    def executeRename(self):
         if not self.rename_items:
             return
         success = 0
@@ -766,7 +766,7 @@ class BatchRenameDialog(QDialog):
             if item.original_name == item.new_name:
                 continue
             try:
-                os.rename(item.original_path, item.get_new_path())
+                os.rename(item.original_path, item.getNewPath())
                 success += 1
             except Exception as e:
                 errors += 1
@@ -777,15 +777,15 @@ class BatchRenameDialog(QDialog):
         else:
             messageBox(self, "重命名完成", f"成功重命名: {success} 个文件", 1)
         if self.folder_path:
-            self.load_folder(self.folder_path)
+            self.loadFolder(self.folder_path)
 
-    def clear_items(self):
+    def clearItems(self):
         self.rename_items = []
         self.folder_path = ""
         self.folder_label.setFolderPath("拖拽文件夹到此处")
         self.folder_label.resetStyle()
         self.file_count_label.setText("文件数: 0")
-        self.update_list()
+        self.updateList()
         self.execute_btn.setEnabled(False)
 
 
@@ -805,12 +805,12 @@ class DuplicateFinder(QThread):
 
     def run(self):
         try:
-            result = self.find_duplicates(self.files, self.folder_path)
+            result = self.findDuplicates(self.files, self.folder_path)
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
 
-    def find_duplicates(self, files: List[str], folder_path: str = None) -> Dict[str, List[dict]]:
+    def findDuplicates(self, files: List[str], folder_path: str = None) -> Dict[str, List[dict]]:
         cached_files = self._load_cache()
         new_or_modified = []
         current_files = {}
@@ -955,16 +955,16 @@ class DuplicatePanelManager:
             self._current_duplicates[md5] = [f for f in files if f["path"] != file_path]
             if not self._current_duplicates[md5]:
                 del self._current_duplicates[md5]
-        self.show_duplicates(self._current_duplicates)
+        self.showDuplicates(self._current_duplicates)
 
     def _on_item_double_clicked(self, item, column):
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if data and data.get("type") == "file":
             fp = data.get("path")
-            if fp and hasattr(self.parent, 'open_file_path'):
-                self.parent.open_file_path(fp)
+            if fp and hasattr(self.parent, 'openFilePath'):
+                self.parent.openFilePath(fp)
 
-    def ensure_created(self):
+    def ensureCreated(self):
         if self.panel is not None:
             return
         self.create()
@@ -983,13 +983,13 @@ class DuplicatePanelManager:
         w = self.parent.width()
         if w > 0:
             fw = (self.folder_panel_manager._folder_panel_width
-                  if self.folder_panel_manager and self.folder_panel_manager.is_visible()
+                  if self.folder_panel_manager and self.folder_panel_manager.isVisible()
                   else 0)
-            self.set_sizes(w, fw)
+            self.setSizes(w, fw)
 
-    def show_duplicates(self, duplicates: dict):
+    def showDuplicates(self, duplicates: dict):
         self._current_duplicates = {md5: [dict(f) for f in files] for md5, files in duplicates.items()}
-        self.ensure_created()
+        self.ensureCreated()
         self.tree.clear()
         style = self.parent.style()
         folder_icon = style.standardIcon(QStyle.SP_DirIcon)
@@ -1015,15 +1015,15 @@ class DuplicatePanelManager:
                 del_btn.clicked.connect(lambda checked=False, p=fi["path"]: self._move_to_trash(p))
                 self.tree.setItemWidget(file_item, 3, del_btn)
             group_item.setExpanded(True)
-        self.show_panel_view()
+        self.showPanelView()
 
-    def show_panel_view(self):
+    def showPanelView(self):
         if self.panel is None:
             return
         self.panel.setMinimumWidth(200)
         self.panel.show()
 
-    def set_sizes(self, available_width: int, folder_panel_width: int = 0):
+    def setSizes(self, available_width: int, folder_panel_width: int = 0):
         if not self.panel or available_width <= 0:
             return
         dup_w = self._panel_width
@@ -1050,7 +1050,7 @@ class DuplicatePanelManager:
             self.placeholder.setFixedWidth(0)
             self.placeholder.hide()
 
-    def is_visible(self) -> bool:
+    def isVisible(self) -> bool:
         return self.panel is not None
 
 class ToolBoxSettings(QDialog):
@@ -1059,9 +1059,9 @@ class ToolBoxSettings(QDialog):
         self.settings = dict(settings)
         self.setWindowTitle("工具箱设置")
         self.setMinimumWidth(450)
-        self.init_ui()
+        self.initUI()
 
-    def init_ui(self):
+    def initUI(self):
         layout = QFormLayout(self)
 
         scroll_speed = self.settings.get("scroll.speed", 50)
@@ -1251,11 +1251,11 @@ class _AutoCopyManager:
         self.target_file = "data/copy.txt"
         self._monitor = None
 
-    def init_monitor(self, parent):
+    def initMonitor(self, parent):
         self._monitor = ClipboardMonitor()
         self._monitor._callbacks.add(self._on_clipboard_change)
     
-    def set_enabled(self, enabled: bool):
+    def setEnabled(self, enabled: bool):
         self.enabled = enabled
         if enabled:
             self._monitor.start()
@@ -1266,9 +1266,9 @@ class _AutoCopyManager:
 
     def _on_clipboard_change(self, text: str):
         if self.enabled and text:
-            self.copy_to_file(text)
+            self.copyToFile(text)
 
-    def copy_to_file(self, text: str) -> bool:
+    def copyToFile(self, text: str) -> bool:
         if not text:
             return False
         try:
@@ -1300,11 +1300,11 @@ class _AutoSearchManager:
         self._current_search_text = ""
         self.close_delay = 3
 
-    def init_monitor(self, parent):
+    def initMonitor(self, parent):
         self._monitor = ClipboardMonitor()
         self._monitor._callbacks.add(self._on_clipboard_change)
     
-    def set_enabled(self, enabled: bool):
+    def setEnabled(self, enabled: bool):
         self.enabled = enabled
         if enabled and self.search_paths:
             self._monitor.start()
@@ -1363,13 +1363,13 @@ class _AutoSearchManager:
         layout.addWidget(result_list)
         self._popup.setLayout(layout)
 
-        def on_double_click(item):
+        def onDoubleClick(item):
             r = item.data(Qt.UserRole)
             if r:
                 self._open_file(r['file'], r['line'])
                 self._popup.close()
 
-        result_list.itemDoubleClicked.connect(on_double_click)
+        result_list.itemDoubleClicked.connect(onDoubleClick)
         self._popup.show()
         screen = QApplication.primaryScreen()
         if screen:
@@ -1389,13 +1389,13 @@ class _AutoSearchManager:
             messageBox(self._popup, tr("错误"), tr("文件不存在") + file_path, 1)
             return
         mw = self.parent
-        open_method = getattr(mw, 'open_file_path', None)
+        open_method = getattr(mw, 'openFilePath', None)
         if open_method:
             open_method(file_path)
             QTimer.singleShot(100, lambda: self._goto_line(mw, line))
 
     def _goto_line(self, mw, line: int):
-        get_ed = getattr(mw, 'get_current_editor', None)
+        get_ed = getattr(mw, 'getCurrentEditor', None)
         if not get_ed:
             return
         editor = get_ed()
@@ -1411,7 +1411,7 @@ class _AutoClickManager:
     def __init__(self, parent=None):
         self._tm = TimerManager()
         self.parent = parent
-        self._timer = self._tm.create_timer(parent)
+        self._timer = self._tm.createTimer(parent)
         self._timer.timeout.connect(self._do_click)
         self.enabled = False
         self.interval = 3
@@ -1421,7 +1421,7 @@ class _AutoClickManager:
         self._mouse_controller = mouse.Controller()
         self._keyboard_listener = None
 
-    def set_enabled(self, enabled: bool):
+    def setEnabled(self, enabled: bool):
         self.enabled = enabled
         if enabled:
             self._paused = False
@@ -1447,7 +1447,7 @@ class _AutoClickManager:
     def _start_listener(self):
         self._stop_listener()
 
-        def on_press(key):
+        def onPress(key):
             try:
                 if key == keyboard.Key.esc:
                     self._paused = True
@@ -1459,7 +1459,7 @@ class _AutoClickManager:
             except Exception:
                 logger.exception("按键监听回调失败")
 
-        self._keyboard_listener = keyboard.Listener(on_press=on_press)
+        self._keyboard_listener = keyboard.Listener(on_press=onPress)
         self._keyboard_listener.daemon = True
         self._keyboard_listener.start()
 

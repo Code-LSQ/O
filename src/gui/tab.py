@@ -36,7 +36,7 @@ class EditorTab(QWidget):
         self.is_modified = False
         self.encoding = "utf-8"
         self.view_mode = ViewMode.TEXT
-        self._original_content = ''
+        self._original_content = ""
         self.highlighter = None
         self.is_markdown = False
         self._markdown_cache = LRUCache(max_size=10)
@@ -75,7 +75,7 @@ class EditorTab(QWidget):
         self._total_lines = 0
         self._loaded_lines = 0
         self._page_buffer = {}         # {page_num: modified_content}
-        self._truncated_file_path = ''
+        self._truncated_file_path = ""
         self._truncated_encoding = "utf-8"
 
         layout = QVBoxLayout(self)
@@ -653,11 +653,11 @@ class EditorTab(QWidget):
             self.text_edit.show()
             with open(self.file_path, "rb") as f:
                 data = f.read()
-            display = ''
+            display = ""
             for i in range(0, len(data), 16):
                 chunk = data[i:i+16]
-                hex_part = ' '.join(f'{b:02X}' for b in chunk).ljust(48)
-                ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+                hex_part = " ".join(f'{b:02X}' for b in chunk).ljust(48)
+                ascii_part = "".join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
                 display += f'{i:08X}  {hex_part}  {ascii_part}\n'
             self.text_edit.setPlainText(display)
             self.text_edit.setReadOnly(True)
@@ -670,7 +670,7 @@ class EditorTab(QWidget):
 
     def setContent(self, content: str, emit_changed: bool = True):
         if content is None:
-            content = ''
+            content = ""
         try:
             content = _LINE_ENDING_RE.sub('\n', content)
         except Exception:
@@ -679,7 +679,6 @@ class EditorTab(QWidget):
         if content == self._original_content and not self.is_modified:
             return
         
-        self._original_content = content
         self._markdown_cache.clear()
         self.is_modified = False
         self.clearTruncated(clear_buffer=False)
@@ -699,6 +698,9 @@ class EditorTab(QWidget):
 
         try:
             self.text_edit.setPlainText(content)
+            # Qt 内部会对某些 Unicode 字符做规范化（如 \xa0 → 空格），
+            # 从 toPlainText() 回读 _original_content 确保后续比较与 Qt 实际内容一致
+            self._original_content = self.text_edit.toPlainText()
             self.text_edit.document().setModified(False)
         except Exception:
             logger.exception("设置内容失败")
@@ -832,7 +834,7 @@ class EditorTab(QWidget):
         self._loaded_lines = 0
         if clear_buffer:
             self._page_buffer.clear()
-        self._truncated_file_path = ''
+        self._truncated_file_path = ""
         self.text_edit.setReadOnly(False)
         self._pagination_bar.setVisible(False)
 

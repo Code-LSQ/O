@@ -11,7 +11,7 @@ from src.util import logger, Singleton
 # 如果需要全局快捷键并抑制其传给系统和其他程序， Windows 使用 win32_event_filter ，macOS 使用 darwin_intercept 。 Linux 似乎暂时没有好办法。
 
 
-def copy_selection():
+def copySelection():
     old = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         GlobalHotkeyListener._is_pasting = True
@@ -67,7 +67,7 @@ class GlobalHotkeyListener(Singleton):
         self._lock = threading.Lock()
     
     @staticmethod
-    def _get_key_name(key):
+    def _getKeyName(key):
         key_name = None
         key_char = getattr(key, 'char', None)
         key_name_attr = getattr(key, "name", None)
@@ -103,12 +103,12 @@ class GlobalHotkeyListener(Singleton):
         last_ctrl_press_time = 0
         ctrl_was_held = False
         
-        hotkey_config = self._parse_hotkey(hotkey_str) if hotkey_str else None
+        hotkey_config = self._parseHotkey(hotkey_str) if hotkey_str else None
         
-        def on_key_press(key):
+        def onPress(key):
             nonlocal last_ctrl_press_time, ctrl_was_held
             try:
-                key_name = self._get_key_name(key)
+                key_name = self._getKeyName(key)
                 if not key_name:
                     return
                 
@@ -130,19 +130,19 @@ class GlobalHotkeyListener(Singleton):
                 
                 if hotkey_config and not self._hotkey_triggered:
                     with self._lock:
-                        if self._check_hotkey(pressed_keys_copy, hotkey_config):
+                        if self._checkHotkey(pressed_keys_copy, hotkey_config):
                             self._hotkey_triggered = True
                             QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
                 
-                self._check_tool_hotkeys(pressed_keys_copy)
+                self._checkToolHotkeys(pressed_keys_copy)
                 
             except Exception:
                 logger.exception(f"按键处理错误")
         
-        def on_key_release(key):
+        def onRelease(key):
             nonlocal ctrl_was_held
             try:
-                key_name = self._get_key_name(key)
+                key_name = self._getKeyName(key)
                 if not key_name:
                     return
                 
@@ -157,11 +157,11 @@ class GlobalHotkeyListener(Singleton):
             except Exception:
                 logger.exception("按键释放错误")
         
-        def on_mouse_click(x, y, button, pressed):
+        def onClick(x, y, button, pressed):
             if pressed and button in (mouse.Button.x1, mouse.Button.x2) and mouse_side_enabled:
                 QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
         
-        def keyboard_win32_filter(msg, data):
+        def keyboardWinFilter(msg, data):
             if self._is_pasting:
                 return
             WM_KEYDOWN = 0x0100
@@ -177,7 +177,7 @@ class GlobalHotkeyListener(Singleton):
                     pressed_names.add(name if name else str(vk_code))
                 for hotkey_str, tool in self._tool_hotkeys.items():
                     hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
-                    if hotkey_keys and self._check_hotkey(pressed_names, hotkey_keys):
+                    if hotkey_keys and self._checkHotkey(pressed_names, hotkey_keys):
                         self._pending_tool = tool
                         self._pending_hotkey = hotkey_str
                         QMetaObject.invokeMethod(main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
@@ -187,10 +187,10 @@ class GlobalHotkeyListener(Singleton):
 
         try:
             self._keyboard_listener = keyboard.Listener(
-                on_press=on_key_press,
-                on_release=on_key_release,
+                on_press=onPress,
+                on_release=onRelease,
                 suppress=False,
-                win32_event_filter=keyboard_win32_filter
+                win32_event_filter=keyboardWinFilter
             )
             self._keyboard_listener.start()
             if hotkey_config or self._tool_hotkeys or double_ctrl_enabled:
@@ -199,7 +199,7 @@ class GlobalHotkeyListener(Singleton):
             if mouse_side_enabled:
                 self._mouse_listener = None
 
-                def mouse_win32_filter(msg, data):
+                def mouseWinFilter(msg, data):
                     WM_XBUTTONDOWN = 0x020B
                     WM_XBUTTONUP = 0x020C
                     if msg in (WM_XBUTTONDOWN, WM_XBUTTONUP):
@@ -210,9 +210,9 @@ class GlobalHotkeyListener(Singleton):
                             self._mouse_listener.suppress_event()
 
                 self._mouse_listener = mouse.Listener(
-                    on_click=None,
+                    on_click=onClick,
                     suppress=False,
-                    win32_event_filter=mouse_win32_filter
+                    win32_event_filter=mouseWinFilter
                     )
                 self._mouse_listener.start()
                 logger.info("鼠标侧键监听已启动")
@@ -246,7 +246,7 @@ class GlobalHotkeyListener(Singleton):
         self._stop()
         self.start(main_window, hotkey_str, mouse_side_enabled, double_ctrl_enabled)
     
-    def _parse_hotkey(self, hotkey_str: str) -> set:
+    def _parseHotkey(self, hotkey_str: str) -> set:
         """解析快捷键字符串为按键集合"""
         if not hotkey_str:
             return None
@@ -269,7 +269,7 @@ class GlobalHotkeyListener(Singleton):
         logger.info(f"解析快捷键: '{hotkey_str}' -> {keys}")
         return keys if keys else None
     
-    def _check_hotkey(self, pressed_keys: set, hotkey_keys: set) -> bool:
+    def _checkHotkey(self, pressed_keys: set, hotkey_keys: set) -> bool:
         """检查是否匹配快捷键"""
         if not hotkey_keys:
             return False
@@ -330,7 +330,7 @@ class GlobalHotkeyListener(Singleton):
         
         return True
     
-    def _check_tool_hotkeys(self, pressed_keys=None):
+    def _checkToolHotkeys(self, pressed_keys=None):
         """检查工具快捷键"""
         if not self._tool_hotkeys or not self._main_window:
             return
@@ -343,7 +343,7 @@ class GlobalHotkeyListener(Singleton):
 
         for hotkey_str, tool in self._tool_hotkeys.items():
             hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
-            if hotkey_keys and self._check_hotkey(pressed_keys, hotkey_keys):
+            if hotkey_keys and self._checkHotkey(pressed_keys, hotkey_keys):
                 logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
                 self._pending_tool = tool
                 self._pending_hotkey = hotkey_str
@@ -357,10 +357,10 @@ class GlobalHotkeyListener(Singleton):
             return
         with self._lock:
             self._tool_hotkeys[hotkey_str] = tool
-            self._tool_hotkeys_cache[hotkey_str] = self._parse_hotkey(hotkey_str)
+            self._tool_hotkeys_cache[hotkey_str] = self._parseHotkey(hotkey_str)
         logger.info(f"注册工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
     
-    def clear_tool_hotkeys(self):
+    def clearToolHotkeys(self):
         """清除所有工具快捷键"""
         with self._lock:
             self._tool_hotkeys.clear()
@@ -368,7 +368,7 @@ class GlobalHotkeyListener(Singleton):
         logger.info("清除所有工具快捷键")
 
 
-def translate_key_to_str(event):
+def eventToKey(event):
     """将 QKeyEvent 转换为快捷键字符串"""
     key = event.key()
     if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab, Qt.Key.Key_Space, Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
@@ -385,14 +385,14 @@ def translate_key_to_str(event):
     if modifiers & Qt.KeyboardModifier.MetaModifier:
         parts.append("Meta")
     
-    key_name = key_value_to_str(key)
+    key_name = codeToKey(key)
     if key_name:
         parts.append(key_name)
     
     return "+".join(parts) if parts else None
 
 
-def key_value_to_str(key):
+def codeToKey(key):
     """将键值映射为可读字符串"""
     key_map = {
         Qt.Key.Key_A: "A", Qt.Key.Key_B: "B", Qt.Key.Key_C: "C", Qt.Key.Key_D: "D",
@@ -450,7 +450,7 @@ class KeyCaptureFilter(QObject):
                 return True
 
             modifiers = event.modifiers()
-            key_name = key_value_to_str(key)
+            key_name = codeToKey(key)
 
             if is_key_press:
                 if key_name:
@@ -466,7 +466,7 @@ class KeyCaptureFilter(QObject):
                         self._pressed_keys.add('meta')
                 self._max_keys = self._max_keys | self._pressed_keys
 
-                seq = self._build_seq(self._max_keys)
+                seq = self._buildSeq(self._max_keys)
                 if seq and seq != self._last_seq:
                     self._last_seq = seq
                     self.key_captured.emit(seq)
@@ -484,7 +484,7 @@ class KeyCaptureFilter(QObject):
                         self._pressed_keys.discard('meta')
 
                 if not self._pressed_keys and self._max_keys:
-                    seq = self._build_seq(self._max_keys)
+                    seq = self._buildSeq(self._max_keys)
                     if seq and seq != self._last_seq:
                         self._last_seq = seq
                         self.key_captured.emit(seq)
@@ -494,7 +494,7 @@ class KeyCaptureFilter(QObject):
 
         return super().eventFilter(obj, event)
 
-    def _build_seq(self, keys):
+    def _buildSeq(self, keys):
         parts = []
         if 'ctrl' in keys:
             parts.append("Ctrl")

@@ -37,7 +37,7 @@ elif sys.platform == "darwin":
     for p in ['/System', '/Library', '/private', '/Applications', '/Volumes', '/Network', '/cores', '/opt', '/usr', '/var', '/etc', '/bin', '/sbin', '/lib']:
         system_dir.add(os.path.normpath(p))
 
-def _is_system_path(path: str) -> bool:
+def _isSystemPath(path: str) -> bool:
     normalized = os.path.normpath(path)
     if sys.platform == "win32":
         normalized = normalized.lower()
@@ -64,16 +64,16 @@ class LinkPlugin(PluginBase):
 
     def getAction(self):
         action = QAction(self.description, self.main_window)
-        action.triggered.connect(self.show_manage_dialog)
+        action.triggered.connect(self.showManageDialog)
         return action
     
-    def show_manage_dialog(self, action=None):
+    def showManageDialog(self, action=None):
         self.initialize()
-        dialog = LinkManage(self.main_window, pairs=self.settings.get("links", []), on_save=self._on_dialog_save)
+        dialog = LinkManage(self.main_window, pairs=self.settings.get("links", []), on_save=self._onDialogSave)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.show()
     
-    def _on_dialog_save(self, pairs):
+    def _onDialogSave(self, pairs):
         """对话框保存回调"""
         self.settings["links"] = pairs
         self.saveConfig()
@@ -111,9 +111,9 @@ class LinkManage(QDialog):
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
 
-        self.run_btn.clicked.connect(self.run_link)
-        self.recover_btn.clicked.connect(self.recover_link)
-        self.test_btn.clicked.connect(self.test_all_links)
+        self.run_btn.clicked.connect(self.runLink)
+        self.recover_btn.clicked.connect(self.recoverLink)
+        self.test_btn.clicked.connect(self.testAllLinks)
         self.pair_manage.add_btn.clicked.connect(self.add)
         self.pair_manage.edit_btn.clicked.connect(self.edit)
         self.pair_manage.delete_btn.clicked.connect(self.delete)
@@ -124,15 +124,15 @@ class LinkManage(QDialog):
             self.on_save(self.pair_manage.getPairs())
         super().closeEvent(event)
 
-    def _show_elevation_dialog(self):
+    def _showElevationDialog(self):
         """显示提权确认对话框"""
         if messageBox(self, "需要管理员权限", "是否以管理员身份运行？是则重启程序", 2):
             runAdmin()
 
-    def _handle_symlink_error(self, err_msg: str):
+    def _handleSymlinkError(self, err_msg: str):
         """处理符号链接操作错误，如果是权限问题则显示提权对话框"""
         if "需要管理员权限" in err_msg:
-            self._show_elevation_dialog()
+            self._showElevationDialog()
         else:
             messageBox(self, "错误", f"操作失败: {err_msg}", 1)
 
@@ -144,7 +144,7 @@ class LinkManage(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, pair.get("value", ""))
             self.pair_manage.pair_list.addItem(item)
 
-    def parse_value(self, value: str) -> Tuple[Optional[str], Optional[str]]:
+    def parseValue(self, value: str) -> Tuple[Optional[str], Optional[str]]:
         if not value:
             return None, None
         if "->" in value:
@@ -160,7 +160,7 @@ class LinkManage(QDialog):
             target_path = None
         return source_path, target_path
 
-    def _create_symlink(self, target_path: str, link_path: str, is_dir: Optional[bool] = None) -> Tuple[bool, Optional[str]]:
+    def _createSymlink(self, target_path: str, link_path: str, is_dir: Optional[bool] = None) -> Tuple[bool, Optional[str]]:
         """创建符号链接：在 link_path 创建指向 target_path 的符号链接"""
         is_dir_flag = is_dir if is_dir is not None else os.path.isdir(target_path)
         try:
@@ -176,7 +176,7 @@ class LinkManage(QDialog):
             logger.exception("创建符号链接失败")
             return False, str(e)
 
-    def _safe_move(self, src: str, dst: str) -> Tuple[bool, Optional[str]]:
+    def _safeMove(self, src: str, dst: str) -> Tuple[bool, Optional[str]]:
         src_drive = os.path.splitdrive(src)[0].lower()
         dst_drive = os.path.splitdrive(dst)[0].lower()
         if src_drive == dst_drive:
@@ -201,7 +201,7 @@ class LinkManage(QDialog):
         except Exception as e:
             return False, f"跨盘复制失败: {e}"
 
-    def _execute_link_operation(
+    def _executeLinkOperation(
         self,
         source_path: str,
         target_path: str,
@@ -213,9 +213,9 @@ class LinkManage(QDialog):
         2. 如果 source_path 是普通文件/目录：移动到 target_path
         3. 在 source_path 创建指向 target_path 的符号链接
         """
-        if _is_system_path(source_path):
+        if _isSystemPath(source_path):
             return False, f"源路径涉及系统目录，禁止操作: {source_path}"
-        if _is_system_path(target_path):
+        if _isSystemPath(target_path):
             return False, f"目标路径涉及系统目录，禁止操作: {target_path}"
 
         # 如果 source_path 是符号链接，先获取其目标
@@ -223,7 +223,7 @@ class LinkManage(QDialog):
         if source_is_symlink:
             try:
                 original_target = os.readlink(source_path)
-                if original_target and _is_system_path(original_target):
+                if original_target and _isSystemPath(original_target):
                     return False, f"符号链接目标涉及系统目录，禁止操作: {original_target}"
                 os.remove(source_path)
                 logger.info(f"已删除旧符号链接: {source_path} -> {original_target}")
@@ -258,7 +258,7 @@ class LinkManage(QDialog):
                     parent = os.path.dirname(target_path)
                     if not os.path.exists(parent):
                         return False, f"目标父目录不存在: {parent}"
-                    success, err_msg = self._safe_move(move_source, target_path)
+                    success, err_msg = self._safeMove(move_source, target_path)
                     if not success:
                         return False, err_msg
                     logger.info(f"移动文件: {move_source} -> {target_path}")
@@ -270,9 +270,9 @@ class LinkManage(QDialog):
             return False, f"目标路径不存在: {target_path}"
         
         is_dir = source_is_dir if source_is_dir is not None else os.path.isdir(target_path)
-        success, err_msg = self._create_symlink(target_path, source_path, is_dir)
+        success, err_msg = self._createSymlink(target_path, source_path, is_dir)
         if not success and move_source:
-            rollback_ok, rollback_err = self._safe_move(target_path, move_source)
+            rollback_ok, rollback_err = self._safeMove(target_path, move_source)
             if rollback_ok:
                 return False, f"创建符号链接失败，已自动回滚: {err_msg}"
             else:
@@ -283,15 +283,15 @@ class LinkManage(QDialog):
                 )
         return success, err_msg
 
-    def _recover_link_operation(self, source_path: str, target_path: str) -> Tuple[bool, Optional[str]]:
+    def _recoverLinkOperation(self, source_path: str, target_path: str) -> Tuple[bool, Optional[str]]:
         """恢复操作：删除符号链接，并将文件从 target_path 移回 source_path
         
         Args:
             source_path: 符号链接路径（将恢复为原始文件位置）
             target_path: 当前文件位置（将被移回 source_path）"""
-        if _is_system_path(source_path):
+        if _isSystemPath(source_path):
             return False, f"源路径涉及系统目录，禁止恢复操作: {source_path}"
-        if _is_system_path(target_path):
+        if _isSystemPath(target_path):
             return False, f"目标路径涉及系统目录，禁止恢复操作: {target_path}"
 
         # 1. 删除符号链接（如果存在）
@@ -321,7 +321,7 @@ class LinkManage(QDialog):
             # target_path 不存在，无法恢复
             return False, f"目标路径不存在，无法恢复: {target_path}"
 
-    def get_selected_pair(self):
+    def getSelectedPair(self):
         selected = self.pair_manage.pair_list.selectedItems()
         if not selected:
             messageBox(self, "警告", "请先选择一个要操作的项", 1)
@@ -330,7 +330,7 @@ class LinkManage(QDialog):
 
         name = current_item.text()
         value = current_item.data(Qt.ItemDataRole.UserRole)
-        source_path, target_path = self.parse_value(value)
+        source_path, target_path = self.parseValue(value)
         
         if target_path is None:
             messageBox(self, "警告", "无效的格式，需要 source_path->target_path 格式", 1)
@@ -352,7 +352,7 @@ class LinkManage(QDialog):
             return (not_exists_status, None)
 
     def add(self):
-        name, value = self.pair_dialog("添加配对")
+        name, value = self.pairDialog("添加配对")
         if name is not None:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, value)
@@ -368,7 +368,7 @@ class LinkManage(QDialog):
         old_name = current_item.text()
         old_value = current_item.data(Qt.ItemDataRole.UserRole)
 
-        name, value = self.pair_dialog("编辑配对", old_name, old_value)
+        name, value = self.pairDialog("编辑配对", old_name, old_value)
         if name is not None:
             current_item.setText(name)
             current_item.setData(Qt.ItemDataRole.UserRole, value)
@@ -384,7 +384,7 @@ class LinkManage(QDialog):
             row = self.pair_manage.pair_list.row(current_item)
             self.pair_manage.pair_list.takeItem(row)
 
-    def pair_dialog(self, title: str, initial_name: str = "", initial_value: str = "") -> Tuple[Optional[str], Optional[str]]:
+    def pairDialog(self, title: str, initial_name: str = "", initial_value: str = "") -> Tuple[Optional[str], Optional[str]]:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         dialog.setMinimumWidth(450)
@@ -426,17 +426,17 @@ class LinkManage(QDialog):
         source = os.path.normpath(os.path.expandvars(source))
         target = os.path.normpath(os.path.expandvars(target))
 
-        if _is_system_path(source):
+        if _isSystemPath(source):
             messageBox(self, "禁止操作", f"源路径涉及系统目录，禁止操作:\n{source}", 1)
             return None, None
-        if _is_system_path(target):
+        if _isSystemPath(target):
             messageBox(self, "禁止操作", f"目标路径涉及系统目录，禁止操作:\n{target}", 1)
             return None, None
 
         return name, f"{source}->{target}"
 
-    def run_link(self):
-        result = self.get_selected_pair()
+    def runLink(self):
+        result = self.getSelectedPair()
         if result[0] is None:
             return
         
@@ -444,34 +444,34 @@ class LinkManage(QDialog):
         status, is_dir = self.checkPathLink(source_path, SOURCE_SYMLINK, SOURCE_NOT_SYMLINK, SOURCE_NOT_EXISTS)
 
         if status == SOURCE_SYMLINK:
-            success, err_msg = self._execute_link_operation(source_path, target_path, True, is_dir)
+            success, err_msg = self._executeLinkOperation(source_path, target_path, True, is_dir)
             if success:
                 messageBox(self, "完成", "已删除旧符号链接并创建新符号链接", 1)
             else:
-                self._handle_symlink_error(err_msg)
+                self._handleSymlinkError(err_msg)
 
         elif status == SOURCE_NOT_SYMLINK:
             if messageBox(self, "确认", f"源路径存在但不是符号链接，是否将其移动到目标路径并创建符号链接？\n{source_path} -> {target_path}", 2):
-                success, err_msg = self._execute_link_operation(source_path, target_path, False, is_dir)
+                success, err_msg = self._executeLinkOperation(source_path, target_path, False, is_dir)
                 if success:
                     messageBox(self, "完成", "文件已移动并创建符号链接", 1)
                 else:
-                    self._handle_symlink_error(err_msg)
+                    self._handleSymlinkError(err_msg)
 
         elif status == SOURCE_NOT_EXISTS:
             if not os.path.exists(target_path):
                 messageBox(self, "无法创建", "源路径和目标路径均不存在，无法创建符号链接", 1)
                 return
             is_dir = os.path.isdir(target_path)
-            success, err_msg = self._execute_link_operation(source_path, target_path, False, is_dir)
+            success, err_msg = self._executeLinkOperation(source_path, target_path, False, is_dir)
             if success:
                 messageBox(self, "完成", "符号链接创建成功", 1)
             else:
-                self._handle_symlink_error(err_msg)
+                self._handleSymlinkError(err_msg)
 
 
-    def recover_link(self):
-        result = self.get_selected_pair()
+    def recoverLink(self):
+        result = self.getSelectedPair()
         if result[0] is None:
             return
         
@@ -479,18 +479,18 @@ class LinkManage(QDialog):
         status, is_dir = self.checkPathLink(source_path, SOURCE_SYMLINK, SOURCE_NOT_SYMLINK, SOURCE_NOT_EXISTS)
 
         if status == SOURCE_SYMLINK:
-            success, err_msg = self._recover_link_operation(source_path, target_path)
+            success, err_msg = self._recoverLinkOperation(source_path, target_path)
             if success:
                 messageBox(self, "完成", "符号链接已删除，文件已恢复", 1)
             else:
-                self._handle_symlink_error(err_msg)
+                self._handleSymlinkError(err_msg)
         
         elif status == SOURCE_NOT_SYMLINK:
             if not os.path.exists(target_path):
                 messageBox(self, "无法恢复", f"目标路径不存在，无法恢复:\n{target_path}", 1)
                 return
 
-            if _is_system_path(source_path):
+            if _isSystemPath(source_path):
                 messageBox(self, "禁止操作", f"源路径涉及系统目录，禁止删除:\n{source_path}", 1)
                 return
 
@@ -506,16 +506,16 @@ class LinkManage(QDialog):
                     messageBox(self, "错误", f"删除源路径失败: {str(e)}", 1)
                     return
                 # 调用恢复操作
-                success, err_msg = self._recover_link_operation(source_path, target_path)
+                success, err_msg = self._recoverLinkOperation(source_path, target_path)
                 if success:
                     messageBox(self, "完成", "文件已恢复", 1)
                 else:
-                    self._handle_symlink_error(err_msg)
+                    self._handleSymlinkError(err_msg)
         
         elif status == SOURCE_NOT_EXISTS:
             messageBox(self, "完成", "源路径不存在，无需恢复", 1)
 
-    def test_all_links(self):
+    def testAllLinks(self):
         if self.pair_manage.pair_list.count() == 0:
             messageBox(self, "测试结果", "没有符号链接", 1)
             return
@@ -530,7 +530,7 @@ class LinkManage(QDialog):
                 results.append(f"{name}: 数据为空")
                 continue
             
-            source_path, target_path = self.parse_value(value)
+            source_path, target_path = self.parseValue(value)
             
             if source_path is None or target_path is None:
                 results.append(f"{name}: 格式错误 (需要 source->target 格式)")

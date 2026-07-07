@@ -26,7 +26,7 @@ def _resolveContentImage(content_parts: List[Dict]):
             continue
         i += 1
 
-def resolve_image_urls(messages: List[Dict]) -> List[Dict]:
+def resolveImageUrls(messages: List[Dict]) -> List[Dict]:
     """遍历消息列表，移除 content 中的图片，仅保留纯文本"""
     for msg in messages:
         content = msg.get("content", "")
@@ -34,7 +34,7 @@ def resolve_image_urls(messages: List[Dict]) -> List[Dict]:
             _resolveContentImage(content)
     return messages
 
-def _get_profile(settings) -> dict:
+def _getProfile(settings) -> dict:
     """获取当前激活的配置"""
     active_profile = settings.get("active", "")
     profiles = settings.get("profiles", {})
@@ -51,12 +51,12 @@ class AIBaseAdapter(ABC):
     负责处理不同AI服务API的差异，提供统一的接口。
     
     子类需要实现的方法：
-    - get_api_url(): 获取API URL
-    - get_headers(): 获取HTTP请求头
-    - build_chat_request(): 构建聊天请求体
-    - parse_chat_response(): 解析聊天响应
-    - get_model_list_url(): 获取模型列表URL
-    - parse_models_response(): 解析模型列表响应
+    - getApiUrl(): 获取API URL
+    - getHeaders(): 获取HTTP请求头
+    - buildChatRequest(): 构建聊天请求体
+    - parseChatResponse(): 解析聊天响应
+    - getModelListUrl(): 获取模型列表URL
+    - parseModelsResponse(): 解析模型列表响应
     """
     
     _requires_api_key: bool = True
@@ -66,50 +66,50 @@ class AIBaseAdapter(ABC):
         self._override_api_key = api_key
         self._override_api_url = api_url
     
-    def _get_profile_url(self, default_url: str) -> str:
-        profile = _get_profile(self.config)
+    def _getProfileUrl(self, default_url: str) -> str:
+        profile = _getProfile(self.config)
         return profile.get("api_url", "") or default_url
     
     @abstractmethod
-    def get_api_url(self, model: str = "") -> str:
+    def getApiUrl(self, model: str = "") -> str:
         """获取API URL"""
         pass
     
     @abstractmethod
-    def get_headers(self, api_key: str) -> Dict[str, str]:
+    def getHeaders(self, api_key: str) -> Dict[str, str]:
         """获取请求头"""
         pass
     
     @abstractmethod
-    def build_chat_request(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
+    def buildChatRequest(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
         """构建聊天请求体"""
         pass
     
     @abstractmethod
-    def parse_chat_response(self, response: requests.Response) -> str:
+    def parseChatResponse(self, response: requests.Response) -> str:
         """解析聊天响应"""
         pass
     
     @abstractmethod
-    def get_model_list_url(self) -> str:
+    def getModelListUrl(self) -> str:
         """获取模型列表 URL"""
         pass
     
     @abstractmethod
-    def parse_models_response(self, response: requests.Response) -> List[str]:
+    def parseModelsResponse(self, response: requests.Response) -> List[str]:
         """解析模型列表响应"""
         pass
     
-    def parse_usage(self, response_data: dict) -> tuple[int, int]:
+    def parseUsage(self, response_data: dict) -> tuple[int, int]:
         """从响应数据中提取 (input_tokens, output_tokens)，默认返回 (0,0)"""
         return 0, 0
     
-    def _build_stream_options(self) -> dict:
+    def _buildStreamOptions(self) -> dict:
         """构建流式的额外请求参数，默认不添加"""
         return {}
     
     @staticmethod
-    def _extract_error(response: requests.Response, prefix: str) -> str:
+    def _extractError(response: requests.Response, prefix: str) -> str:
         """从非 200 响应中提取错误消息"""
         error_msg = f"{prefix}: {response.status_code}"
         try:
@@ -122,20 +122,20 @@ class AIBaseAdapter(ABC):
             error_msg += f" - {response.text}"
         return error_msg
     
-    def _validate_request(self, api_key: str, api_url: str):
+    def _validateRequest(self, api_key: str, api_url: str):
         if self._requires_api_key and not api_key:
             raise AIError("API Key未设置")
         if not api_url:
             raise AIError("API URL未设置")
     
-    def _do_request(self, url: str, headers: dict, json_data: dict = None, timeout: int = 60, stream: bool = False, method: str = 'POST'):
+    def _doRequest(self, url: str, headers: dict, json_data: dict = None, timeout: int = 60, stream: bool = False, method: str = 'POST'):
         try:
             if method == 'GET':
                 response = _session.get(url, headers=headers, timeout=timeout)
             else:
                 response = _session.post(url, headers=headers, json=json_data, timeout=timeout, stream=stream)
             if response.status_code != 200:
-                error_msg = self._extract_error(response, "API请求失败")
+                error_msg = self._extractError(response, "API请求失败")
                 logger.error(f"AI API错误: {error_msg}")
                 raise AIError(error_msg)
             return response
@@ -149,78 +149,78 @@ class AIBaseAdapter(ABC):
             raise AIError(f"未知错误: {str(e)}")
     
     def chat(self, messages: List[Dict], model: str, temperature: float = 0.7, max_tokens: int = 2000) -> tuple[str, int, int]:
-        api_key = self._get_api_key()
-        api_url = self.get_api_url(model)
-        self._validate_request(api_key, api_url)
+        api_key = self._getApiKey()
+        api_url = self.getApiUrl(model)
+        self._validateRequest(api_key, api_url)
         
-        data = self.build_chat_request(model, messages, temperature, max_tokens)
-        headers = self.get_headers(api_key)
+        data = self.buildChatRequest(model, messages, temperature, max_tokens)
+        headers = self.getHeaders(api_key)
         
         try:
-            response = self._do_request(api_url, headers, json_data=data, timeout=60)
+            response = self._doRequest(api_url, headers, json_data=data, timeout=60)
             logger.info(f"AI API请求: model={model}, status={response.status_code}")
             resp_data = response.json()
-            text = self.parse_chat_response(response)
-            in_t, out_t = self.parse_usage(resp_data)
+            text = self.parseChatResponse(response)
+            in_t, out_t = self.parseUsage(resp_data)
             return text, in_t, out_t
         except json.JSONDecodeError:
             raise AIError("API返回格式错误")
         except KeyError as e:
             raise AIError(f"API返回数据缺少必要字段: {e}")
     
-    def get_models(self) -> List[str]:
-        api_key = self._get_api_key()
-        api_url = self.get_api_url()
-        self._validate_request(api_key, api_url)
+    def getModels(self) -> List[str]:
+        api_key = self._getApiKey()
+        api_url = self.getApiUrl()
+        self._validateRequest(api_key, api_url)
         
-        headers = self.get_headers(api_key)
+        headers = self.getHeaders(api_key)
         
         try:
-            models_url = self.get_model_list_url()
-            response = self._do_request(models_url, headers, timeout=30, method='GET')
+            models_url = self.getModelListUrl()
+            response = self._doRequest(models_url, headers, timeout=30, method='GET')
             logger.info(f"获取模型列表: status={response.status_code}")
-            return self.parse_models_response(response)
+            return self.parseModelsResponse(response)
         except AIError:
             raise
         except Exception as e:
             raise AIError(f"获取模型列表失败: {str(e)}")
     
-    def _get_api_key(self) -> str:
+    def _getApiKey(self) -> str:
         """获取API Key"""
         if self._override_api_key:
             return str(self._override_api_key).strip()
-        profile = _get_profile(self.config)
+        profile = _getProfile(self.config)
         key = profile.get("api_key")
         if key:
             return str(key).strip()
         return ""
 
-    def test_connection(self) -> bool:
+    def testConnection(self) -> bool:
         """测试API连接"""
         try:
-            self.get_models()
+            self.getModels()
             return True
         except Exception:
             return False
 
-    def stream_chat(self, messages: List[Dict], model: str, callback, temperature: float = 0.7, max_tokens: int = 2000) -> tuple[int, int]:
-        api_key = self._get_api_key()
-        api_url = self.get_api_url(model)
-        self._validate_request(api_key, api_url)
+    def streamChat(self, messages: List[Dict], model: str, callback, temperature: float = 0.7, max_tokens: int = 2000) -> tuple[int, int]:
+        api_key = self._getApiKey()
+        api_url = self.getApiUrl(model)
+        self._validateRequest(api_key, api_url)
         
-        data = self.build_chat_request(model, messages, temperature, max_tokens)
+        data = self.buildChatRequest(model, messages, temperature, max_tokens)
         data["stream"] = True
-        data.update(self._build_stream_options())
-        headers = self.get_headers(api_key)
+        data.update(self._buildStreamOptions())
+        headers = self.getHeaders(api_key)
         
-        response = self._do_request(api_url, headers, json_data=data, timeout=120, stream=True)
+        response = self._doRequest(api_url, headers, json_data=data, timeout=120, stream=True)
         logger.info(f"AI流式请求: model={model}, status={response.status_code}")
         
-        _, in_t, out_t = self.parse_stream_response(response, callback)
+        _, in_t, out_t = self.parseStreamResponse(response, callback)
         return in_t, out_t
     
     @staticmethod
-    def _extract_stream_chunk(obj: dict) -> str:
+    def _extractStreamChunk(obj: dict) -> str:
         """从 SSE 响应对象中提取 content chunk"""
         choices = obj.get('choices')
         if not choices or not choices[0]:
@@ -229,7 +229,7 @@ class AIBaseAdapter(ABC):
         chunk = delta.get('content')
         return chunk if chunk is not None else None
 
-    def parse_stream_response(self, response: requests.Response, callback) -> tuple[str, int, int]:
+    def parseStreamResponse(self, response: requests.Response, callback) -> tuple[str, int, int]:
         """解析流式响应，子类可覆盖
         Returns:
             (完整内容, input_tokens, output_tokens)
@@ -247,13 +247,13 @@ class AIBaseAdapter(ABC):
                 try:
                     obj = json.loads(data)
                     last_data = obj
-                    chunk = self._extract_stream_chunk(obj)
+                    chunk = self._extractStreamChunk(obj)
                     if chunk is not None:
                         content += chunk
                         callback(chunk)
                 except json.JSONDecodeError:
                     continue
-        in_t, out_t = self.parse_usage(last_data) if last_data else (0, 0)
+        in_t, out_t = self.parseUsage(last_data) if last_data else (0, 0)
         return content, in_t, out_t
 
 class OpenAIAdapter(AIBaseAdapter):
@@ -269,19 +269,19 @@ class OpenAIAdapter(AIBaseAdapter):
 
     大多数 AI API 采用此格式，是所有兼容适配器的基类"""
     
-    def get_api_url(self, model: str = "") -> str:
+    def getApiUrl(self, model: str = "") -> str:
         if self._override_api_url:
             return f"{str(self._override_api_url).strip().rstrip('/')}/chat/completions"
-        url = self._get_profile_url("https://api.deepseek.com")
+        url = self._getProfileUrl("https://api.deepseek.com")
         return f"{str(url).strip().rstrip('/')}/chat/completions"
 
-    def get_headers(self, api_key: str) -> Dict[str, str]:
+    def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
     
-    def build_chat_request(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
+    def buildChatRequest(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
         return {
             "model": model,
             "messages": messages,
@@ -289,24 +289,24 @@ class OpenAIAdapter(AIBaseAdapter):
             "max_tokens": max_tokens
         }
     
-    def _build_stream_options(self) -> dict:
+    def _buildStreamOptions(self) -> dict:
         return {"stream_options": {"include_usage": True}}
     
-    def parse_chat_response(self, response: requests.Response) -> str:
+    def parseChatResponse(self, response: requests.Response) -> str:
         result = response.json()
         if "choices" not in result or len(result["choices"]) == 0:
             raise AIError("API返回格式错误")
         return result["choices"][0]["message"]["content"]
     
-    def parse_usage(self, response_data: dict) -> tuple[int, int]:
+    def parseUsage(self, response_data: dict) -> tuple[int, int]:
         usage = response_data.get("usage", {})
         return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
     
-    def get_model_list_url(self) -> str:
-        url = self._get_profile_url("https://api.deepseek.com")
+    def getModelListUrl(self) -> str:
+        url = self._getProfileUrl("https://api.deepseek.com")
         return f"{str(url).strip().rstrip('/')}/models"
     
-    def parse_models_response(self, response: requests.Response) -> List[str]:
+    def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
         if "data" not in result:
             raise AIError("API返回格式错误")
@@ -322,16 +322,16 @@ class OllamaAdapter(AIBaseAdapter):
     
     _requires_api_key: bool = False
     
-    def get_api_url(self, model: str = "") -> str:
-        url = self._get_profile_url("http://127.0.0.1:11434")
+    def getApiUrl(self, model: str = "") -> str:
+        url = self._getProfileUrl("http://127.0.0.1:11434")
         return f"{str(url).strip().rstrip('/')}/api/chat"
     
-    def get_headers(self, api_key: str) -> Dict[str, str]:
+    def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
             "Content-Type": "application/json"
         }
     
-    def build_chat_request(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
+    def buildChatRequest(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
         ollama_messages = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -364,16 +364,16 @@ class OllamaAdapter(AIBaseAdapter):
             },
         }
     
-    def parse_chat_response(self, response: requests.Response) -> str:
+    def parseChatResponse(self, response: requests.Response) -> str:
         result = response.json()
         if "message" not in result:
             raise AIError("API返回格式错误")
         return result["message"].get("content", "")
 
-    def parse_usage(self, response_data: dict) -> tuple[int, int]:
+    def parseUsage(self, response_data: dict) -> tuple[int, int]:
         return response_data.get("prompt_eval_count", 0), response_data.get("eval_count", 0)
     
-    def parse_stream_response(self, response: requests.Response, callback) -> tuple[str, int, int]:
+    def parseStreamResponse(self, response: requests.Response, callback) -> tuple[str, int, int]:
         content = ""
         last_data = None
         for line in response.iter_lines():
@@ -396,11 +396,11 @@ class OllamaAdapter(AIBaseAdapter):
         out_t = last_data.get("eval_count", 0) if last_data else 0
         return content, in_t, out_t
     
-    def get_model_list_url(self) -> str:
-        url = self._get_profile_url("http://127.0.0.1:11434")
+    def getModelListUrl(self) -> str:
+        url = self._getProfileUrl("http://127.0.0.1:11434")
         return f"{str(url).strip().rstrip('/')}/api/tags"
     
-    def parse_models_response(self, response: requests.Response) -> List[str]:
+    def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
         if "models" not in result:
             raise AIError("API返回格式错误")
@@ -416,18 +416,18 @@ class ClaudeAdapter(AIBaseAdapter):
     
     ANTHROPIC_VERSION = "2023-06-01"
     
-    def get_api_url(self, model: str = "") -> str:
-        url = self._get_profile_url("https://api.anthropic.com")
+    def getApiUrl(self, model: str = "") -> str:
+        url = self._getProfileUrl("https://api.anthropic.com")
         return f"{str(url).strip().rstrip('/')}/v1/messages"
     
-    def get_headers(self, api_key: str) -> Dict[str, str]:
+    def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
             "Content-Type": "application/json",
             "x-api-key": api_key,
             "anthropic-version": self.ANTHROPIC_VERSION
         }
     
-    def build_chat_request(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
+    def buildChatRequest(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
         system_parts = []
         anthropic_messages = []
         for msg in messages:
@@ -481,7 +481,7 @@ class ClaudeAdapter(AIBaseAdapter):
             request["system"] = "\n".join(system_parts)
         return request
     
-    def parse_chat_response(self, response: requests.Response) -> str:
+    def parseChatResponse(self, response: requests.Response) -> str:
         result = response.json()
         if "content" not in result:
             raise AIError("API返回格式错误")
@@ -491,15 +491,15 @@ class ClaudeAdapter(AIBaseAdapter):
             return content[0].get("text", "")
         return str(content)
     
-    def parse_usage(self, response_data: dict) -> tuple[int, int]:
+    def parseUsage(self, response_data: dict) -> tuple[int, int]:
         usage = response_data.get("usage", {})
         return usage.get("input_tokens", 0), usage.get("output_tokens", 0)
     
-    def get_model_list_url(self) -> str:
-        url = self._get_profile_url("https://api.anthropic.com")
+    def getModelListUrl(self) -> str:
+        url = self._getProfileUrl("https://api.anthropic.com")
         return f"{str(url).strip().rstrip('/')}/v1/models"
     
-    def parse_models_response(self, response: requests.Response) -> List[str]:
+    def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
         if "data" not in result:
             raise AIError("API返回格式错误")
@@ -513,20 +513,20 @@ class ClaudeAdapter(AIBaseAdapter):
 class GeminiAdapter(AIBaseAdapter):
     """Gemini (Google) 适配器，差异：API Key 在 URL query 参数中；角色为 assistant 而不是 model；请求体用 contents/parts 结构"""
     
-    def get_api_url(self, model: str = "") -> str:
-        url = self._get_profile_url("https://generativelanguage.googleapis.com")
-        profile = _get_profile(self.config)
+    def getApiUrl(self, model: str = "") -> str:
+        url = self._getProfileUrl("https://generativelanguage.googleapis.com")
+        profile = _getProfile(self.config)
         if not model:
             model = profile.get("model", "") or ""
-        api_key = self._get_api_key()
+        api_key = self._getApiKey()
         return f"{str(url).strip().rstrip('/')}/v1beta/models/{model}:generateContent?key={api_key}"
     
-    def get_headers(self, api_key: str) -> Dict[str, str]:
+    def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
             "Content-Type": "application/json"
         }
     
-    def build_chat_request(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
+    def buildChatRequest(self, model: str, messages: List[Dict], temperature: float, max_tokens: int) -> Dict[str, Any]:
         contents = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -563,7 +563,7 @@ class GeminiAdapter(AIBaseAdapter):
             }
         }
     
-    def parse_chat_response(self, response: requests.Response) -> str:
+    def parseChatResponse(self, response: requests.Response) -> str:
         result = response.json()
         if "candidates" not in result or len(result["candidates"]) == 0:
             raise AIError("API返回格式错误")
@@ -578,16 +578,16 @@ class GeminiAdapter(AIBaseAdapter):
         
         return content["parts"][0].get("text", "")
     
-    def parse_usage(self, response_data: dict) -> tuple[int, int]:
+    def parseUsage(self, response_data: dict) -> tuple[int, int]:
         meta = response_data.get("usageMetadata", {})
         return meta.get("promptTokenCount", 0), meta.get("candidatesTokenCount", 0)
     
-    def get_model_list_url(self) -> str:
-        url = self._get_profile_url("https://generativelanguage.googleapis.com")
-        api_key = self._get_api_key()
+    def getModelListUrl(self) -> str:
+        url = self._getProfileUrl("https://generativelanguage.googleapis.com")
+        api_key = self._getApiKey()
         return f"{str(url).strip().rstrip('/')}/v1beta/models?key={api_key}"
     
-    def parse_models_response(self, response: requests.Response) -> List[str]:
+    def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
         if "models" not in result:
             raise AIError("API返回格式错误")
@@ -620,7 +620,7 @@ class AIError(Exception):
     """AI相关错误"""
     pass
 
-def get_adapter_endpoint(endpoint_name: str, config, api_key: Optional[str] = None, api_url: Optional[str] = None) -> AIBaseAdapter:
+def getAdapterEndpoint(endpoint_name: str, config, api_key: Optional[str] = None, api_url: Optional[str] = None) -> AIBaseAdapter:
     """根据端点名称获取对应的适配器"""
     for name, cls, url in AI_ADAPTER:
         if name == endpoint_name and cls is not None:
@@ -628,7 +628,7 @@ def get_adapter_endpoint(endpoint_name: str, config, api_key: Optional[str] = No
     return OpenAIAdapter(config, api_key=api_key, api_url=api_url)
 
 
-def get_adapter_url(api_url: str, config, api_key: Optional[str] = None) -> AIBaseAdapter:
+def getAdapterUrl(api_url: str, config, api_key: Optional[str] = None) -> AIBaseAdapter:
     """根据 API URL 推测并返回对应的适配器"""
     url_lower = api_url.lower() if api_url else ""
     
@@ -654,9 +654,9 @@ class AIClient:
         self._adapter = None
         self._active_profile = None
         if profile_name:
-            self._switch_profile(profile_name)
+            self._switchProfile(profile_name)
 
-    def _switch_profile(self, name):
+    def _switchProfile(self, name):
         """切换到指定名称的AI配置"""
         profiles = self.config.get("profiles", {})
         if name not in profiles:
@@ -668,7 +668,7 @@ class AIClient:
                 return
         self._active_profile = name
 
-    def _get_profile(self) -> dict:
+    def _getProfile(self) -> dict:
         profiles = self.config.get("profiles", {})
         if not profiles:
             return {}
@@ -677,9 +677,9 @@ class AIClient:
             active = next(iter(profiles), "")
         return profiles.get(active, {})
 
-    def _get_endpoint_name(self) -> str:
+    def _getEndpointName(self) -> str:
         """获取当前选中的端点名称"""
-        profile = self._get_profile()
+        profile = self._getProfile()
         api_url = profile.get("api_url", "") or "https://api.deepseek.com"
         
         for name, cls, url in AI_ADAPTER:
@@ -695,13 +695,13 @@ class AIClient:
         return "DeepSeek"
     
     @staticmethod
-    def _endpoint_name_from_url(api_url: str) -> str:
+    def _endpointNameFromUrl(api_url: str) -> str:
         for name, cls, url in AI_ADAPTER:
             if url == api_url:
                 return name
         return "自定义" if "custom" in str(api_url).lower() else "DeepSeek"
     
-    def _lb_record(self, name: str, success: bool):
+    def _lbRecord(self, name: str, success: bool):
         # 连续三次失败时禁用
         if success:
             self.__class__._lb_failures.pop(name, None)
@@ -713,7 +713,7 @@ class AIClient:
                 self.__class__._lb_disabled[name] = True
                 logger.warning(f"配置 [{name}] {cnt}次连续失败，已禁用")
     
-    def _lb_pick_groups(self) -> Optional[List[Dict[str, Any]]]:
+    def _lbPickGroups(self) -> Optional[List[Dict[str, Any]]]:
         """按优先级分组返回 [{name: cfg, ...}, ...]，保留完整配置信息的权重"""
         lb = self.config.get("load_balance", {})
         if not lb.get("enabled"):
@@ -734,40 +734,40 @@ class AIClient:
 
         return [groups[pri] for pri in sorted(groups)]
     
-    def _get_adapter(self):
+    def _getAdapter(self):
         """获取适配器实例"""
         if self._adapter is None:
-            endpoint_name = self._get_endpoint_name()
-            self._adapter = get_adapter_endpoint(endpoint_name, self.config)
+            endpoint_name = self._getEndpointName()
+            self._adapter = getAdapterEndpoint(endpoint_name, self.config)
         return self._adapter
     
-    def get_model(self) -> str:
+    def getModel(self) -> str:
         """获取模型"""
-        profile = self._get_profile()
+        profile = self._getProfile()
         model = profile.get("model", "") or "deepseek-chat"
         return str(model).strip()
     
-    def get_temperature(self) -> float:
+    def getTemperature(self) -> float:
         """获取温度"""
-        profile = self._get_profile()
+        profile = self._getProfile()
         temp = profile.get("temperature", 0.7)
         if temp is None:
             return 0.7
         return float(temp)
     
-    def get_max_tokens(self) -> int:
+    def getMaxTokens(self) -> int:
         """获取最大token数"""
-        profile = self._get_profile()
+        profile = self._getProfile()
         tokens = profile.get("max_tokens", 2000)
         if tokens is None:
             return 2000
         return int(tokens)
     
-    def get_prompt_by_name(self, name: str) -> Optional[str]:
+    def getPromptByName(self, name: str) -> Optional[str]:
         """根据名称获取提示词内容"""
         return self.config.get("prompts", {}).get(name)
     
-    def _extract_user_message(self, messages: List[Dict[str, str]]) -> str:
+    def _extractUserMessage(self, messages: List[Dict[str, str]]) -> str:
         for msg in reversed(messages):
             if msg.get("role") == "user":
                 content = msg.get("content", "")
@@ -777,23 +777,23 @@ class AIClient:
                 return str(content)
         return ""
     
-    def _build_prompt_content(self, prompt_content: str, user_message: str) -> str:
+    def _buildPromptContent(self, prompt_content: str, user_message: str) -> str:
         if "{request}" in prompt_content:
             return prompt_content.replace("{request}", user_message)
         return prompt_content
     
-    def _prepare_messages(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> List[Dict]:
+    def _prepareMessages(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> List[Dict]:
         request_messages = []
 
-        system_prompt = self.get_prompt_by_name("系统提示词")
+        system_prompt = self.getPromptByName("系统提示词")
         if system_prompt:
             request_messages.append({"role": "system", "content": system_prompt})
 
         prompt_content = None
         if prompt_name:
-            prompt_content = self.get_prompt_by_name(prompt_name)
+            prompt_content = self.getPromptByName(prompt_name)
             if prompt_content:
-                final_prompt = self._build_prompt_content(prompt_content, self._extract_user_message(messages))
+                final_prompt = self._buildPromptContent(prompt_content, self._extractUserMessage(messages))
                 request_messages.append({"role": "system", "content": final_prompt})
 
         has_request_placeholder = "{request}" in (prompt_content or "")
@@ -808,11 +808,11 @@ class AIClient:
         else:
             request_messages.extend(messages)
 
-        resolve_image_urls(request_messages)
+        resolveImageUrls(request_messages)
         return request_messages
     
-    def _lb_execute(self, request_messages, model, temperature, max_tokens, callback=None):
-        groups = self._lb_pick_groups()
+    def _lbExecute(self, request_messages, model, temperature, max_tokens, callback=None):
+        groups = self._lbPickGroups()
         if groups:
             last_err = None
             for group_dict in groups:
@@ -833,8 +833,8 @@ class AIClient:
                         remaining.pop(selected, None)
                         continue
 
-                    ep_name = self._endpoint_name_from_url(profile.get("api_url", ""))
-                    adapter = get_adapter_endpoint(ep_name, self.config,
+                    ep_name = self._endpointNameFromUrl(profile.get("api_url", ""))
+                    adapter = getAdapterEndpoint(ep_name, self.config,
                                                     api_key=profile.get("api_key", ""),
                                                     api_url=profile.get("api_url", ""))
                     lb_model = profile.get("model", model)
@@ -843,47 +843,47 @@ class AIClient:
                     logger.info(f"负载均衡: 尝试 [{selected}] (model={lb_model})")
                     try:
                         if callback:
-                            in_t, out_t = adapter.stream_chat(messages=request_messages, model=lb_model, callback=callback, temperature=lb_temp, max_tokens=lb_max_tokens)
-                            self._lb_record(selected, True)
+                            in_t, out_t = adapter.streamChat(messages=request_messages, model=lb_model, callback=callback, temperature=lb_temp, max_tokens=lb_max_tokens)
+                            self._lbRecord(selected, True)
                             return in_t, out_t
                         else:
                             text, in_t, out_t = adapter.chat(messages=request_messages, model=lb_model, temperature=lb_temp, max_tokens=lb_max_tokens)
-                            self._lb_record(selected, True)
+                            self._lbRecord(selected, True)
                             return text, in_t, out_t
                     except Exception as e:
                         logger.warning(f"负载均衡: [{selected}] 失败: {e}")
-                        self._lb_record(selected, False)
+                        self._lbRecord(selected, False)
                         last_err = e
                         remaining.pop(selected, None)
             raise last_err or Exception("所有负载均衡配置均失败")
 
-        adapter = self._get_adapter()
+        adapter = self._getAdapter()
         if callback:
-            return adapter.stream_chat(messages=request_messages, model=model, callback=callback, temperature=temperature, max_tokens=max_tokens)
+            return adapter.streamChat(messages=request_messages, model=model, callback=callback, temperature=temperature, max_tokens=max_tokens)
         else:
             return adapter.chat(messages=request_messages, model=model, temperature=temperature, max_tokens=max_tokens)
     
     def chat(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> tuple[str, int, int]:
-        model = self.get_model()
-        request_messages = self._prepare_messages(messages, prompt_name)
-        result = self._lb_execute(request_messages, model, self.get_temperature(), self.get_max_tokens())
+        model = self.getModel()
+        request_messages = self._prepareMessages(messages, prompt_name)
+        result = self._lbExecute(request_messages, model, self.getTemperature(), self.getMaxTokens())
         return result  # (text, in_t, out_t)
     
-    def stream_chat(self, messages: List[Dict[str, str]], callback, prompt_name: Optional[str] = None) -> tuple[int, int]:
-        model = self.get_model()
-        request_messages = self._prepare_messages(messages, prompt_name)
-        result = self._lb_execute(request_messages, model, self.get_temperature(), self.get_max_tokens(), callback=callback)
+    def streamChat(self, messages: List[Dict[str, str]], callback, prompt_name: Optional[str] = None) -> tuple[int, int]:
+        model = self.getModel()
+        request_messages = self._prepareMessages(messages, prompt_name)
+        result = self._lbExecute(request_messages, model, self.getTemperature(), self.getMaxTokens(), callback=callback)
         return result  # (in_t, out_t)
     
-    def get_models(self) -> List[str]:
+    def getModels(self) -> List[str]:
         """获取模型列表"""
-        adapter = self._get_adapter()
-        return adapter.get_models()
+        adapter = self._getAdapter()
+        return adapter.getModels()
     
-    def test_connection(self) -> bool:
+    def testConnection(self) -> bool:
         """测试API连接"""
         try:
-            self.get_models()
+            self.getModels()
             return True
         except Exception:
             return False
@@ -892,7 +892,7 @@ class AIClient:
     _MAX_FOLDER_FILES = 50
     _MAX_FILE_CHARS = 10000
 
-    def build_file_message(self, file_path: str) -> Optional[List[Dict]]:
+    def buildFileMessage(self, file_path: str) -> Optional[List[Dict]]:
         name = os.path.basename(file_path)
         ext = os.path.splitext(file_path)[1].lower()
         size = os.path.getsize(file_path)
@@ -912,7 +912,7 @@ class AIClient:
             content = f.read()
         return [{"role": "user", "content": f"文件: {name}\n\n{content}"}]
 
-    def build_folder_message(self, folder_path: str) -> Optional[List[Dict]]:
+    def buildFolderMessage(self, folder_path: str) -> Optional[List[Dict]]:
         tree_lines = fileTree(Path(folder_path))
         tree_text = '\n'.join(tree_lines)
 

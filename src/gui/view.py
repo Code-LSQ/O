@@ -126,7 +126,7 @@ class FolderPanelManager:
             self.load(file_path)
         else:
             try:
-                self.parent.open_file_path(file_path)
+                self.parent.openFilePath(file_path)
             except Exception as e:
                 messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
     
@@ -174,7 +174,7 @@ class FolderPanelManager:
             
             if is_image:
                 if self.main_window._use_tabs:
-                    editor = self.main_window.add_new_tab(display_path, "")
+                    editor = self.main_window.addTab(display_path, "")
                     editor._archive_type = self.file_op.isZipFile(self.current_archive_path) and 'zip' or 'tar'
                     editor.file_path = self.current_archive_path
                     editor._loadSingleImg(item.full_path)
@@ -190,7 +190,7 @@ class FolderPanelManager:
                     content_str = str(content)
                 
                 if self.main_window._use_tabs:
-                    editor = self.main_window.add_new_tab(display_path, content_str)
+                    editor = self.main_window.addTab(display_path, content_str)
                 else:
                     editor = self.main_window.single_editor
                     editor.setContent(content_str)
@@ -224,11 +224,11 @@ class FolderPanelManager:
                 item_path_norm = os.path.normpath(item_path)
                 if self.main_window.config.isFavorite(item_path_norm):
                     remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
-                    remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.remove_from_favorites(fp))
+                    remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.delFav(fp))
                     menu.addAction(remove_fav_action)
                 else:
                     add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
-                    add_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.add_to_favorites(fp))
+                    add_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.addFav(fp))
                     menu.addAction(add_fav_action)
                 
                 if os.path.isfile(item_path):
@@ -249,11 +249,11 @@ class FolderPanelManager:
             folder_path_norm = os.path.normpath(self.folder_path)
             if self.main_window.config.isFavorite(folder_path_norm):
                 remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
-                remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.remove_from_favorites(fp))
+                remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.delFav(fp))
                 menu.addAction(remove_fav_action)
             else:
                 add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
-                add_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.add_to_favorites(fp))
+                add_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.addFav(fp))
                 menu.addAction(add_fav_action)
 
         menu.exec_(self.tree.mapToGlobal(pos))

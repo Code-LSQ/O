@@ -375,7 +375,7 @@ class FileControl:
         if not file_path:
             return
 
-        self.main.open_file_path(file_path)
+        self.main.openFilePath(file_path)
 
     def openFilePath(self, file_path: str):
         """打开指定路径的文件"""
@@ -383,14 +383,14 @@ class FileControl:
             return
 
         if os.path.isdir(file_path):
-            self.main.load_folder(file_path)
+            self.main.loadFolder(file_path)
             return
 
         # 避免循环依赖
         from src.gui.tab import EditorTab
 
         if not self.main.config.get("Edit.multi_tab", False):
-            editor = self.main.get_current_editor()
+            editor = self.main.getCurrentEditor()
             self._doOpenFile(file_path)
             return
 
@@ -471,7 +471,7 @@ class FileControl:
         try:
             editor = None
             if self.main._use_tabs:
-                editor = self.main.add_new_tab(file_path, "")
+                editor = self.main.addTab(file_path, "")
             else:
                 editor = self.main.single_editor
                 editor.setContent("")
@@ -486,7 +486,7 @@ class FileControl:
         """设置文本编辑器（支持大文件截断信息）"""
         try:
             if self.main._use_tabs:
-                editor = self.main.add_new_tab(file_path, content)
+                editor = self.main.addTab(file_path, content)
             else:
                 editor = self.main.single_editor
                 editor.setContent(content)
@@ -495,7 +495,7 @@ class FileControl:
             if truncated > 0:
                 editor.setTruncated(total_lines, loaded_lines, file_path, encoding)
             self.main.encoding_label.setText(encodingName(encoding) if encoding else "")
-            self.main._toc_panel.hide_panel()
+            self.main._toc_panel.hidePanel()
             self.main.config.addRecentFile(file_path)
             if truncated > 0:
                 self.main.statusBar().showMessage(
@@ -508,7 +508,7 @@ class FileControl:
 
     def saveFile(self) -> bool:
         """保存当前文件（支持大文件翻页合并保存）"""
-        editor = self.main.get_current_editor()
+        editor = self.main.getCurrentEditor()
         if not editor:
             return False
 
@@ -548,7 +548,7 @@ class FileControl:
 
     def saveFileAs(self) -> bool:
         """另存为"""
-        editor = self.main.get_current_editor()
+        editor = self.main.getCurrentEditor()
         if not editor:
             return False
 
@@ -562,7 +562,7 @@ class FileControl:
 
     def openWithEnc(self, encoding: str):
         """以指定编码打开当前文件"""
-        editor = self.main.get_current_editor()
+        editor = self.main.getCurrentEditor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return
@@ -591,7 +591,7 @@ class FileControl:
 
     def saveWithEnc(self, encoding: str):
         """以指定编码保存当前文件"""
-        editor = self.main.get_current_editor()
+        editor = self.main.getCurrentEditor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return
@@ -628,7 +628,7 @@ class FileHandler:
     def _createEditor(self, file_path: str):
         """创建或复用编辑器"""
         if self.main._use_tabs:
-            return self.main.add_new_tab(file_path, "")
+            return self.main.addTab(file_path, "")
         else:
             editor = self.main.single_editor
             editor.setContent("")

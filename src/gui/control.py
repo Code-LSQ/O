@@ -259,7 +259,7 @@ class MenuControl:
         for mode in ViewMode.ALL:
             action = QAction(tr(mode), self.main)
             action.setCheckable(True)
-            action.triggered.connect(lambda checked, m=mode: self.main.change_view_mode(m))
+            action.triggered.connect(lambda checked, m=mode: self.main.setViewMode(m))
             menu.addAction(action)
             self._view_actions[mode] = action
 
@@ -267,7 +267,7 @@ class MenuControl:
         return btn
 
     def _syncViewMenu(self):
-        editor = self.main.get_current_editor()
+        editor = self.main.getCurrentEditor()
         current = self._detectMode(editor)
         supported = self._getModes(editor)
         for mode, action in self._view_actions.items():
@@ -319,15 +319,15 @@ class MenuControl:
     def buildFileMenu(self) -> tuple[QToolButton, QMenu]:
         btn, menu = self.createMenuButton(tr("文件") + "(&F)")
 
-        self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", self.main.new_file, QKeySequence.StandardKey.New)
-        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", self.main.open_file, QKeySequence.StandardKey.Open)
-        self.main.action_open_folder = self._addAction(menu, tr("打开文件夹") + "(&D)", self.main.open_folder_dialog)
-        self.main.action_folder_view = self._addAction(menu, tr("文件夹视图"), self.main.toggle_folder_panel)
+        self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", self.main.newFile, QKeySequence.StandardKey.New)
+        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", self.main.chooseFile, QKeySequence.StandardKey.Open)
+        self.main.action_open_folder = self._addAction(menu, tr("打开文件夹") + "(&D)", self.main.openFolderDialog)
+        self.main.action_folder_view = self._addAction(menu, tr("文件夹视图"), self.main.toggleFolderPanel)
 
         menu.addSeparator()
 
-        self.main.action_save = self._addAction(menu, tr("保存") + "(&S)", self.main.save_file, QKeySequence.StandardKey.Save)
-        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", self.main.save_file_as, QKeySequence.StandardKey.SaveAs)
+        self.main.action_save = self._addAction(menu, tr("保存") + "(&S)", self.main.saveFile, QKeySequence.StandardKey.Save)
+        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", self.main.saveAs, QKeySequence.StandardKey.SaveAs)
 
         menu.addSeparator()
 
@@ -361,7 +361,7 @@ class MenuControl:
 
         menu.addSeparator()
 
-        self.main.action_select_all = self._addAction(menu, tr("全选") + "(&A)", self.main.select_all, QKeySequence.StandardKey.SelectAll)
+        self.main.action_select_all = self._addAction(menu, tr("全选") + "(&A)", self.main.selectAll, QKeySequence.StandardKey.SelectAll)
 
         menu.addSeparator()
 
@@ -382,10 +382,10 @@ class MenuControl:
         text_process_menu = QMenu(tr("文本处理"), self.main)
         menu.addMenu(text_process_menu)
 
-        text_process_menu.addAction(self._addAction(text_process_menu, tr("去空行"), self.main.remove_empty_lines))
-        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行首空格"), self.main.strip_leading_space))
-        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行尾空格"), self.main.strip_trailing_space))
-        text_process_menu.addAction(self._addAction(text_process_menu, tr("行首缩进"), self.main.indent_lines))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去空行"), self.main.removeEmptyLines))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行首空格"), self.main.stripLeadingSpace))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("去行尾空格"), self.main.stripTrailingSpace))
+        text_process_menu.addAction(self._addAction(text_process_menu, tr("行首缩进"), self.main.indentLines))
 
         btn.setMenu(menu)
         return btn, menu
@@ -393,7 +393,7 @@ class MenuControl:
     def settingsAction(self) -> QAction:
         settings_action = QAction(tr("设置"), self.main)
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
-        settings_action.triggered.connect(self.main.show_settings)
+        settings_action.triggered.connect(self.main.showSettings)
         return settings_action
 
     def buildMenuBar(self, toolbar: QToolBar):
