@@ -319,14 +319,14 @@ class CronTask:
             self._thread.start()
 
     def stop(self):
-        self.stopNowait()
+        self.stopNoWait()
         thread = None
         with self._lock:
             thread = self._thread
         if thread and thread.is_alive() and not self._daemon:
             thread.join()
 
-    def stopNowait(self):
+    def stopNoWait(self):
         with self._lock:
             if not self._running:
                 return

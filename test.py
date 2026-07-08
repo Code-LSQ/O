@@ -37,10 +37,10 @@ import types
 import unittest
 import fnmatch
 import tarfile
-import requests
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
 from PySide6.QtTest import QTest
 
 sys.dont_write_bytecode = True
@@ -51,7 +51,7 @@ from src.util import logger
 # Mock 基础设施 — 统一工厂
 
 
-def _make_module(name, **attrs):
+def _makeModule(name, **attrs):
     """Create a module with given attributes"""
     mod = types.ModuleType(name)
     for k, v in attrs.items():
@@ -82,6 +82,21 @@ _SHARED_UTIL_ATTRS = {
     "Singleton": _MockSingleton,
     "logger": MagicMock(),
     "APP_NAME": "O",
+    "EXTENSION": {
+        "TXET": {".txt", ".py", ".js", ".json"},
+        "Markdown": {".md", ".markdown"},
+        "IMAGE": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp"},
+        "ZIP": {".zip", ".jar", ".apk"},
+        "TAR": {".tar", ".tgz"},
+        "ARCHIVE": {".gz", ".bz2", ".xz", ".7z", ".rar"},
+        "AUDIO": {".mp3", ".wav", ".flac"},
+        "VIDEO": {".mp4", ".avi", ".mkv"},
+        "EXECUTE": {".exe", ".dll", ".bin"},
+        "DOCUMENT": {".pdf", ".epub"},
+        "FONT": {".ttf", ".otf"},
+        "DATABASE": {".db", ".sqlite"},
+        "DISK": {".iso"},
+    },
     "IMAGE_EXTENSIONS": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp"},
     "TEXT_EXTENSIONS": {".txt", ".md", ".py", ".js", ".json", ".html", ".css", ".xml"},
     "MARKDOWN_EXTENSIONS": {".md", ".markdown"},
@@ -92,6 +107,7 @@ _SHARED_UTIL_ATTRS = {
     "folderLastModified": MagicMock(return_value=0),
     "parseMtime": lambda x: x,
     "getFilePath": MagicMock(),
+    "imageBase64": MagicMock(return_value=("image/png", "base64data")),
     "messageBox": MagicMock(),
     "dialogBox": MagicMock(),
     "data_dir": MagicMock(),
@@ -99,11 +115,11 @@ _SHARED_UTIL_ATTRS = {
 }
 
 
-def _make_qt_core():
+def _makeQtCore():
     """Create Qt mock modules (PySide6 / QtCore / QtGui / QtWidgets)"""
     return {
         "PySide6": MagicMock(),
-        "PySide6.QtCore": _make_module(
+        "PySide6.QtCore": _makeModule(
             "PySide6.QtCore",
             QThread=MagicMock,
             Signal=MagicMock,
@@ -120,15 +136,15 @@ def _make_qt_core():
     }
 
 
-def _make_util():
+def _makeUtil():
     """Create src.util mock module"""
-    return {"src.util": _make_module("src.util", **_SHARED_UTIL_ATTRS)}
+    return {"src.util": _makeModule("src.util", **_SHARED_UTIL_ATTRS)}
 
 
-def _make_file():
+def _makeFile():
     """Create src.file mock module"""
     return {
-        "src.file": _make_module(
+        "src.file": _makeModule(
             "src.file",
             FileSelect=MagicMock(),
             format_file_size=MagicMock(return_value="1.0 KB"),
@@ -138,10 +154,10 @@ def _make_file():
     }
 
 
-def _make_config():
+def _makeConfig():
     """Create src.config mock module"""
     return {
-        "src.config": _make_module(
+        "src.config": _makeModule(
             "src.config",
             getConfig=MagicMock(return_value={}),
         )
@@ -170,7 +186,7 @@ def applyMock(
     patchers = []
 
     if qt:
-        p = patch.dict("sys.modules", _make_qt_core())
+        p = patch.dict("sys.modules", _makeQtCore())
         p.start()
         patchers.append(p)
 
@@ -212,19 +228,19 @@ def applyMock(
             attrs = dict(_SHARED_UTIL_ATTRS)
             attrs["logger"] = real_util.logger
             attrs["getTimestamp"] = MagicMock(return_value="2025-01-01 00:00:00")
-            p = patch.dict("sys.modules", {"src.util": _make_module("src.util", **attrs)})
+            p = patch.dict("sys.modules", {"src.util": _makeModule("src.util", **attrs)})
         else:
-            p = patch.dict("sys.modules", _make_util())
+            p = patch.dict("sys.modules", _makeUtil())
         p.start()
         patchers.append(p)
 
     if file_mod:
-        p = patch.dict("sys.modules", _make_file())
+        p = patch.dict("sys.modules", _makeFile())
         p.start()
         patchers.append(p)
 
     if config:
-        p = patch.dict("sys.modules", _make_config())
+        p = patch.dict("sys.modules", _makeConfig())
         p.start()
         patchers.append(p)
 
@@ -251,13 +267,13 @@ class TestEncodingMap(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_encoding_map_contains_common(self):
+    def testEncodingMapContainsCommon(self):
         encodings = sys.modules["src.util"].ENCODING_MAP
         self.assertIn("UTF-8", encodings)
         self.assertIn("GBK", encodings)
         self.assertEqual(encodings["UTF-8"], "utf-8")
 
-    def test_encoding_map_values_are_strings(self):
+    def testEncodingMapValuesAreStrings(self):
         for key, val in sys.modules["src.util"].ENCODING_MAP.items():
             self.assertIsInstance(key, str)
             self.assertIsInstance(val, str)
@@ -271,22 +287,22 @@ class TestFileExtensions(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_image_extensions_contain_common(self):
+    def testImageExtensionsContainCommon(self):
         exts = sys.modules["src.util"].IMAGE_EXTENSIONS
         for ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
             self.assertIn(ext, exts)
 
-    def test_text_extensions_contain_common(self):
+    def testTextExtensionsContainCommon(self):
         exts = sys.modules["src.util"].TEXT_EXTENSIONS
         for ext in [".txt", ".md", ".py", ".json"]:
             self.assertIn(ext, exts)
 
-    def test_markdown_extensions(self):
+    def testMarkdownExtensions(self):
         exts = sys.modules["src.util"].MARKDOWN_EXTENSIONS
         self.assertIn(".md", exts)
         self.assertIn(".markdown", exts)
 
-    def test_zip_extensions(self):
+    def testZipExtensions(self):
         exts = sys.modules["src.util"].ZIP_EXTENSIONS
         self.assertIn(".zip", exts)
         self.assertIn(".apk", exts)
@@ -300,7 +316,7 @@ class TestConstants(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_app_name(self):
+    def testAppName(self):
         self.assertEqual(sys.modules["src.util"].APP_NAME, "O")
 
 
@@ -322,7 +338,7 @@ class _PluginTestBase(unittest.TestCase):
 
 class TestPluginBase(_PluginTestBase):
 
-    def test_default_attributes(self):
+    def testDefaultAttributes(self):
         plugin = self.PluginBase()
         self.assertEqual(plugin.name, "Unnamed Plugin")
         self.assertEqual(plugin.description, "")
@@ -331,47 +347,47 @@ class TestPluginBase(_PluginTestBase):
         self.assertFalse(plugin.enabled)
         self.assertEqual(plugin.settings, {})
 
-    def test_initialize_called_without_error(self):
+    def testInitializeCalledWithoutError(self):
         plugin = self.PluginBase()
         plugin.initialize()
 
-    def test_getAction_returns_none_by_default(self):
+    def testGetActionReturnsNoneByDefault(self):
         plugin = self.PluginBase()
         self.assertIsNone(plugin.getAction())
 
-    def test_loadConfig(self):
+    def testLoadConfig(self):
         plugin = self.PluginBase()
         plugin.loadConfig()
         self.assertEqual(plugin.settings, {})
 
-    def test_saveConfig(self):
+    def testSaveConfig(self):
         plugin = self.PluginBase()
         plugin.settings = {"a": 1}
         result = plugin.saveConfig()
         self.assertEqual(result, {"a": 1})
 
-    def test_onFileOpen_does_not_raise(self):
+    def testOnFileOpenDoesNotRaise(self):
         plugin = self.PluginBase()
         plugin.onFileOpen("/some/path")
 
-    def test_onFileSave_does_not_raise(self):
+    def testOnFileSaveDoesNotRaise(self):
         plugin = self.PluginBase()
         plugin.onFileSave("/some/path")
 
-    def test_cleanup_does_not_raise(self):
+    def testCleanupDoesNotRaise(self):
         plugin = self.PluginBase()
         plugin.cleanup()
 
-    def test_main_window_none_by_default(self):
+    def testMainWindowNoneByDefault(self):
         plugin = self.PluginBase()
         self.assertIsNone(plugin.main_window)
 
-    def test_main_window_set_in_init(self):
+    def testMainWindowSetInInit(self):
         mw = MagicMock()
         plugin = self.PluginBase(main_window=mw)
         self.assertEqual(plugin.main_window, mw)
 
-    def test_custom_name(self):
+    def testCustomName(self):
         class TestPlugin(self.PluginBase):
             name = "MyPlugin"
             description = "A test plugin"
@@ -383,7 +399,7 @@ class TestPluginBase(_PluginTestBase):
 
 class TestCreateCustomPlugin(_PluginTestBase):
 
-    def test_plugin_with_custom_getAction(self):
+    def testPluginWithCustomGetAction(self):
         class MenuPlugin(self.PluginBase):
             name = "MenuPlugin"
 
@@ -393,7 +409,7 @@ class TestCreateCustomPlugin(_PluginTestBase):
         plugin = MenuPlugin()
         self.assertEqual(plugin.getAction(), "menu_action")
 
-    def test_plugin_lifecycle_methods(self):
+    def testPluginLifecycleMethods(self):
         calls = []
 
         class LifecyclePlugin(self.PluginBase):
@@ -417,28 +433,28 @@ class TestCreateCustomPlugin(_PluginTestBase):
 
 class TestPluginManagerBasic(_PluginTestBase):
 
-    def test_singleton_pattern(self):
+    def testSingletonPattern(self):
         pm1 = self.PluginManager()
         pm2 = self.PluginManager()
         self.assertIs(pm1, pm2)
 
-    def test_singleton_through_getPluginManager(self):
+    def testSingletonThroughGetPluginManager(self):
         from src.plugin import getPluginManager
 
         pm1 = getPluginManager()
         pm2 = getPluginManager()
         self.assertIs(pm1, pm2)
 
-    def test_initial_state(self):
+    def testInitialState(self):
         pm = self.PluginManager()
         self.assertEqual(pm.plugins, {})
 
-    def test_initial_attributes_exist(self):
+    def testInitialAttributesExist(self):
         pm = self.PluginManager()
         self.assertTrue(hasattr(pm, "enabled_plugins"))
         self.assertTrue(hasattr(pm, "plugin_dir"))
 
-    def test_main_window_settable(self):
+    def testMainWindowSettable(self):
         mw = MagicMock()
         pm = self.PluginManager(main_window=mw)
         self.assertEqual(pm.main_window, mw)
@@ -455,7 +471,7 @@ class _PluginWithTempDirBase(_PluginTestBase):
         shutil.rmtree(self.temp_plugin_dir, ignore_errors=True)
         super().tearDown()
 
-    def _create_plugin_file(self, name, content):
+    def _createPluginFile(self, name, content):
         path = os.path.join(self.temp_plugin_dir, name)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -464,18 +480,18 @@ class _PluginWithTempDirBase(_PluginTestBase):
 
 class TestPluginManagerWithTempDir(_PluginWithTempDirBase):
 
-    def test_scan_empty_dir_returns_empty(self):
+    def testScanEmptyDirReturnsEmpty(self):
         plugins = self.pm.scanPlugins()
         self.assertEqual(plugins, [])
 
-    def test_skip_init_files(self):
-        self._create_plugin_file("__init__.py", "")
-        self._create_plugin_file("_hidden.py", "")
+    def testSkipInitFiles(self):
+        self._createPluginFile("__init__.py", "")
+        self._createPluginFile("_hidden.py", "")
         plugins = self.pm.scanPlugins()
         self.assertEqual(plugins, [])
 
-    def test_scan_valid_plugin_file(self):
-        self._create_plugin_file(
+    def testScanValidPluginFile(self):
+        self._createPluginFile(
             "my_plugin.py",
             """
 from src.plugin import PluginBase
@@ -488,8 +504,8 @@ class MyPlugin(PluginBase):
         plugins = self.pm.scanPlugins()
         self.assertIn("my_plugin", plugins)
 
-    def test_scan_plugin_missing_base_class(self):
-        self._create_plugin_file(
+    def testScanPluginMissingBaseClass(self):
+        self._createPluginFile(
             "bad.py",
             """
 class NotAPlugin:
@@ -500,15 +516,15 @@ class NotAPlugin:
         self.assertIn("bad", result)
         self.assertFalse(self.pm.enablePlugin("bad"))
 
-    def test_enable_unknown_plugin_returns_false(self):
+    def testEnableUnknownPluginReturnsFalse(self):
         result = self.pm.enablePlugin("nonexistent")
         self.assertFalse(result)
 
 
 class TestPluginManagerEnableDisable(_PluginWithTempDirBase):
 
-    def test_enable_disable_cycle(self):
-        self._create_plugin_file(
+    def testEnableDisableCycle(self):
+        self._createPluginFile(
             "cycle_plugin.py",
             """
 from src.plugin import PluginBase
@@ -526,8 +542,8 @@ class CyclePlugin(PluginBase):
         self.assertFalse(self.pm.isPluginEnabled("cycle_plugin"))
         self.assertNotIn("cycle_plugin", self.pm.plugins)
 
-    def test_enable_twice_returns_true(self):
-        self._create_plugin_file(
+    def testEnableTwiceReturnsTrue(self):
+        self._createPluginFile(
             "dup.py",
             """
 from src.plugin import PluginBase
@@ -540,11 +556,11 @@ class DupPlugin(PluginBase):
         self.assertTrue(self.pm.enablePlugin("dup"))
         self.assertTrue(self.pm.enablePlugin("dup"))
 
-    def test_disable_not_enabled_does_not_raise(self):
+    def testDisableNotEnabledDoesNotRaise(self):
         self.pm.disablePlugin("not_enabled")
 
-    def test_get_all_plugins(self):
-        self._create_plugin_file(
+    def testGetAllPlugins(self):
+        self._createPluginFile(
             "p1.py",
             """
 from src.plugin import PluginBase
@@ -555,11 +571,11 @@ class P1(PluginBase):
         )
         self.pm.scanPlugins()
         self.pm.enablePlugin("p1")
-        all_p = self.pm.getAllPlugin()
+        all_p = self.pm.allPlugins()
         self.assertIn("p1", all_p)
 
-    def test_get_enabled_plugins(self):
-        self._create_plugin_file(
+    def testGetEnabledPlugins(self):
+        self._createPluginFile(
             "en.py",
             """
 from src.plugin import PluginBase
@@ -575,7 +591,7 @@ class En(PluginBase):
 
 class TestGetPluginModulePaths(_PluginTestBase):
 
-    def test_nonexistent_dir_returns_empty(self):
+    def testNonexistentDirReturnsEmpty(self):
         pm = self.PluginManager()
         pm.plugin_dir = Path(r"C:\nonexistent_xyz_plugin_dir")
         result = pm.scanPlugins()
@@ -583,24 +599,24 @@ class TestGetPluginModulePaths(_PluginTestBase):
 
 
 class TestPluginManagerConfig(_PluginWithTempDirBase):
-    def _make_config(self, data=None):
+    def _makeConfig(self, data=None):
         config = MagicMock()
         config_data = data or {}
 
-        def get_side_effect(key, default=None):
+        def getSideEffect(key, default=None):
             return config_data.get(key, default)
 
-        config.get.side_effect = get_side_effect
+        config.get.side_effect = getSideEffect
 
-        def set_side_effect(key, value):
+        def setSideEffect(key, value):
             config_data[key] = value
 
-        config.set.side_effect = set_side_effect
+        config.set.side_effect = setSideEffect
         return config, config_data
 
-    def test_init_config_loads_enabled_plugins(self):
-        config, _ = self._make_config({"Plugin": {"p1": {"enabled": True}}})
-        self._create_plugin_file(
+    def testInitConfigLoadsEnabledPlugins(self):
+        config, _ = self._makeConfig({"Plugin": {"p1": {"enabled": True}}})
+        self._createPluginFile(
             "p1.py",
             """
 from src.plugin import PluginBase
@@ -614,9 +630,9 @@ class P1(PluginBase):
         self.assertTrue(self.pm.isPluginEnabled("p1"))
         self.assertIn("p1", self.pm.plugins)
 
-    def test_init_config_default_enabled(self):
-        config, _ = self._make_config({"Plugin": {}})
-        self._create_plugin_file(
+    def testInitConfigDefaultEnabled(self):
+        config, _ = self._makeConfig({"Plugin": {}})
+        self._createPluginFile(
             "p1.py",
             """
 from src.plugin import PluginBase
@@ -628,8 +644,8 @@ class P1(PluginBase):
         self.pm.initConfig(config)
         self.assertTrue(self.pm.isPluginEnabled("p1"))
 
-    def test_save_config_writes_enabled_and_settings(self):
-        config, config_data = self._make_config()
+    def testSaveConfigWritesEnabledAndSettings(self):
+        config, config_data = self._makeConfig()
         self.pm.enabled_plugins = {"p1": True}
         self.pm._scan_cache = {"p1": ("plugin.p1", Path("p1.py"), None)}
         self.pm.plugins["p1"] = MagicMock()
@@ -648,20 +664,20 @@ class TestResolveImageUrls(unittest.TestCase):
         self._patchers = applyMock(
             qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
         )
-        from src.core.AI import resolve_image_urls
+        from src.core.AI import resolveImageUrls
 
-        self.resolve_image_urls = resolve_image_urls
+        self.resolveImageUrls = resolveImageUrls
 
     def tearDown(self):
         for p in self._patchers:
             p.stop()
 
-    def test_no_images_no_change(self):
+    def testNoImagesNoChange(self):
         messages = [{"role": "user", "content": "hello"}]
-        result = self.resolve_image_urls(messages)
+        result = self.resolveImageUrls(messages)
         self.assertEqual(result, messages)
 
-    def test_non_file_url_not_touched(self):
+    def testNonFileUrlNotTouched(self):
         messages = [
             {
                 "role": "user",
@@ -671,40 +687,40 @@ class TestResolveImageUrls(unittest.TestCase):
             }
         ]
         original = json.loads(json.dumps(messages))
-        self.resolve_image_urls(messages)
+        self.resolveImageUrls(messages)
         self.assertEqual(messages, original)
 
-    def test_file_url_no_real_file_logs_error(self):
+    def testFileUrlNoRealFileLogsError(self):
         messages = [
             {
                 "role": "user",
                 "content": [{"type": "image_url", "url": "file:///nonexistent/img.png"}],
             }
         ]
-        self.resolve_image_urls(messages)
+        self.resolveImageUrls(messages)
         part = messages[0]["content"][0]
         self.assertEqual(part["type"], "text")
         self.assertIn("图片加载失败", part["text"])
 
-    def test_different_url_key_handling(self):
+    def testDifferentUrlKeyHandling(self):
         messages = [
             {
                 "role": "user",
                 "content": [{"type": "image_url", "url": "file:///nonexistent/img.png"}],
             }
         ]
-        self.resolve_image_urls(messages)
+        self.resolveImageUrls(messages)
         part = messages[0]["content"][0]
         self.assertEqual(part["type"], "text")
 
-    def test_non_dict_part_ignored(self):
+    def testNonDictPartIgnored(self):
         messages = [{"role": "user", "content": ["not a dict"]}]
-        self.resolve_image_urls(messages)
+        self.resolveImageUrls(messages)
         self.assertEqual(messages[0]["content"][0], "not a dict")
 
-    def test_non_image_type_ignored(self):
+    def testNonImageTypeIgnored(self):
         messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
-        self.resolve_image_urls(messages)
+        self.resolveImageUrls(messages)
         self.assertEqual(messages[0]["content"][0]["text"], "hello")
 
 
@@ -721,29 +737,29 @@ class TestAIClientBuildPromptContent(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_with_request_placeholder(self):
+    def testWithRequestPlaceholder(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content("Please translate: {request}", "hello world")
+        result = client._buildPromptContent("Please translate: {request}", "hello world")
         self.assertEqual(result, "Please translate: hello world")
 
-    def test_without_placeholder_appends(self):
+    def testWithoutPlaceholderAppends(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content("You are a translator.", "hello world")
+        result = client._buildPromptContent("You are a translator.", "hello world")
         self.assertEqual(result, "You are a translator.\n\nhello world")
 
-    def test_empty_prompt(self):
+    def testEmptyPrompt(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content("", "user text")
+        result = client._buildPromptContent("", "user text")
         self.assertEqual(result, "\n\nuser text")
 
-    def test_empty_user_message(self):
+    def testEmptyUserMessage(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content("prefix {request} suffix", "")
+        result = client._buildPromptContent("prefix {request} suffix", "")
         self.assertEqual(result, "prefix  suffix")
 
-    def test_multiple_placeholders(self):
+    def testMultiplePlaceholders(self):
         client = self.getAIClient(config={})
-        result = client._build_prompt_content("{request} and {request}", "text")
+        result = client._buildPromptContent("{request} and {request}", "text")
         self.assertEqual(result, "text and text")
 
 
@@ -760,22 +776,22 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_simple_text_message(self):
+    def testSimpleTextMessage(self):
         client = self.getAIClient(config={})
         messages = [{"role": "user", "content": "hello"}]
-        result = client._extract_user_message(messages)
+        result = client._extractUserMessage(messages)
         self.assertEqual(result, "hello")
 
-    def test_last_user_message(self):
+    def testLastUserMessage(self):
         client = self.getAIClient(config={})
         messages = [
             {"role": "assistant", "content": "response"},
             {"role": "user", "content": "final question"},
         ]
-        result = client._extract_user_message(messages)
+        result = client._extractUserMessage(messages)
         self.assertEqual(result, "final question")
 
-    def test_multipart_content(self):
+    def testMultipartContent(self):
         client = self.getAIClient(config={})
         messages = [
             {
@@ -783,21 +799,21 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
                 "content": [{"type": "text", "text": "part1"}, {"type": "text", "text": "part2"}],
             }
         ]
-        result = client._extract_user_message(messages)
+        result = client._extractUserMessage(messages)
         self.assertEqual(result, "part1\npart2")
 
-    def test_empty_messages(self):
+    def testEmptyMessages(self):
         client = self.getAIClient(config={})
-        result = client._extract_user_message([])
+        result = client._extractUserMessage([])
         self.assertEqual(result, "")
 
-    def test_no_user_message(self):
+    def testNoUserMessage(self):
         client = self.getAIClient(config={})
         messages = [{"role": "assistant", "content": "only assistant"}]
-        result = client._extract_user_message(messages)
+        result = client._extractUserMessage(messages)
         self.assertEqual(result, "")
 
-    def test_mixed_content_types_in_multipart(self):
+    def testMixedContentTypesInMultipart(self):
         client = self.getAIClient(config={})
         messages = [
             {
@@ -809,7 +825,7 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
                 ],
             }
         ]
-        result = client._extract_user_message(messages)
+        result = client._extractUserMessage(messages)
         self.assertIn("text part", result)
         self.assertIn("more text", result)
         self.assertNotIn("image", result)
@@ -836,19 +852,19 @@ class TestLoadBalancing(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_lb_disabled_no_groups(self):
+    def testLbDisabledNoGroups(self):
         config = {"load_balance": {"enabled": False}}
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertIsNone(result)
 
-    def test_lb_disabled_no_config(self):
+    def testLbDisabledNoConfig(self):
         config = {}
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertIsNone(result)
 
-    def test_lb_single_profile(self):
+    def testLbSingleProfile(self):
         config = {
             "load_balance": {
                 "enabled": True,
@@ -856,10 +872,10 @@ class TestLoadBalancing(unittest.TestCase):
             }
         }
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertEqual(result, [["DeepSeek"]])
 
-    def test_lb_multiple_profiles_same_priority(self):
+    def testLbMultipleProfilesSamePriority(self):
         config = {
             "load_balance": {
                 "enabled": True,
@@ -867,13 +883,13 @@ class TestLoadBalancing(unittest.TestCase):
             }
         }
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]), 2)
         self.assertIn("A", result[0])
         self.assertIn("B", result[0])
 
-    def test_lb_different_priorities(self):
+    def testLbDifferentPriorities(self):
         config = {
             "load_balance": {
                 "enabled": True,
@@ -884,12 +900,12 @@ class TestLoadBalancing(unittest.TestCase):
             }
         }
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0], ["Primary"])
         self.assertEqual(result[1], ["Secondary"])
 
-    def test_lb_priority_zero_disabled(self):
+    def testLbPriorityZeroDisabled(self):
         config = {
             "load_balance": {
                 "enabled": True,
@@ -900,36 +916,36 @@ class TestLoadBalancing(unittest.TestCase):
             }
         }
         client = self.getAIClient(config=config)
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], ["Active"])
 
-    def test_lb_failure_tracking(self):
+    def testLbFailureTracking(self):
         client = self.getAIClient(config={})
 
-        self.assertFalse(client._lb_disabled_check("Test"))
+        self.assertFalse(client.__class__._lb_disabled.get("Test", False))
 
-        client._lb_record("Test", False)
+        client._lbRecord("Test", False)
         self.assertEqual(client.__class__._lb_failures.get("Test"), 1)
-        self.assertFalse(client._lb_disabled_check("Test"))
+        self.assertFalse(client.__class__._lb_disabled.get("Test", False))
 
-        client._lb_record("Test", False)
-        client._lb_record("Test", False)
-        self.assertTrue(client._lb_disabled_check("Test"))
+        client._lbRecord("Test", False)
+        client._lbRecord("Test", False)
+        self.assertTrue(client.__class__._lb_disabled.get("Test", False))
 
-    def test_lb_recovery_after_success(self):
+    def testLbRecoveryAfterSuccess(self):
         client = self.getAIClient(config={})
 
-        client._lb_record("Test", False)
-        client._lb_record("Test", False)
-        client._lb_record("Test", False)
-        self.assertTrue(client._lb_disabled_check("Test"))
+        client._lbRecord("Test", False)
+        client._lbRecord("Test", False)
+        client._lbRecord("Test", False)
+        self.assertTrue(client.__class__._lb_disabled.get("Test", False))
 
-        client._lb_record("Test", True)
-        self.assertFalse(client._lb_disabled_check("Test"))
+        client._lbRecord("Test", True)
+        self.assertFalse(client.__class__._lb_disabled.get("Test", False))
         self.assertNotIn("Test", client.__class__._lb_failures)
 
-    def test_lb_disabled_profile_excluded(self):
+    def testLbDisabledProfileExcluded(self):
         config = {
             "load_balance": {
                 "enabled": True,
@@ -941,17 +957,17 @@ class TestLoadBalancing(unittest.TestCase):
         }
         client = self.getAIClient(config=config)
         client.__class__._lb_disabled = {"Bad": True}
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], ["Good"])
 
-    def test_lb_all_disabled_returns_none(self):
+    def testLbAllDisabledReturnsNone(self):
         config = {
             "load_balance": {"enabled": True, "profiles": {"A": {"priority": 1, "weight": 1}}}
         }
         client = self.getAIClient(config=config)
         client.__class__._lb_disabled = {"A": True}
-        result = client._lb_pick_groups()
+        result = client._lbPickGroups()
         self.assertIsNone(result)
 
 
@@ -972,61 +988,61 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_openai_adapter_build_request(self):
+    def testOpenaiAdapterBuildRequest(self):
         adapter = self.OpenAIAdapter(
             config={}, api_key="test-key", api_url="https://api.openai.com"
         )
         messages = [{"role": "user", "content": "hello"}]
-        request = adapter.build_chat_request("gpt-4", messages, 0.7, 2000)
+        request = adapter.buildChatRequest("gpt-4", messages, 0.7, 2000)
         self.assertEqual(request["model"], "gpt-4")
         self.assertEqual(request["messages"], messages)
         self.assertEqual(request["temperature"], 0.7)
         self.assertEqual(request["max_tokens"], 2000)
 
-    def test_openai_adapter_headers(self):
+    def testOpenaiAdapterHeaders(self):
         adapter = self.OpenAIAdapter(config={}, api_key="sk-test", api_url="https://api.openai.com")
-        headers = adapter.get_headers("sk-test")
+        headers = adapter.getHeaders("sk-test")
         self.assertEqual(headers["Authorization"], "Bearer sk-test")
         self.assertEqual(headers["Content-Type"], "application/json")
 
-    def test_openai_adapter_api_url(self):
+    def testOpenaiAdapterApiUrl(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.deepseek.com")
-        url = adapter.get_api_url()
+        url = adapter.getApiUrl()
         self.assertEqual(url, "https://api.deepseek.com/chat/completions")
 
-    def test_openai_adapter_parse_response(self):
+    def testOpenaiAdapterParseResponse(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.openai.com")
         mock_response = MagicMock()
         mock_response.json.return_value = {"choices": [{"message": {"content": "Hello, world!"}}]}
-        result = adapter.parse_chat_response(mock_response)
+        result = adapter.parseChatResponse(mock_response)
         self.assertEqual(result, "Hello, world!")
 
-    def test_openai_adapter_parse_empty_choices(self):
+    def testOpenaiAdapterParseEmptyChoices(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.openai.com")
         mock_response = MagicMock()
         mock_response.json.return_value = {"choices": []}
         with self.assertRaises(self.AIError):
-            adapter.parse_chat_response(mock_response)
+            adapter.parseChatResponse(mock_response)
 
-    def test_openai_adapter_parse_usage(self):
+    def testOpenaiAdapterParseUsage(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.openai.com")
         data = {"usage": {"prompt_tokens": 10, "completion_tokens": 20}}
-        in_t, out_t = adapter.parse_usage(data)
+        in_t, out_t = adapter.parseUsage(data)
         self.assertEqual(in_t, 10)
         self.assertEqual(out_t, 20)
 
-    def test_openai_adapter_parse_usage_missing(self):
+    def testOpenaiAdapterParseUsageMissing(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.openai.com")
-        in_t, out_t = adapter.parse_usage({})
+        in_t, out_t = adapter.parseUsage({})
         self.assertEqual(in_t, 0)
         self.assertEqual(out_t, 0)
 
-    def test_openai_adapter_get_models_url(self):
+    def testOpenaiAdapterGetModelsUrl(self):
         adapter = self.OpenAIAdapter(config={}, api_key="key", api_url="https://api.deepseek.com")
-        url = adapter.get_model_list_url()
+        url = adapter.getModelListUrl()
         self.assertEqual(url, "https://api.deepseek.com/models")
 
-    def test_claude_adapter_build_request(self):
+    def testClaudeAdapterBuildRequest(self):
         adapter = self.ClaudeAdapter(
             config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com"
         )
@@ -1034,99 +1050,99 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "hello"},
         ]
-        request = adapter.build_chat_request("claude-3-opus", messages, 0.5, 1000)
+        request = adapter.buildChatRequest("claude-3-opus", messages, 0.5, 1000)
         self.assertEqual(request["model"], "claude-3-opus")
         self.assertNotIn("system", [m["role"] for m in request["messages"]])
         self.assertEqual(len(request["messages"]), 1)
         self.assertEqual(request["messages"][0]["role"], "user")
 
-    def test_claude_adapter_headers(self):
+    def testClaudeAdapterHeaders(self):
         adapter = self.ClaudeAdapter(
             config={}, api_key="sk-ant-test", api_url="https://api.anthropic.com"
         )
-        headers = adapter.get_headers("sk-ant-test")
+        headers = adapter.getHeaders("sk-ant-test")
         self.assertEqual(headers["x-api-key"], "sk-ant-test")
         self.assertEqual(headers["Content-Type"], "application/json")
         self.assertIn("anthropic-version", headers)
 
-    def test_claude_adapter_api_url(self):
+    def testClaudeAdapterApiUrl(self):
         adapter = self.ClaudeAdapter(config={}, api_key="key", api_url="https://api.anthropic.com")
-        url = adapter.get_api_url()
+        url = adapter.getApiUrl()
         self.assertEqual(url, "https://api.anthropic.com/v1/messages")
 
-    def test_claude_adapter_parse_response(self):
+    def testClaudeAdapterParseResponse(self):
         adapter = self.ClaudeAdapter(config={}, api_key="key", api_url="https://api.anthropic.com")
         mock_response = MagicMock()
         mock_response.json.return_value = {"content": [{"text": "Claude response"}]}
-        result = adapter.parse_chat_response(mock_response)
+        result = adapter.parseChatResponse(mock_response)
         self.assertEqual(result, "Claude response")
 
-    def test_claude_adapter_parse_empty_content(self):
+    def testClaudeAdapterParseEmptyContent(self):
         adapter = self.ClaudeAdapter(config={}, api_key="key", api_url="https://api.anthropic.com")
         mock_response = MagicMock()
         mock_response.json.return_value = {}
         with self.assertRaises(self.AIError):
-            adapter.parse_chat_response(mock_response)
+            adapter.parseChatResponse(mock_response)
 
-    def test_claude_adapter_parse_usage(self):
+    def testClaudeAdapterParseUsage(self):
         adapter = self.ClaudeAdapter(config={}, api_key="key", api_url="https://api.anthropic.com")
         data = {"usage": {"input_tokens": 15, "output_tokens": 25}}
-        in_t, out_t = adapter.parse_usage(data)
+        in_t, out_t = adapter.parseUsage(data)
         self.assertEqual(in_t, 15)
         self.assertEqual(out_t, 25)
 
-    def test_ollama_adapter_build_request_no_images(self):
+    def testOllamaAdapterBuildRequestNoImages(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
         messages = [{"role": "user", "content": "hello"}]
-        request = adapter.build_chat_request("llama3", messages, 0.7, 2000)
+        request = adapter.buildChatRequest("llama3", messages, 0.7, 2000)
         self.assertEqual(request["model"], "llama3")
         self.assertIn("options", request)
         self.assertEqual(request["options"]["num_predict"], 2000)
 
-    def test_ollama_adapter_headers(self):
+    def testOllamaAdapterHeaders(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
-        headers = adapter.get_headers("")
+        headers = adapter.getHeaders("")
         self.assertEqual(headers["Content-Type"], "application/json")
         self.assertNotIn("Authorization", headers)
 
-    def test_ollama_adapter_api_url(self):
+    def testOllamaAdapterApiUrl(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
-        url = adapter.get_api_url()
+        url = adapter.getApiUrl()
         self.assertEqual(url, "http://127.0.0.1:11434/api/chat")
 
-    def test_ollama_adapter_parse_response(self):
+    def testOllamaAdapterParseResponse(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
         mock_response = MagicMock()
         mock_response.json.return_value = {"message": {"content": "Ollama reply"}}
-        result = adapter.parse_chat_response(mock_response)
+        result = adapter.parseChatResponse(mock_response)
         self.assertEqual(result, "Ollama reply")
 
-    def test_ollama_adapter_get_models_url(self):
+    def testOllamaAdapterGetModelsUrl(self):
         adapter = self.OllamaAdapter(config={}, api_key="", api_url="http://127.0.0.1:11434")
-        url = adapter.get_model_list_url()
+        url = adapter.getModelListUrl()
         self.assertEqual(url, "http://127.0.0.1:11434/api/tags")
 
-    def test_gemini_adapter_build_request(self):
+    def testGeminiAdapterBuildRequest(self):
         adapter = self.GeminiAdapter(
             config={}, api_key="gemini-key", api_url="https://generativelanguage.googleapis.com"
         )
         messages = [{"role": "user", "content": "hello"}]
-        request = adapter.build_chat_request("gemini-pro", messages, 0.7, 2000)
+        request = adapter.buildChatRequest("gemini-pro", messages, 0.7, 2000)
         self.assertIn("contents", request)
         self.assertIn("generationConfig", request)
         self.assertEqual(request["contents"][0]["role"], "user")
         self.assertEqual(request["generationConfig"]["temperature"], 0.7)
         self.assertEqual(request["generationConfig"]["maxOutputTokens"], 2000)
 
-    def test_gemini_adapter_role_mapping(self):
+    def testGeminiAdapterRoleMapping(self):
         adapter = self.GeminiAdapter(
             config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
         )
         messages = [{"role": "assistant", "content": "response"}]
-        request = adapter.build_chat_request("gemini-pro", messages, 0.7, 2000)
+        request = adapter.buildChatRequest("gemini-pro", messages, 0.7, 2000)
         self.assertEqual(request["contents"][0]["role"], "model")
 
-    def test_gemini_adapter_parse_response(self):
+    def testGeminiAdapterParseResponse(self):
         adapter = self.GeminiAdapter(
             config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
         )
@@ -1134,24 +1150,24 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         mock_response.json.return_value = {
             "candidates": [{"content": {"parts": [{"text": "Gemini response"}]}}]
         }
-        result = adapter.parse_chat_response(mock_response)
+        result = adapter.parseChatResponse(mock_response)
         self.assertEqual(result, "Gemini response")
 
-    def test_gemini_adapter_empty_candidates(self):
+    def testGeminiAdapterEmptyCandidates(self):
         adapter = self.GeminiAdapter(
             config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
         )
         mock_response = MagicMock()
         mock_response.json.return_value = {"candidates": []}
         with self.assertRaises(self.AIError):
-            adapter.parse_chat_response(mock_response)
+            adapter.parseChatResponse(mock_response)
 
-    def test_gemini_adapter_parse_usage(self):
+    def testGeminiAdapterParseUsage(self):
         adapter = self.GeminiAdapter(
             config={}, api_key="key", api_url="https://generativelanguage.googleapis.com"
         )
         data = {"usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 10}}
-        in_t, out_t = adapter.parse_usage(data)
+        in_t, out_t = adapter.parseUsage(data)
         self.assertEqual(in_t, 5)
         self.assertEqual(out_t, 10)
 
@@ -1163,7 +1179,7 @@ class TestAdapterMap(unittest.TestCase):
         )
         from src.core.AI import (
             AI_ADAPTER,
-            get_adapter_endpoint,
+            getAdapterEndpoint,
             OpenAIAdapter,
             ClaudeAdapter,
             OllamaAdapter,
@@ -1171,7 +1187,7 @@ class TestAdapterMap(unittest.TestCase):
         )
 
         self.AI_ADAPTER = AI_ADAPTER
-        self.get_adapter_endpoint = get_adapter_endpoint
+        self.getAdapterEndpoint = getAdapterEndpoint
         self.OpenAIAdapter = OpenAIAdapter
         self.ClaudeAdapter = ClaudeAdapter
         self.OllamaAdapter = OllamaAdapter
@@ -1181,27 +1197,27 @@ class TestAdapterMap(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_adapter_map_contains_known_services(self):
+    def testAdapterMapContainsKnownServices(self):
         names = [name for name, cls, url in self.AI_ADAPTER if cls is not None]
         expected = ["Claude", "DeepSeek", "Gemini", "Ollama", "OpenAI", "OpenRouter"]
         for name in expected:
             self.assertIn(name, names)
 
-    def test_get_adapter_endpoint_returns_correct_type(self):
-        adapter = self.get_adapter_endpoint("Claude", {}, api_key="key", api_url="url")
+    def testGetAdapterEndpointReturnsCorrectType(self):
+        adapter = self.getAdapterEndpoint("Claude", {}, api_key="key", api_url="url")
         self.assertIsInstance(adapter, self.ClaudeAdapter)
 
-        adapter = self.get_adapter_endpoint("Ollama", {}, api_key="", api_url="url")
+        adapter = self.getAdapterEndpoint("Ollama", {}, api_key="", api_url="url")
         self.assertIsInstance(adapter, self.OllamaAdapter)
 
-        adapter = self.get_adapter_endpoint("Gemini", {}, api_key="key", api_url="url")
+        adapter = self.getAdapterEndpoint("Gemini", {}, api_key="key", api_url="url")
         self.assertIsInstance(adapter, self.GeminiAdapter)
 
-        adapter = self.get_adapter_endpoint("DeepSeek", {}, api_key="key", api_url="url")
+        adapter = self.getAdapterEndpoint("DeepSeek", {}, api_key="key", api_url="url")
         self.assertIsInstance(adapter, self.OpenAIAdapter)
 
-    def test_unknown_endpoint_falls_back_to_openai(self):
-        adapter = self.get_adapter_endpoint("Unknown", {}, api_key="key", api_url="url")
+    def testUnknownEndpointFallsBackToOpenai(self):
+        adapter = self.getAdapterEndpoint("Unknown", {}, api_key="key", api_url="url")
         self.assertIsInstance(adapter, self.OpenAIAdapter)
 
 
@@ -1220,30 +1236,30 @@ class TestAIClientBuildFileMessage(unittest.TestCase):
             p.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def _make_file(self, name, content=b"test"):
+    def _makeFile(self, name, content=b"test"):
         path = os.path.join(self.test_dir, name)
         with open(path, "wb") as f:
             f.write(content)
         return path
 
-    def test_text_file_message(self):
+    def testTextFileMessage(self):
         client = self.getAIClient(config={})
-        path = self._make_file("test.txt", b"hello world")
-        result = client.build_file_message(path)
+        path = self._makeFile("test.txt", b"hello world")
+        result = client.buildFileMessage(path)
         self.assertIsNotNone(result)
         self.assertEqual(result[0]["role"], "user")
         self.assertIn("hello world", result[0]["content"])
 
-    def test_large_file_skipped(self):
+    def testLargeFileSkipped(self):
         client = self.getAIClient(config={})
-        path = self._make_file("large.bin", b"x" * (4 * 1024 * 1024 + 1))
-        result = client.build_file_message(path)
+        path = self._makeFile("large.bin", b"x" * (4 * 1024 * 1024 + 1))
+        result = client.buildFileMessage(path)
         self.assertIsNone(result)
 
-    def test_binary_file_read_with_errors_replaced(self):
+    def testBinaryFileReadWithErrorsReplaced(self):
         client = self.getAIClient(config={})
-        path = self._make_file("binary.bin", bytes(range(256)))
-        result = client.build_file_message(path)
+        path = self._makeFile("binary.bin", bytes(range(256)))
+        result = client.buildFileMessage(path)
         self.assertIsNotNone(result)
 
 
@@ -1260,13 +1276,13 @@ class TestSyncModeConstants(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_mode_constants(self):
+    def testModeConstants(self):
         from plugin.OpenList import MODE_SYNC, MODE_BACKUP
 
         self.assertEqual(MODE_SYNC, "sync")
         self.assertEqual(MODE_BACKUP, "backup")
 
-    def test_task_status_constants(self):
+    def testTaskStatusConstants(self):
         from plugin.OpenList import (
             TASK_STATUS_RUNNING,
             TASK_STATUS_SUCCESS,
@@ -1290,7 +1306,7 @@ class TestTaskConfig(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_default_values(self):
+    def testDefaultValues(self):
         from plugin.OpenList import TaskConfig
 
         cfg = TaskConfig()
@@ -1303,7 +1319,7 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(cfg.tar_folders, "")
         self.assertEqual(cfg.tree_folders, "")
 
-    def test_toDict_roundtrip(self):
+    def testToDictRoundtrip(self):
         from plugin.OpenList import TaskConfig
 
         cfg = TaskConfig(
@@ -1325,7 +1341,7 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(restored.mode, "sync")
         self.assertTrue(restored.confirm_before_sync)
 
-    def test_fromDict_missing_keys(self):
+    def testFromDictMissingKeys(self):
         from plugin.OpenList import TaskConfig
 
         cfg = TaskConfig.fromDict({"name": "minimal"})
@@ -1333,7 +1349,7 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(cfg.mode, "backup")
         self.assertEqual(cfg.src_path, "")
 
-    def test_backup_mode_default(self):
+    def testBackupModeDefault(self):
         from plugin.OpenList import TaskConfig
 
         cfg = TaskConfig.fromDict({"name": "backup_task"})
@@ -1372,7 +1388,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
                 files[rel] = {"size": stat.st_size, "mtime": int(stat.st_mtime)}
         return files
 
-    def _make_worker(self, mode="sync"):
+    def _makeWorker(self, mode="sync"):
         """创建 SyncWorker 实例用于测试"""
         from plugin.OpenList import SyncWorker, TaskConfig, MODE_SYNC, MODE_BACKUP
 
@@ -1382,61 +1398,61 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         worker._abort = False
         return worker
 
-    def test_local_file_not_in_remote(self):
+    def testLocalFileNotInRemote(self):
         self._touch(self.local_dir, "new.txt", b"local only")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("new.txt", to_upload)
         self.assertEqual(len(to_delete), 0)
 
-    def test_remote_file_not_in_local_sync_mode(self):
+    def testRemoteFileNotInLocalSyncMode(self):
         self._touch(self.remote_dir, "old.txt", b"remote only")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("old.txt", to_delete)
 
-    def test_backup_mode_no_delete(self):
+    def testBackupModeNoDelete(self):
         self._touch(self.remote_dir, "extra.txt", b"extra")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("backup")
+        worker = self._makeWorker("backup")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertEqual(len(to_delete), 0)
 
-    def test_identical_files_no_sync_needed(self):
+    def testIdenticalFilesNoSyncNeeded(self):
         content = b"same content"
         self._touch(self.local_dir, "match.txt", content)
         self._touch(self.remote_dir, "match.txt", content)
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertNotIn("match.txt", to_upload)
 
-    def test_file_content_changed_needs_update(self):
+    def testFileContentChangedNeedsUpdate(self):
         self._touch(self.local_dir, "changed.txt", b"new version!")
         self._touch(self.remote_dir, "changed.txt", b"old version")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("changed.txt", to_upload)
 
-    def test_nested_folder_structure(self):
+    def testNestedFolderStructure(self):
         self._touch(self.local_dir, "a/b/c/deep.txt", b"deep")
         self._touch(self.local_dir, "root.txt", b"root")
         self._touch(self.remote_dir, "root.txt", b"root")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertTrue(any("deep.txt" in k for k in to_upload))
 
-    def test_bidirectional_diff(self):
+    def testBidirectionalDiff(self):
         self._touch(self.local_dir, "only_local.txt", b"A")
         self._touch(self.remote_dir, "only_remote.txt", b"B")
         self._touch(self.local_dir, "both_diff.txt", b"content C1 longer")
@@ -1445,7 +1461,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         self._touch(self.remote_dir, "both_same.txt", b"D")
         local = self._scan(self.local_dir)
         remote = self._scan(self.remote_dir)
-        worker = self._make_worker("sync")
+        worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("only_local.txt", to_upload)
         self.assertIn("only_remote.txt", to_delete)
@@ -1463,7 +1479,7 @@ class TestExcludeRules(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_glob_exclude_match(self):
+    def testGlobExcludeMatch(self):
         rules = ["*.pyc", "*/__pycache__/*"]
         should_exclude = ["script.pyc", os.path.join("sub", "__pycache__", "cache.py")]
         should_keep = ["script.py", "data.txt"]
@@ -1482,12 +1498,12 @@ class TestExcludeRules(unittest.TestCase):
             )
             self.assertFalse(matched, f"{path} should not be excluded")
 
-    def test_exclude_git_folder(self):
+    def testExcludeGitFolder(self):
         rule = "*/.git/*"
         self.assertTrue(fnmatch.fnmatch("project/.git/config", rule))
         self.assertFalse(fnmatch.fnmatch("project/src/main.py", rule))
 
-    def test_multiple_exclude_rules(self):
+    def testMultipleExcludeRules(self):
         rules = ["*.log", "*.tmp", "*.bak"]
         for r in rules:
             self.assertTrue(fnmatch.fnmatch(f"file{r}", r))
@@ -1512,7 +1528,7 @@ class TestTarPackaging(unittest.TestCase):
         with open(path, "wb") as f:
             f.write(content)
 
-    def test_create_tar_with_files(self):
+    def testCreateTarWithFiles(self):
         self._touch("file1.txt", b"content1")
         self._touch("file2.txt", b"content2")
 
@@ -1528,7 +1544,7 @@ class TestTarPackaging(unittest.TestCase):
         self.assertIn("file1.txt", names)
         self.assertIn("file2.txt", names)
 
-    def test_tar_preserves_content(self):
+    def testTarPreservesContent(self):
         self._touch("data.bin", b"\x00\x01\x02\x03")
         with tarfile.open(self.tar_path, "w") as tar:
             tar.add(os.path.join(self.test_dir, "data.bin"), arcname="data.bin")
@@ -1554,7 +1570,7 @@ class TestLazyInitPerformance(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_time_perf_counter_baseline(self):
+    def testTimePerfCounterBaseline(self):
         """测试 time.perf_counter 基本可用性"""
         start = time.perf_counter()
         import time as tm
@@ -1596,7 +1612,7 @@ class TestSyncPerformance(unittest.TestCase):
                 result.add(rel)
         return result
 
-    def test_diff_100_files(self):
+    def testDiff100Files(self):
         """测试 100 个文件的同步 diff 耗时"""
         for i in range(100):
             self._touch(self.local_dir, f"file_{i}.txt", f"content_{i}".encode())
@@ -1620,7 +1636,7 @@ class TestSyncPerformance(unittest.TestCase):
         self.assertEqual(len(to_delete), 0)
         self.assertLess(elapsed, 2.0, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 2.0 秒")
 
-    def test_diff_1000_files(self):
+    def testDiff1000Files(self):
         """测试 1000 个文件的同步 diff 耗时"""
         for i in range(1000):
             self._touch(self.local_dir, f"file_{i}.txt", f"content_{i}".encode())
@@ -1695,7 +1711,7 @@ class TestApiKeyErrors(unittest.TestCase):
             p.stop()
 
     @patch("requests.Session.post")
-    def test_openai_401_error(self, mock_post):
+    def testOpenai401Error(self, mock_post):
         """测试 OpenAI API 返回 401 时抛出 AIError"""
         mock_resp = MagicMock()
         mock_resp.status_code = 401
@@ -1708,7 +1724,7 @@ class TestApiKeyErrors(unittest.TestCase):
         self.assertIn("401", str(ctx.exception))
 
     @patch("requests.Session.post")
-    def test_openai_403_error(self, mock_post):
+    def testOpenai403Error(self, mock_post):
         """测试 OpenAI API 返回 403 时抛出 AIError"""
         mock_resp = MagicMock()
         mock_resp.status_code = 403
@@ -1720,13 +1736,13 @@ class TestApiKeyErrors(unittest.TestCase):
             adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
         self.assertIn("403", str(ctx.exception))
 
-    def test_missing_api_key(self):
+    def testMissingApiKey(self):
         """测试未设置 API Key 时抛出 AIError"""
         adapter = self.OpenAIAdapter(config=_PROFILE_CONFIG_NO_KEY)
         with self.assertRaises(self.AIError):
             adapter.chat([], model="gpt-4")
 
-    def test_missing_api_url(self):
+    def testMissingApiUrl(self):
         """测试未设置 API URL 时使用默认值 (不抛异常)"""
         cfg = {
             "AI": {
@@ -1735,7 +1751,7 @@ class TestApiKeyErrors(unittest.TestCase):
             }
         }
         adapter = self.OpenAIAdapter(config=cfg)
-        url = adapter.get_api_url()
+        url = adapter.getApiUrl()
         self.assertIn("chat/completions", url)
 
 
@@ -1763,7 +1779,7 @@ class TestNetworkErrors(unittest.TestCase):
             p.stop()
 
     @patch("requests.Session.post")
-    def test_timeout_error(self, mock_post):
+    def testTimeoutError(self, mock_post):
         """测试网络超时抛 AIError"""
         mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
 
@@ -1773,7 +1789,7 @@ class TestNetworkErrors(unittest.TestCase):
         self.assertIn("超时", str(ctx.exception))
 
     @patch("requests.Session.post")
-    def test_connection_error(self, mock_post):
+    def testConnectionError(self, mock_post):
         """测试网络断开抛 AIError"""
         mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
@@ -1806,30 +1822,30 @@ class TestPluginErrors(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_enable_non_existent_plugin(self):
+    def testEnableNonExistentPlugin(self):
         """测试启用不存在的插件返回 False"""
         mgr = self.PluginManager()
         result = mgr.enablePlugin("nonexistent_plugin")
         self.assertFalse(result)
 
-    def test_disable_non_existent_plugin(self):
+    def testDisableNonExistentPlugin(self):
         """测试禁用不存在的插件不报错"""
         mgr = self.PluginManager()
         mgr.disablePlugin("nonexistent_plugin")
 
-    def test_reload_non_existent_plugin(self):
+    def testReloadNonExistentPlugin(self):
         """测试重新加载不存在的插件返回 False"""
         mgr = self.PluginManager()
         result = mgr.reloadPlugin("nonexistent_plugin")
         self.assertFalse(result)
 
-    def testloadPluginClass_invalid_name(self):
+    def testLoadPluginClassInvalidName(self):
         """测试加载无效插件类返回 None"""
         mgr = self.PluginManager()
         result = mgr.loadPluginClass("invalid")
         self.assertIsNone(result)
 
-    def test_scan_cache_after_failed_load(self):
+    def testScanCacheAfterFailedLoad(self):
         """测试加载失败后扫描缓存状态一致"""
         mgr = self.PluginManager()
         mgr.loadPluginClass("invalid")
@@ -1860,7 +1876,7 @@ class TestModelErrors(unittest.TestCase):
             p.stop()
 
     @patch("requests.Session.post")
-    def test_empty_response_text(self, mock_post):
+    def testEmptyResponseText(self, mock_post):
         """测试 AI 返回空文本"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1872,7 +1888,7 @@ class TestModelErrors(unittest.TestCase):
         self.assertEqual(text, "")
 
     @patch("requests.Session.post")
-    def test_malformed_json_response(self, mock_post):
+    def testMalformedJsonResponse(self, mock_post):
         """测试 API 返回非 JSON 数据"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1885,7 +1901,7 @@ class TestModelErrors(unittest.TestCase):
         self.assertIn("格式错误", str(ctx.exception))
 
     @patch("requests.Session.post")
-    def test_missing_choices_key(self, mock_post):
+    def testMissingChoicesKey(self, mock_post):
         """测试 API 返回缺少 choices 字段"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1919,12 +1935,12 @@ class TestConfigErrors(unittest.TestCase):
         for p in self._patchers:
             p.stop()
 
-    def test_empty_config_returns_defaults(self):
+    def testEmptyConfigReturnsDefaults(self):
         """测试空配置时返回默认值"""
         adapter = self.OpenAIAdapter(config={})
         self.assertIsNotNone(adapter)
 
-    def test_partial_config(self):
+    def testPartialConfig(self):
         """测试部分配置不报错"""
         adapter = self.OpenAIAdapter(config={"AI": {"api_key": "test"}})
         self.assertIsNotNone(adapter)
@@ -2029,7 +2045,7 @@ class _MemState:
 _MEM = _MemState()
 
 
-def _mem_init():
+def _memInit():
     """初始化 tracemalloc 追踪"""
     import tracemalloc
 
@@ -2040,7 +2056,7 @@ def _mem_init():
     logger.info("tracemalloc 追踪已启动")
 
 
-def _mem_take_snapshot():
+def _memTakeSnapshot():
     """拍快照并输出内存总量 TOP20"""
     if not _MEM.started:
         return
@@ -2069,7 +2085,7 @@ def _mem_take_snapshot():
         logger.info(f"  #{i+1} {stat}")
 
 
-def _count_qt_objects(widget, max_depth=20):
+def _countQtObjects(widget, max_depth=20):
     """递归统计 QObject 数量和类型"""
     from collections import Counter
 
@@ -2086,9 +2102,9 @@ def _count_qt_objects(widget, max_depth=20):
     return counter
 
 
-def _log_qt_objects(widget):
+def _logQtObjects(widget):
     """记录 Qt 对象统计到日志"""
-    counter = _count_qt_objects(widget)
+    counter = _countQtObjects(widget)
     total = sum(counter.values())
     top = counter.most_common(15)
     logger.info(f"=== Qt 对象统计 (共 {total} 个) TOP15 ===")
@@ -2103,19 +2119,19 @@ def _patchMainWindow():
 
     original_init = MainWindow.__init__
 
-    def patched_init(self, *args, **kwargs):
+    def patchedInit(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self._mem_toggle = False
         timer = QTimer(self)
         timer.timeout.connect(
             lambda: (
-                _mem_take_snapshot() if self._mem_toggle else _log_qt_objects(self),
+                _memTakeSnapshot() if self._mem_toggle else _logQtObjects(self),
                 setattr(self, "_mem_toggle", not self._mem_toggle),
             )
         )
         timer.start(5000)
 
-    MainWindow.__init__ = patched_init
+    MainWindow.__init__ = patchedInit
     logger.info("MainWindow.__init__")
 
 
@@ -2139,7 +2155,7 @@ def main():
         sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a not in test_flags]
 
         if args.me:
-            _mem_init()
+            _memInit()
 
         from o import main as launch_app
 

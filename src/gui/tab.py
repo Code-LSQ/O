@@ -87,7 +87,7 @@ class EditorTab(QWidget):
         self.text_edit._parent_tab = self
         self.text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.text_edit.installEventFilter(self)
-        self.text_edit.setZoomCallback(self._onTextZoom)
+        self.text_edit.setZoomCallback(lambda zf: self.window().statusBar().showMessage(f"当前缩放 {int(zf * 100)}%", 1500))
         self.text_edit.cursor_position_changed.connect(self._onCursorPos)
         self._cursor_position_callback = None
 
@@ -103,7 +103,7 @@ class EditorTab(QWidget):
 
         self._prev_page_btn = QPushButton("上一页")
         self._prev_page_btn.setFixedWidth(80)
-        self._prev_page_btn.clicked.connect(self._onPrevPage)
+        self._prev_page_btn.clicked.connect(lambda: self._goToPage(self._current_page - 1) if self._current_page > 0 else None)
         pag_layout.addWidget(self._prev_page_btn)
 
         self._page_label = QLabel("第 0 / 0 页")
@@ -117,7 +117,7 @@ class EditorTab(QWidget):
 
         self._load_all_btn = QPushButton("加载全部")
         self._load_all_btn.setFixedWidth(100)
-        self._load_all_btn.clicked.connect(self._onLoadAll)
+        self._load_all_btn.clicked.connect(lambda: self.loadAllContent())
         pag_layout.addWidget(self._load_all_btn)
 
         layout.addWidget(self._pagination_bar)
@@ -125,7 +125,7 @@ class EditorTab(QWidget):
         self.image_scroll = QScrollArea()
         self.image_scroll.setWidgetResizable(True)
         self.image_label = ImageLabel()
-        self.image_label.setZoomCallback(self._onImgZoom)
+        self.image_label.setZoomCallback(lambda zf: self.window().statusBar().showMessage(f"当前缩放 {int(zf * 100)}%", 1500))
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_scroll.setWidget(self.image_label)
         self.image_scroll.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -204,16 +204,6 @@ class EditorTab(QWidget):
                 self.is_modified = False
                 self.file_changed.emit(False)
 
-    def _onTextZoom(self, zoom_factor: float):
-        """文本缩放变化回调"""
-        zoom_percent = int(zoom_factor * 100)
-        self.window().statusBar().showMessage(f"当前缩放 {zoom_percent}%", 1500)
-
-    def _onImgZoom(self, zoom_factor: float):
-        """图片缩放变化回调"""
-        zoom_percent = int(zoom_factor * 100)
-        self.window().statusBar().showMessage(f"当前缩放 {zoom_percent}%", 1500)
-    
     def eventFilter(self, obj, event):
         if obj == self.text_edit and event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type and self.file_path:
             return self._onArcDblClick(event)
@@ -717,7 +707,7 @@ class EditorTab(QWidget):
             return False
 
         if self.is_modified:
-            if not messageBox(self, "未保存的修改", f"文件已修改但未保存。\n是否重新加载并丢弃修改？"):
+            if not messageBox(self, "未保存的修改", "文件已修改但未保存。\n是否重新加载并丢弃修改？"):
                 return False
 
         old_cursor_pos = self.text_edit.textCursor().position()
@@ -734,7 +724,7 @@ class EditorTab(QWidget):
         if self._is_pdf:
             self._exitPdf()
         if hasattr(self.image_label, '_comic_view_enabled') and self.image_label._comic_view_enabled:
-            self.image_label._exit_comic_view()
+            self.image_label._exitComicView()
 
         self.text_edit.show()
         self.image_scroll.hide()
@@ -790,8 +780,8 @@ class EditorTab(QWidget):
         self.file_changed.emit(False)
 
         main_window = self.window()
-        if hasattr(main_window, '_apply_editor_settings'):
-            main_window._apply_editor_settings(self)
+        if hasattr(main_window, '_applyEditorSettings'):
+            main_window._applyEditorSettings(self)
 
         try:
             cursor = self.text_edit.textCursor()
@@ -854,16 +844,9 @@ class EditorTab(QWidget):
         self._prev_page_btn.setEnabled(cur > 1)
         self._next_page_btn.setEnabled(cur < total)
 
-    def _onPrevPage(self):
-        if self._current_page > 0:
-            self._goToPage(self._current_page - 1)
-
     def _onNextPage(self):
         if self._current_page < self._total_pages - 1:
             self._goToPage(self._current_page + 1)
-
-    def _onLoadAll(self):
-        self.loadAllContent()
 
     def _goToPage(self, page: int):
         if page < 0 or page >= self._total_pages:
@@ -1025,8 +1008,8 @@ class EditorTab(QWidget):
     
     def _enterFolderComic(self):
         """进入普通文件夹图库模式"""
-        self.image_label._enter_comic_view()
-    
+        self.image_label._enterComicView()
+
     def _enterArcGallery(self):
         """进入压缩包图库模式"""
         logger.info(f"=== _enterArcGallery called, archive_type={self._archive_type}")
@@ -1077,10 +1060,8 @@ class EditorTab(QWidget):
         self.image_scroll.show()
         
         logger.info(f"=== calling set_archive_images, image_label={self.image_label}")
-        self.image_label.set_archive_images(images_data)
-        logger.info(f"=== calling _toggle_comic_view")
-        self.image_label._toggle_comic_view()
-        logger.info(f"=== done")
+        self.image_label.setArchiveImages(images_data)
+        self.image_label._toggleComicView()
 
 
 # 导入放在文件末尾避免循环依赖

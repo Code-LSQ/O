@@ -19,21 +19,16 @@ class FindReplaceDialog(QDialog):
         self.setWindowTitle(tr("查找与替换"))
         self.setMinimumWidth(450)
         self.config = config if config is not None else getConfig()
-        self.presets = self._loadPresets()
-        self.current_preset_rules = []
-        self.initUI()
-
-    def _loadPresets(self):
         if self.config:
             presets = self.config.get("Edit.find_presets", [])
             if isinstance(presets, list):
-                return presets
-        return []
-
-    def _savePresets(self):
-        if self.config:
-            self.config.set("Edit.find_presets", self.presets)
-            self.config.save()
+                self.presets = presets
+            else:
+                self.presets = []
+        else:
+            self.presets = []
+        self.current_preset_rules = []
+        self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout(self)
@@ -240,7 +235,9 @@ class FindReplaceDialog(QDialog):
             for i in range(pair_list.count()):
                 item = pair_list.item(i)
                 self.presets.append({"name": item.text(), "value": item.data(Qt.ItemDataRole.UserRole)})
-            self._savePresets()
+            if self.config:
+                self.config.set("Edit.find_presets", self.presets)
+                self.config.save()
             self._updatePresetCombo()
 
     def onFindNext(self):
@@ -296,8 +293,3 @@ class FindReplaceDialog(QDialog):
 
     def setFindText(self, text: str):
         self.find_edit.setText(text)
-    
-    def showFindRe(self):
-        self.find_edit.setFocus()
-        self.find_edit.selectAll()
-        self.show()

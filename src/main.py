@@ -731,15 +731,10 @@ class MainWindow(WindowMouse, QMainWindow):
         self._hover_timer.setSingleShot(True)
         self._hover_timer.timeout.connect(self._onHover)
 
-        QTimer.singleShot(0, self._lazyInit)
+        QTimer.singleShot(0, lambda: (self.startGlobalListener(), self._initPlugins()))
 
         if self.app:
-            self.app.aboutToQuit.connect(self._onQuit)
-
-    def _onQuit(self):
-        """应用退出时保存状态"""
-        self._saveGeometry()
-        getConfig().save()
+            self.app.aboutToQuit.connect(lambda: (self._saveGeometry(), getConfig().save()))
 
     def _syncTools(self):
         """同步 _tools 到配置"""
@@ -785,11 +780,6 @@ class MainWindow(WindowMouse, QMainWindow):
                     window.window_control.updateIcons(theme)
         except Exception:
             logger.exception("应用主题失败")
-
-    def _lazyInit(self):
-        """延迟初始化"""
-        self.startGlobalListener()
-        self._initPlugins()
 
     def _initPlugins(self):
         """初始化插件系统"""
@@ -1236,7 +1226,6 @@ class MainWindow(WindowMouse, QMainWindow):
     def _createButton(self, tool: dict, index: int) -> DragToolButton:
         """创建工具按钮"""
         name = tool.get("name", "未命名")
-        icon_path = tool.get("icon", "")
         path = tool.get("path", "") or tool.get("url", "")
         note = tool.get("note", "")
         

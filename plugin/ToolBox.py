@@ -74,22 +74,22 @@ class ToolBox(PluginBase):
     def getAction(self):
         menu = QMenu(self.description, self.main_window)
 
-        menu.addAction("工具箱设置", self._show_settings)
+        menu.addAction("工具箱设置", self._showSettings)
 
-        menu.addAction(tr("搜索"), self._open_search)
-        menu.addAction("快速文本", self._quick_text)
-        menu.addAction("批量重命名", self._batch_rename)
+        menu.addAction(tr("搜索"), self._openSearch)
+        menu.addAction("快速文本", self._quickText)
+        menu.addAction("批量重命名", self._batchRename)
         menu.addAction("查找重复文件", self._findDuplicates)
-        menu.addAction("快速粘贴", self._quick_paste)
+        menu.addAction("快速粘贴", self._quickPaste)
 
-        menu.addAction("自动滑动", self._toggle_scroll)
-        menu.addAction("自动复制", self._toggle_copy)
-        menu.addAction("自动搜索", self._toggle_search)
-        menu.addAction("自动点击", self._toggle_click)
+        menu.addAction("自动滑动", self._toggleScroll)
+        menu.addAction("自动复制", self._toggleCopy)
+        menu.addAction("自动搜索", self._toggleSearch)
+        menu.addAction("自动点击", self._toggleClick)
 
         return menu
 
-    def _toggle_scroll(self):
+    def _toggleScroll(self):
         self.initialize()
         if self._scroll_timer.enabled:
             self._scroll_timer.stop()
@@ -99,7 +99,7 @@ class ToolBox(PluginBase):
             self._scroll_timer.start(speed)
             logger.info(f"自动滑动已启动 (速度: {speed})")
 
-    def _toggle_copy(self):
+    def _toggleCopy(self):
         self.initialize()
         if self._copy_mgr.enabled:
             self._copy_mgr.setEnabled(False)
@@ -109,7 +109,7 @@ class ToolBox(PluginBase):
             self._copy_mgr.setEnabled(True)
             logger.info("自动复制已启动")
 
-    def _toggle_search(self):
+    def _toggleSearch(self):
         self.initialize()
         if self._search_mgr.enabled:
             self._search_mgr.setEnabled(False)
@@ -125,7 +125,7 @@ class ToolBox(PluginBase):
             else:
                 logger.info("自动搜索已启动")
 
-    def _toggle_click(self):
+    def _toggleClick(self):
         self.initialize()
         if self._click_mgr.enabled:
             self._click_mgr.setEnabled(False)
@@ -136,12 +136,12 @@ class ToolBox(PluginBase):
             self._click_mgr.setEnabled(True)
             logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
 
-    def _batch_rename(self):
+    def _batchRename(self):
         dialog = BatchRenameDialog(self.main_window)
         dialog.exec()
 
     def _findDuplicates(self):
-        editor = self._ensure_editor()
+        editor = self._ensureEditor()
         if not editor:
             return
 
@@ -164,12 +164,12 @@ class ToolBox(PluginBase):
         self.saveConfig()
         logger.info("正在扫描重复文件")
         finder = DuplicateFinder(files, folder_path=paths[0] if paths else None)
-        finder.finished.connect(lambda dups, g=gen: self._on_dup_finished(editor, dups, g))
+        finder.finished.connect(lambda dups, g=gen: self._onDupFinished(editor, dups, g))
         finder.error.connect(lambda err: messageBox(editor, "错误", f"扫描失败: {err}", 1))
         finder.start()
         self._dup_finder = finder
 
-    def _on_dup_finished(self, editor, duplicates: dict, gen: int = 0):
+    def _onDupFinished(self, editor, duplicates: dict, gen: int = 0):
         if gen != self._dup_finder_gen:
             return
         logger.info("扫描完成")
@@ -183,14 +183,14 @@ class ToolBox(PluginBase):
         mgr.setSizes(editor.width(), fw)
         self._duplicate_mgr = mgr
 
-    def _quick_paste(self):
+    def _quickPaste(self):
         text = GlobalHotkeyListener._placeholders.get("Select", "")
         if not text:
             return
         mw = self.main_window
         activate = getattr(mw, 'activateWindow', None)
         raise_fn = getattr(mw, 'raise_', None)
-        get_ed = getattr(mw, 'getCurrentEditor', None)
+        get_ed = getattr(mw, 'getEditor', None)
         if not get_ed:
             return
         if activate:
@@ -204,7 +204,7 @@ class ToolBox(PluginBase):
         cursor = editor.text_edit.textCursor()
         cursor.insertText(text)
 
-    def _quick_text(self):
+    def _quickText(self):
         self.initialize()
         items = self.settings.get("quick_text.list", [])
         dialog = QuickTextDialog(items, self.main_window)
@@ -212,9 +212,9 @@ class ToolBox(PluginBase):
             text = dialog.selected_text
             if text:
                 QApplication.clipboard().setText(text)
-                QTimer.singleShot(50, self._global_paste)
+                QTimer.singleShot(50, self._globalPaste)
 
-    def _global_paste(self):
+    def _globalPaste(self):
         try:
             kb = keyboard.Controller()
             kb.press(keyboard.Key.ctrl)
@@ -224,12 +224,12 @@ class ToolBox(PluginBase):
         except Exception:
             logger.exception("全局粘贴失败")
 
-    def _open_search(self):
+    def _openSearch(self):
         config = getConfig()
         dialog = SearchDialog(config.get("Launch.tools", {}), self.main_window)
         dialog.exec()
 
-    def _show_settings(self):
+    def _showSettings(self):
         self.initialize()
         dialog = ToolBoxSettings(self.settings, self.main_window)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -241,9 +241,9 @@ class ToolBox(PluginBase):
                 self._scroll_timer.start(new_speed)
             self.saveConfig()
 
-    def _ensure_editor(self):
+    def _ensureEditor(self):
         mw = self.main_window
-        if hasattr(mw, 'getCurrentEditor'):
+        if hasattr(mw, 'getEditor'):
             return mw
         if hasattr(mw, '_editor_window') and mw._editor_window:
             return mw._editor_window
@@ -261,9 +261,9 @@ class SearchDialog(QDialog):
         self._setupUI()
         self._populate()
         self.search_edit.setFocus()
-        QTimer.singleShot(0, self._do_center)
+        QTimer.singleShot(0, self._doCenter)
 
-    def _do_center(self):
+    def _doCenter(self):
         parent = self.parent()
         if parent:
             center = parent.geometry().center()
@@ -277,14 +277,14 @@ class SearchDialog(QDialog):
     def eventFilter(self, obj, event):
         if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Up:
-                self._move_selection(-1)
+                self._moveSelection(-1)
                 return True
             elif event.key() == Qt.Key.Key_Down:
-                self._move_selection(1)
+                self._moveSelection(1)
                 return True
         return super().eventFilter(obj, event)
 
-    def _move_selection(self, direction):
+    def _moveSelection(self, direction):
         current = self.list_widget.currentRow()
         count = self.list_widget.count()
         if count == 0:
@@ -303,7 +303,7 @@ class SearchDialog(QDialog):
         self.search_edit.setFixedHeight(42)
         self.search_edit.setStyleSheet("border-radius: 0;")
         self.search_edit.textChanged.connect(self._filter)
-        self.search_edit.returnPressed.connect(self._accept_current)
+        self.search_edit.returnPressed.connect(self._acceptCurrent)
         main_layout.addWidget(self.search_edit)
 
         sep = QFrame()
@@ -313,13 +313,13 @@ class SearchDialog(QDialog):
         self.list_widget = QListWidget()
         self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
         self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.itemClicked.connect(self._onItemClicked)
         self.list_widget.setIconSize(QSize(24, 24))
         main_layout.addWidget(self.list_widget, 1)
 
         self.search_edit.installEventFilter(self)
 
-    def _all_tools(self):
+    def _allTools(self):
         result = []
         for group_tools in self._tools.values():
             result.extend(group_tools)
@@ -327,7 +327,7 @@ class SearchDialog(QDialog):
 
     def _populate(self, tools=None):
         self.list_widget.clear()
-        source = self._all_tools() if tools is None else tools
+        source = self._allTools() if tools is None else tools
         for tool in source:
             item = QListWidgetItem(getIcon(tool, 24), tool.get("name", ""))
             item.setSizeHint(QSize(0, 36))
@@ -340,19 +340,19 @@ class SearchDialog(QDialog):
             self._populate()
             return
         matched = []
-        for tool in self._all_tools():
+        for tool in self._allTools():
             if (text in tool.get("name", "").lower()
                     or text in (tool.get("path", "") or tool.get("url", "")).lower()
                     or text in tool.get("note", "").lower()):
                 matched.append(tool)
         self._populate(matched)
 
-    def _accept_current(self):
+    def _acceptCurrent(self):
         current = self.list_widget.currentItem()
         if current:
-            self._on_item_clicked(current)
+            self._onItemClicked(current)
 
-    def _on_item_clicked(self, item):
+    def _onItemClicked(self, item):
         tool = item.data(Qt.ItemDataRole.UserRole)
         if tool:
             self.accept()
@@ -365,7 +365,7 @@ class SearchDialog(QDialog):
             self.reject()
         elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if self.focusWidget() is not self.search_edit:
-                self._accept_current()
+                self._acceptCurrent()
         else:
             super().keyPressEvent(event)
 
@@ -384,12 +384,12 @@ class FileSearcher:
             if not os.path.exists(path):
                 continue
             if os.path.isfile(path):
-                results.extend(self._search_file(path))
+                results.extend(self._searchFile(path))
             elif os.path.isdir(path):
-                results.extend(self._search_directory(path, abort_check))
+                results.extend(self._searchDirectory(path, abort_check))
         return results
 
-    def _search_file(self, file_path: str) -> List[dict]:
+    def _searchFile(self, file_path: str) -> List[dict]:
         results = []
         abs_path = os.path.abspath(file_path)
         try:
@@ -397,7 +397,7 @@ class FileSearcher:
                 return []
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 for line_num, line in enumerate(f, 1):
-                    matches = self._find_matches(line)
+                    matches = self._findMatches(line)
                     if matches:
                         results.append({
                             "file": abs_path,
@@ -409,23 +409,23 @@ class FileSearcher:
             logger.exception(f"搜索文件失败 {file_path}")
         return results
 
-    def _search_directory(self, dir_path: str, abort_check=None) -> List[dict]:
+    def _searchDirectory(self, dir_path: str, abort_check=None) -> List[dict]:
         results = []
         for root_dir, dirs, files in os.walk(dir_path):
             if abort_check and abort_check():
                 break
             for file in files:
-                if self._is_text_file(file):
+                if self._isTextFile(file):
                     file_path = os.path.join(root_dir, file)
-                    results.extend(self._search_file(file_path))
+                    results.extend(self._searchFile(file_path))
         return results
 
     @staticmethod
-    def _is_text_file(filename: str) -> bool:
+    def _isTextFile(filename: str) -> bool:
         ext = os.path.splitext(filename)[1].lower()
         return ext not in BINARY_EXTENSIONS or filename in {'Makefile', 'Dockerfile', 'Vagrantfile'}
 
-    def _find_matches(self, line: str) -> List[str]:
+    def _findMatches(self, line: str) -> List[str]:
         matches = []
         search_text = self.search_text
         if self.regex:
@@ -525,7 +525,7 @@ class BatchRenameDialog(QDialog):
         self.rename_items: list[RenameItem] = []
         self._preview_timer = QTimer()
         self._preview_timer.setSingleShot(True)
-        self._preview_timer.timeout.connect(self._do_preview)
+        self._preview_timer.timeout.connect(self._doPreview)
         self.initUI()
         self.setMinimumSize(700, 500)
 
@@ -702,7 +702,7 @@ class BatchRenameDialog(QDialog):
     def applyPreview(self):
         self._preview_timer.start(150)
 
-    def _do_preview(self):
+    def _doPreview(self):
         if not self.rename_items:
             self.updateList()
             return
@@ -811,14 +811,14 @@ class DuplicateFinder(QThread):
             self.error.emit(str(e))
 
     def findDuplicates(self, files: List[str], folder_path: str = None) -> Dict[str, List[dict]]:
-        cached_files = self._load_cache()
+        cached_files = self._loadCache()
         new_or_modified = []
         current_files = {}
 
         if folder_path:
-            current_files = self._build_file_tree(folder_path)
-            new_or_modified = self._scan_new_or_modified(current_files, cached_files)
-            self._remove_deleted(current_files, cached_files)
+            current_files = self._buildFileTree(folder_path)
+            new_or_modified = self._scanChanges(current_files, cached_files)
+            self._removeDeleted(current_files, cached_files)
 
         md5_dict: Dict[str, List[dict]] = {}
         file_hash_map = {}
@@ -851,10 +851,10 @@ class DuplicateFinder(QThread):
 
         duplicates = {md5: fl for md5, fl in md5_dict.items() if len(fl) > 1}
         if folder_path and current_files:
-            self._save_cache(current_files)
+            self._saveCache(current_files)
         return duplicates
 
-    def _load_cache(self) -> Dict:
+    def _loadCache(self) -> Dict:
         if not cache_file.exists():
             return {}
         try:
@@ -862,11 +862,11 @@ class DuplicateFinder(QThread):
         except Exception:
             return {}
 
-    def _save_cache(self, files_dict: Dict):
+    def _saveCache(self, files_dict: Dict):
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(files_dict, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def _build_file_tree(self, folder_path: str) -> Dict:
+    def _buildFileTree(self, folder_path: str) -> Dict:
         files = {}
         for root_dir, dirs, filenames in os.walk(folder_path):
             for fn in filenames:
@@ -878,7 +878,7 @@ class DuplicateFinder(QThread):
                     continue
         return files
 
-    def _scan_new_or_modified(self, current: Dict, cached: Dict) -> List[str]:
+    def _scanChanges(self, current: Dict, cached: Dict) -> List[str]:
         result = []
         for fp, info in current.items():
             if fp not in cached:
@@ -888,7 +888,7 @@ class DuplicateFinder(QThread):
                 result.append(fp)
         return result
 
-    def _remove_deleted(self, current: Dict, cached: Dict):
+    def _removeDeleted(self, current: Dict, cached: Dict):
         deleted = set(cached.keys()) - set(current.keys())
         for p in deleted:
             del cached[p]
@@ -921,12 +921,12 @@ class DuplicatePanelManager:
         self.tree.setColumnWidth(3, 60)
         self.tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._show_tree_context_menu)
-        self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.tree.customContextMenuRequested.connect(self._treeContextMenu)
+        self.tree.itemDoubleClicked.connect(self._onItemDoubleClicked)
         layout.addWidget(self.tree)
         return self.panel
 
-    def _show_tree_context_menu(self, pos):
+    def _treeContextMenu(self, pos):
         menu = QMenu(self.parent)
         close_action = QAction("关闭重复文件视图", self.parent)
         close_action.triggered.connect(self.close)
@@ -943,11 +943,11 @@ class DuplicatePanelManager:
                         show_in.triggered.connect(lambda checked=False, p=fp: showFile(p, self.parent))
                         menu.addAction(show_in)
                         to_trash = QAction("移动到回收站", self.parent)
-                        to_trash.triggered.connect(lambda checked=False, p=fp: self._move_to_trash(p))
+                        to_trash.triggered.connect(lambda checked=False, p=fp: self._moveToTrash(p))
                         menu.addAction(to_trash)
         menu.exec_(self.tree.mapToGlobal(pos))
 
-    def _move_to_trash(self, file_path: str):
+    def _moveToTrash(self, file_path: str):
         from src.system import moveTrash
         if not moveTrash(file_path):
             messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
@@ -957,7 +957,7 @@ class DuplicatePanelManager:
                 del self._current_duplicates[md5]
         self.showDuplicates(self._current_duplicates)
 
-    def _on_item_double_clicked(self, item, column):
+    def _onItemDoubleClicked(self, item, column):
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if data and data.get("type") == "file":
             fp = data.get("path")
@@ -1012,7 +1012,7 @@ class DuplicatePanelManager:
                 })
                 del_btn = QPushButton("删除")
                 del_btn.setFixedSize(50, 22)
-                del_btn.clicked.connect(lambda checked=False, p=fi["path"]: self._move_to_trash(p))
+                del_btn.clicked.connect(lambda checked=False, p=fi["path"]: self._moveToTrash(p))
                 self.tree.setItemWidget(file_item, 3, del_btn)
             group_item.setExpanded(True)
         self.showPanelView()
@@ -1084,9 +1084,9 @@ class ToolBoxSettings(QDialog):
 
         btn_h = QHBoxLayout()
         add_btn = QPushButton("添加路径")
-        add_btn.clicked.connect(self._add_search_path)
+        add_btn.clicked.connect(self._addSearchPath)
         rm_btn = QPushButton("移除选中")
-        rm_btn.clicked.connect(self._remove_search_path)
+        rm_btn.clicked.connect(self._removeSearchPath)
         btn_h.addWidget(add_btn)
         btn_h.addWidget(rm_btn)
         btn_h.addStretch()
@@ -1122,16 +1122,16 @@ class ToolBoxSettings(QDialog):
 
         self._qt_list = QListWidget()
         self._qt_list.setMaximumHeight(120)
-        self._qt_list.itemDoubleClicked.connect(self._qt_edit)
+        self._qt_list.itemDoubleClicked.connect(self._qtEdit)
         layout.addRow("快速文本", self._qt_list)
 
         qt_btn_h = QHBoxLayout()
         qt_add = QPushButton("添加")
-        qt_add.clicked.connect(self._qt_add)
+        qt_add.clicked.connect(self._qtAdd)
         qt_edit = QPushButton("编辑")
-        qt_edit.clicked.connect(self._qt_edit)
+        qt_edit.clicked.connect(self._qtEdit)
         qt_del = QPushButton("删除")
-        qt_del.clicked.connect(self._qt_del)
+        qt_del.clicked.connect(self._qtDel)
         qt_btn_h.addWidget(qt_add)
         qt_btn_h.addWidget(qt_edit)
         qt_btn_h.addWidget(qt_del)
@@ -1153,17 +1153,17 @@ class ToolBoxSettings(QDialog):
         btn_row.addWidget(cancel_btn)
         layout.addRow(btn_row)
 
-    def _add_search_path(self):
+    def _addSearchPath(self):
         path = getFilePath(self, "选择搜索路径", mode="dir")
         if path:
             self.search_paths_list.addItem(path)
 
-    def _remove_search_path(self):
+    def _removeSearchPath(self):
         row = self.search_paths_list.currentRow()
         if row >= 0:
             self.search_paths_list.takeItem(row)
 
-    def _qt_add(self):
+    def _qtAdd(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("添加快速文本")
         dialog.setMinimumWidth(400)
@@ -1191,7 +1191,7 @@ class ToolBoxSettings(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._qt_list.addItem(item)
 
-    def _qt_edit(self):
+    def _qtEdit(self):
         current = self._qt_list.currentItem()
         if not current:
             return
@@ -1221,7 +1221,7 @@ class ToolBoxSettings(QDialog):
             current.setText(entry["note"] or entry["text"])
             current.setData(Qt.ItemDataRole.UserRole, entry)
 
-    def _qt_del(self):
+    def _qtDel(self):
         current = self._qt_list.currentItem()
         if current:
             row = self._qt_list.row(current)
@@ -1253,7 +1253,7 @@ class _AutoCopyManager:
 
     def initMonitor(self, parent):
         self._monitor = ClipboardMonitor()
-        self._monitor._callbacks.add(self._on_clipboard_change)
+        self._monitor._callbacks.add(self._onClipboardChange)
     
     def setEnabled(self, enabled: bool):
         self.enabled = enabled
@@ -1264,7 +1264,7 @@ class _AutoCopyManager:
             self._monitor.stop()
             logger.info("自动复制已停止")
 
-    def _on_clipboard_change(self, text: str):
+    def _onClipboardChange(self, text: str):
         if self.enabled and text:
             self.copyToFile(text)
 
@@ -1302,7 +1302,7 @@ class _AutoSearchManager:
 
     def initMonitor(self, parent):
         self._monitor = ClipboardMonitor()
-        self._monitor._callbacks.add(self._on_clipboard_change)
+        self._monitor._callbacks.add(self._onClipboardChange)
     
     def setEnabled(self, enabled: bool):
         self.enabled = enabled
@@ -1313,7 +1313,7 @@ class _AutoSearchManager:
             self._monitor.stop()
             logger.info("自动搜索已停止")
 
-    def _on_clipboard_change(self, text: str):
+    def _onClipboardChange(self, text: str):
         if self.enabled and text and self.search_paths:
             self._current_search_text = text
             if self._search_thread and self._search_thread.isRunning():
@@ -1323,18 +1323,18 @@ class _AutoSearchManager:
                 text, self.search_paths, self.case_sensitive, self.regex
             )
             self._search_thread.finished.connect(
-                lambda results, st=text: self._on_search_finished(results, st)
+                lambda results, st=text: self._onSearchFinished(results, st)
             )
             self._search_thread.error.connect(
                 lambda err: logger.error(f"搜索失败: {err}")
             )
             self._search_thread.start()
 
-    def _on_search_finished(self, results: List[dict], search_text: str):
+    def _onSearchFinished(self, results: List[dict], search_text: str):
         if results and search_text == self._current_search_text:
-            self._show_popup(results, search_text)
+            self._showPopup(results, search_text)
 
-    def _show_popup(self, results: List[dict], search_text: str):
+    def _showPopup(self, results: List[dict], search_text: str):
         if self._popup:
             self._popup.close()
             self._popup = None
@@ -1366,7 +1366,7 @@ class _AutoSearchManager:
         def onDoubleClick(item):
             r = item.data(Qt.UserRole)
             if r:
-                self._open_file(r['file'], r['line'])
+                self._openFile(r['file'], r['line'])
                 self._popup.close()
 
         result_list.itemDoubleClicked.connect(onDoubleClick)
@@ -1384,7 +1384,7 @@ class _AutoSearchManager:
         self._popup_timer.setSingleShot(True)
         self._popup_timer.start(self.close_delay * 1000)
 
-    def _open_file(self, file_path: str, line: int):
+    def _openFile(self, file_path: str, line: int):
         if not Path(file_path).exists():
             messageBox(self._popup, tr("错误"), tr("文件不存在") + file_path, 1)
             return
@@ -1392,10 +1392,10 @@ class _AutoSearchManager:
         open_method = getattr(mw, 'openFilePath', None)
         if open_method:
             open_method(file_path)
-            QTimer.singleShot(100, lambda: self._goto_line(mw, line))
+            QTimer.singleShot(100, lambda: self._gotoLine(mw, line))
 
-    def _goto_line(self, mw, line: int):
-        get_ed = getattr(mw, 'getCurrentEditor', None)
+    def _gotoLine(self, mw, line: int):
+        get_ed = getattr(mw, 'getEditor', None)
         if not get_ed:
             return
         editor = get_ed()
@@ -1412,7 +1412,7 @@ class _AutoClickManager:
         self._tm = TimerManager()
         self.parent = parent
         self._timer = self._tm.createTimer(parent)
-        self._timer.timeout.connect(self._do_click)
+        self._timer.timeout.connect(self._doClick)
         self.enabled = False
         self.interval = 3
         self._paused = False
@@ -1425,15 +1425,15 @@ class _AutoClickManager:
         self.enabled = enabled
         if enabled:
             self._paused = False
-            self._start_listener()
+            self._startListener()
             self._active_interval = self.interval
             self._timer.start(int(self.interval * 1000))
         else:
             self._paused = False
-            self._stop_listener()
+            self._stopListener()
             self._timer.stop()
 
-    def _do_click(self):
+    def _doClick(self):
         if self.interval != self._active_interval:
             self._active_interval = self.interval
             self._timer.stop()
@@ -1444,8 +1444,8 @@ class _AutoClickManager:
             except Exception:
                 logger.exception("模拟鼠标点击失败")
 
-    def _start_listener(self):
-        self._stop_listener()
+    def _startListener(self):
+        self._stopListener()
 
         def onPress(key):
             try:
@@ -1463,7 +1463,7 @@ class _AutoClickManager:
         self._keyboard_listener.daemon = True
         self._keyboard_listener.start()
 
-    def _stop_listener(self):
+    def _stopListener(self):
         if self._keyboard_listener:
             self._keyboard_listener.stop()
             self._keyboard_listener = None
@@ -1513,9 +1513,9 @@ class QuickTextDialog(QDialog):
         self._setupUI()
         self._populate()
         self.search_edit.setFocus()
-        QTimer.singleShot(0, self._do_center)
+        QTimer.singleShot(0, self._doCenter)
 
-    def _do_center(self):
+    def _doCenter(self):
         parent = self.parent()
         if parent:
             center = parent.geometry().center()
@@ -1529,14 +1529,14 @@ class QuickTextDialog(QDialog):
     def eventFilter(self, obj, event):
         if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Up:
-                self._move_selection(-1)
+                self._moveSelection(-1)
                 return True
             elif event.key() == Qt.Key.Key_Down:
-                self._move_selection(1)
+                self._moveSelection(1)
                 return True
         return super().eventFilter(obj, event)
 
-    def _move_selection(self, direction):
+    def _moveSelection(self, direction):
         current = self.list_widget.currentRow()
         count = self.list_widget.count()
         if count == 0:
@@ -1555,7 +1555,7 @@ class QuickTextDialog(QDialog):
         self.search_edit.setFixedHeight(42)
         self.search_edit.setStyleSheet("border-radius: 0;")
         self.search_edit.textChanged.connect(self._filter)
-        self.search_edit.returnPressed.connect(self._accept_current)
+        self.search_edit.returnPressed.connect(self._acceptCurrent)
         main_layout.addWidget(self.search_edit)
 
         sep = QFrame()
@@ -1566,8 +1566,8 @@ class QuickTextDialog(QDialog):
         self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
         self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list_widget.setItemDelegate(QuickTextDelegate(self.list_widget))
-        self.list_widget.itemClicked.connect(self._on_item_clicked)
-        self.list_widget.itemDoubleClicked.connect(self._on_item_clicked)
+        self.list_widget.itemClicked.connect(self._onItemClicked)
+        self.list_widget.itemDoubleClicked.connect(self._onItemClicked)
         main_layout.addWidget(self.list_widget, 1)
 
         self.search_edit.installEventFilter(self)
@@ -1594,12 +1594,12 @@ class QuickTextDialog(QDialog):
                 matched.append(entry)
         self._populate(matched)
 
-    def _accept_current(self):
+    def _acceptCurrent(self):
         current = self.list_widget.currentItem()
         if current:
-            self._on_item_clicked(current)
+            self._onItemClicked(current)
 
-    def _on_item_clicked(self, item):
+    def _onItemClicked(self, item):
         entry = item.data(Qt.ItemDataRole.UserRole)
         if isinstance(entry, dict):
             text = entry.get("text", "")
@@ -1614,7 +1614,7 @@ class QuickTextDialog(QDialog):
             self.reject()
         elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if self.focusWidget() is not self.search_edit:
-                self._accept_current()
+                self._acceptCurrent()
         else:
             super().keyPressEvent(event)
 

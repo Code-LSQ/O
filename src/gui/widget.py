@@ -26,12 +26,12 @@ class EditorTextEdit(QTextEdit):
         self._cached_block_count = 0
 
         doc = self.document()
-        doc.blockCountChanged.connect(self._onBlockCountChanged)
+        doc.blockCountChanged.connect(self._onBlockChange)
         doc.contentsChanged.connect(self._onContentsChanged)
-        self.textChanged.connect(self._updateLineNo)
+        self.textChanged.connect(self._updateLineNum)
         self.cursorPositionChanged.connect(self._onCursorChanged)
 
-        self._updateLineNoWidth(0)
+        self._updateLineNumWidth(0)
         self.highlightLine()
         
         self._zoom_factor = 1.0
@@ -53,23 +53,23 @@ class EditorTextEdit(QTextEdit):
     def setZoomCallback(self, callback):
         self._zoom_callback = callback
     
-    def _onBlockCountChanged(self, new_count: int):
+    def _onBlockChange(self, new_count: int):
         """块数量变化时更新缓存"""
         if new_count != self._cached_block_count:
             self._cached_block_count = new_count
-            self._updateLineNoWidth(0)
+            self._updateLineNumWidth(0)
             self.line_number_area.update()
 
     def _onContentsChanged(self):
         """内容改变时更新行号区域"""
         if self.line_numbers_visible:
-            self._updateLineNoWidth(0)
+            self._updateLineNumWidth(0)
             self.line_number_area.update()
 
-    def _updateLineNo(self):
+    def _updateLineNum(self):
         """文本改变时更新行号区域"""
         if self.line_numbers_visible:
-            self._updateLineNoWidth(0)
+            self._updateLineNumWidth(0)
 
     def wheelEvent(self, event):
         modifiers = event.modifiers()
@@ -134,7 +134,7 @@ class EditorTextEdit(QTextEdit):
         new_size = max(1, new_size)
         font.setPointSize(new_size)
         self.setFont(font)
-        self._updateLineNoWidth(0)
+        self._updateLineNumWidth(0)
 
     def setHtml(self, text: str):
         """重写setHtml以支持markdown渲染"""
@@ -665,12 +665,12 @@ class EditorTextEdit(QTextEdit):
         """设置行号是否可见"""
         self.line_numbers_visible = visible
         self.line_number_area.setVisible(visible)
-        self._updateLineNoWidth(0)
+        self._updateLineNumWidth(0)
 
     def isLineNumbersVisible(self) -> bool:
         return self.line_numbers_visible
 
-    def _lineNoWidth(self):
+    def _lineNumWidth(self):
         """计算行号区域宽度（带缓存）"""
         if not self.line_numbers_visible:
             return 0
@@ -686,11 +686,11 @@ class EditorTextEdit(QTextEdit):
             self._cached_block_count = current_block_count
         return self._cached_line_number_width
 
-    def _updateLineNoWidth(self, _):
+    def _updateLineNumWidth(self, _):
         """更新行号区域宽度"""
-        self.setViewportMargins(self._lineNoWidth(), 0, 0, 0)
+        self.setViewportMargins(self._lineNumWidth(), 0, 0, 0)
 
-    def _updateLineNoArea(self, rect, dy):
+    def _updateLineNumArea(self, rect, dy):
         """更新行号区域"""
         if not self.line_numbers_visible:
             return
@@ -699,7 +699,7 @@ class EditorTextEdit(QTextEdit):
         else:
             self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
         if rect.contains(self.viewport().rect()):
-            self._updateLineNoWidth(0)
+            self._updateLineNumWidth(0)
 
     def scrollContentsBy(self, dx, dy):
         """滚动内容时同步行号区域"""
@@ -711,7 +711,7 @@ class EditorTextEdit(QTextEdit):
         """窗口大小改变事件"""
         super().resizeEvent(event)
         cr = self.contentsRect()
-        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self._lineNoWidth(), cr.height()))
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self._lineNumWidth(), cr.height()))
 
     def highlightLine(self):
         """高亮当前行"""

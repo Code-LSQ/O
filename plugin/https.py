@@ -113,10 +113,10 @@ class HTTPTool:
 
         self._server_shutdown.clear()
         self.running = True
-        self.server_thread = threading.Thread(target=self._run_server, daemon=True)
+        self.server_thread = threading.Thread(target=self._runServer, daemon=True)
         self.server_thread.start()
 
-    def _run_server(self):
+    def _runServer(self):
         """服务器线程入口：创建 ThreadedHTTPServer 并启动"""
         shared_folder = self.shared_folder
         shared_folder = os.path.abspath(shared_folder)
@@ -156,17 +156,17 @@ class HTTPTool:
             def do_GET(self):
                 path = parse.unquote(self.path)
                 if path == "/":
-                    self._send_custom_index()
+                    self._sendCustomIndex()
                 else:
                     try:
-                        self._serve_file_download()
+                        self._serveFileDownload()
                     except ConnectionResetError:
                         pass
                     except Exception:
                         logger.exception(f"GET请求失败 {path}")
                         self.send_error(500)
 
-            def _serve_file_download(self):
+            def _serveFileDownload(self):
                 translated_path = self.translate_path(self.path)
                 if os.path.isdir(translated_path):
                     super().do_GET()
@@ -198,17 +198,17 @@ class HTTPTool:
                     try:
                         content_length = int(self.headers.get('Content-Length', 0))
                         body = self.rfile.read(content_length).decode("utf-8")
-                        self._handle_send_data(body)
+                        self._handleSendData(body)
                     except Exception:
                         logger.exception("处理send_data请求失败")
                         self.send_error(500)
                 elif self.path == "/upload":
-                    self._handle_upload()
+                    self._handleUpload()
                 else:
                     self.send_error(404)
 
             @staticmethod
-            def _parse_boundary(content_type: str) -> str:
+            def _parseBoundary(content_type: str) -> str:
                 """从 Content-Type 中提取 boundary"""
                 if 'boundary=' not in content_type:
                     return ""
@@ -218,7 +218,7 @@ class HTTPTool:
                 return boundary
 
             @staticmethod
-            def _parse_multipart_file(part: bytes, boundary: str) -> dict:
+            def _parseMultipartFile(part: bytes, boundary: str) -> dict:
                 """解析单个 multipart part，提取 filename + file_data"""
                 if b'Content-Disposition: form-data' not in part or b'filename="' not in part:
                     return None
@@ -243,7 +243,7 @@ class HTTPTool:
                 return {"filename": filename, "data": file_data}
 
             @staticmethod
-            def _save_uploaded_file(filename: str, file_data: bytes, target_folder: str) -> str:
+            def _saveUploadedFile(filename: str, file_data: bytes, target_folder: str) -> str:
                 """保存上传文件，返回文件名或 None"""
                 safe_name = os.path.normpath(os.path.basename(filename)).replace('\\', '/')
                 if safe_name in ('.', '..', ''):
@@ -261,7 +261,7 @@ class HTTPTool:
                     return None
 
             @staticmethod
-            def _append_received_data(http_tool, data_lock, key: str, val: str):
+            def _appendReceivedData(http_tool, data_lock, key: str, val: str):
                 if key != "data":
                     return
                 data = parse.unquote_plus(val)
@@ -274,10 +274,10 @@ class HTTPTool:
                     if len(http_tool.received_data) > MAX_RECV_DATA:
                         http_tool.received_data.pop(0)
 
-            def _handle_upload(self):
+            def _handleUpload(self):
                 content_type = self.headers.get('Content-Type', '')
                 if content_type == 'application/octet-stream':
-                    self._handle_upload_stream()
+                    self._handleUploadStream()
                     return
 
                 if 'multipart/form-data' not in content_type:
@@ -286,7 +286,7 @@ class HTTPTool:
 
                 content_length = int(self.headers.get('Content-Length', 0))
                 target_folder = upload_folder if upload_folder else self.directory
-                boundary = self._parse_boundary(content_type)
+                boundary = self._parseBoundary(content_type)
                 if not boundary:
                     self.send_error(400)
                     return
@@ -300,10 +300,10 @@ class HTTPTool:
 
                 uploaded = []
                 for part in data.split(('--' + boundary).encode()):
-                    parsed = self._parse_multipart_file(part, boundary)
+                    parsed = self._parseMultipartFile(part, boundary)
                     if parsed is None:
                         continue
-                    saved = self._save_uploaded_file(parsed["filename"], parsed["data"], target_folder)
+                    saved = self._saveUploadedFile(parsed["filename"], parsed["data"], target_folder)
                     if saved:
                         uploaded.append(saved)
 
@@ -331,7 +331,7 @@ class HTTPTool:
                 logger.info("form 连接关闭")
                 self.wfile.flush()
 
-            def _handle_upload_stream(self):
+            def _handleUploadStream(self):
                 target_folder = upload_folder if upload_folder else self.directory
 
                 content_length = self.headers.get('Content-Length')
@@ -402,7 +402,7 @@ class HTTPTool:
                 logger.info("stream 连接关闭")
                 self.wfile.flush()
 
-            def _send_custom_index(self):
+            def _sendCustomIndex(self):
                 items = []
                 try:
                     for item in os.listdir(self.directory):
@@ -585,12 +585,12 @@ class HTTPTool:
                 self.end_headers()
                 self.wfile.write(html.encode("utf-8"))
 
-            def _handle_send_data(self, body):
+            def _handleSendData(self, body):
                 try:
                     for pair in body.split('&'):
                         if '=' in pair:
                             key, val = pair.split('=', 1)
-                            self._append_received_data(http_tool, data_lock, key, val)
+                            self._appendReceivedData(http_tool, data_lock, key, val)
                 except Exception:
                     logger.exception("解析发送数据失败")
 
@@ -637,16 +637,16 @@ class HTTPDialog(QDialog):
         self.setWindowTitle("局域网通信")
         self.setMinimumSize(600, 500)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
-        self._init_ui()
-        self._update_status()
+        self._initUI()
+        self._updateStatus()
         if not self.tool.running:
             self.tool.startServer()
-            self._update_status()
+            self._updateStatus()
 
     def showEvent(self, event):
         super().showEvent(event)
 
-    def _init_ui(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -710,7 +710,7 @@ class HTTPDialog(QDialog):
         self.send_edit.setStyleSheet("background: #eeeeee")
 
         self.send_btn = QPushButton("发送")
-        self.send_btn.clicked.connect(self._send_data)
+        self.send_btn.clicked.connect(self._sendData)
         send_header_layout.addWidget(self.send_btn)
 
         clear_send_btn = QPushButton("清空")
@@ -730,14 +730,14 @@ class HTTPDialog(QDialog):
         self.recv_edit.setReadOnly(True)
 
         clear_recv_btn = QPushButton("清空")
-        clear_recv_btn.clicked.connect(self._clear_recv)
+        clear_recv_btn.clicked.connect(self._clearRecv)
         recv_header_layout.addWidget(clear_recv_btn)
 
         content_layout.addLayout(recv_header_layout)
         content_layout.addWidget(self.recv_edit)
 
         self.recv_timer = QTimer()
-        self.recv_timer.timeout.connect(self._update_recv_data)
+        self.recv_timer.timeout.connect(self._updateRecvData)
         self.recv_timer.start(1000)
 
         layout.addWidget(content)
@@ -747,7 +747,7 @@ class HTTPDialog(QDialog):
         bottom_layout = QHBoxLayout(bottom_bar)
 
         self.start_btn = QPushButton("启动服务")
-        self.start_btn.clicked.connect(self._toggle_server)
+        self.start_btn.clicked.connect(self._toggleServer)
         bottom_layout.addWidget(self.start_btn)
 
         self.status_label = QLabel("未启动")
@@ -762,7 +762,7 @@ class HTTPDialog(QDialog):
 
         layout.addWidget(bottom_bar)
 
-    def _send_data(self):
+    def _sendData(self):
         """向共享数据缓冲写入文本"""
         data = self.send_edit.toPlainText().strip()
         if not data:
@@ -775,13 +775,13 @@ class HTTPDialog(QDialog):
         self.send_edit.clear()
         logger.info("数据已发送")
 
-    def _clear_recv(self):
+    def _clearRecv(self):
         with self.tool._data_lock:
             if hasattr(self.tool, 'received_data'):
                 self.tool.received_data.clear()
         self.recv_edit.clear()
 
-    def _update_recv_data(self):
+    def _updateRecvData(self):
         """定时刷新接收数据显示"""
         with self.tool._data_lock:
             new_data = self.tool.received_data[-10:] if hasattr(self.tool, 'received_data') else []
@@ -789,18 +789,18 @@ class HTTPDialog(QDialog):
             if new_text != self.recv_edit.toPlainText():
                 self.recv_edit.setPlainText(new_text)
 
-    def _toggle_server(self):
+    def _toggleServer(self):
         """切换服务器启动 / 停止状态"""
         if self.tool.running:
             self.tool.stopServer()
             self.start_btn.setText("启动服务")
             self.status_label.setText("已停止")
         else:
-            self._save_to_settings(self.tool.settings)
+            self._saveToSettings(self.tool.settings)
             self.tool.startServer()
-            self._update_status()
+            self._updateStatus()
 
-    def _save_to_settings(self, settings: dict):
+    def _saveToSettings(self, settings: dict):
         try:
             port = int(self.port_edit.text())
             if 1 <= port <= 65535:
@@ -811,14 +811,14 @@ class HTTPDialog(QDialog):
         settings["upload_folder"] = self.upload_folder_edit.text()
         settings["background_run"] = self.background_check.isChecked()
 
-    def _update_status(self):
+    def _updateStatus(self):
         if self.tool.running:
             self.start_btn.setText("停止服务")
             port = self.tool.settings.get("port", 8000)
             self.status_label.setText(f"运行中: {self.tool.local_ip}:{port}")
 
     def closeEvent(self, event):
-        self._save_to_settings(self.tool.settings)
+        self._saveToSettings(self.tool.settings)
         if self.tool.plugin:
             self.tool.plugin.settings.update(self.tool.settings)
             self.tool.plugin.saveConfig()

@@ -263,7 +263,8 @@ class FolderPanelManager:
         from src.system import moveTrash as _moveTrash
         if _moveTrash(item_path):
             self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
-            self.refreshAfterDelete(item_path)
+            if self.panel is not None and self.folder_path:
+                self.load(self.folder_path)
         else:
             messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
     
@@ -421,7 +422,4 @@ class FolderPanelManager:
     def isVisible(self) -> bool:
         return self.panel is not None
     
-    def refreshAfterDelete(self, deleted_path: str):
-        """删除文件后刷新"""
-        if self.panel is not None and self.folder_path:
-            self.load(self.folder_path)
+

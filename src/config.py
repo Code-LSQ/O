@@ -120,7 +120,7 @@ class ConfigManager(Singleton):
             except json.JSONDecodeError:
                 logger.exception("配置文件格式错误")
                 self._backupReset()
-                logger.info(f"配置文件已备份，创建默认配置")
+                logger.info("配置文件已备份，创建默认配置")
             except Exception:
                 logger.exception("配置文件加载失败")
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
@@ -195,9 +195,6 @@ class ConfigManager(Singleton):
             recent.remove(file_path)
         recent.insert(0, file_path)
         self.set("Edit.recent", recent[:10])
-
-    def getFavorites(self) -> list:
-        return self.get("Edit.favorites", [])
 
     def addFavorite(self, file_path: str):
         file_path = os.path.normpath(file_path)
@@ -685,7 +682,7 @@ class SettingsDialog(QDialog):
                 self._shortcut_editor = editor
                 self._shortcut_key_filter = KeyCaptureFilter(self)
                 self._shortcut_key_filter.key_captured.connect(lambda seq: self._onKeyCapture(seq, row))
-                self._shortcut_key_filter.capture_cancelled.connect(lambda: self._onCancelCapture(row))
+                self._shortcut_key_filter.capture_cancelled.connect(lambda: self._closeEditor(row))
                 editor.installEventFilter(self._shortcut_key_filter)
                 editor.installEventFilter(self)
                 editor.setFocus()
@@ -698,10 +695,6 @@ class SettingsDialog(QDialog):
         if hasattr(self, '_shortcut_editor') and self._shortcut_editor:
             self._shortcut_editor.setText(seq)
             self._shortcut_editor.selectAll()
-
-    def _onCancelCapture(self, row):
-        """取消快捷键捕获"""
-        self._closeEditor(row)
 
     def _closeEditor(self, row):
         """清理快捷键编辑器"""

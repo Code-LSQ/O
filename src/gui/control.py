@@ -244,7 +244,7 @@ class MenuControl:
         toolbar.setFloatable(False)
         toolbar.setFixedHeight(32)
         toolbar.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        toolbar.mouseDoubleClickEvent = self.main._on_toolbar_double_click
+        toolbar.mouseDoubleClickEvent = self.main._onToolbarDoubleClick
         return toolbar
 
     def createWindowButton(self, toolbar: QToolBar):
@@ -267,7 +267,7 @@ class MenuControl:
         return btn
 
     def _syncViewMenu(self):
-        editor = self.main.getCurrentEditor()
+        editor = self.main.getEditor()
         current = self._detectMode(editor)
         supported = self._getModes(editor)
         for mode, action in self._view_actions.items():
@@ -319,27 +319,27 @@ class MenuControl:
     def buildFileMenu(self) -> tuple[QToolButton, QMenu]:
         btn, menu = self.createMenuButton(tr("文件") + "(&F)")
 
-        self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", self.main.newFile, QKeySequence.StandardKey.New)
-        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", self.main.chooseFile, QKeySequence.StandardKey.Open)
+        self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", lambda: (self.main.addTab(), self.main.statusBar().showMessage(tr("新建文件"), 3000)), QKeySequence.StandardKey.New)
+        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", lambda: self.main._file_controller.openFile(), QKeySequence.StandardKey.Open)
         self.main.action_open_folder = self._addAction(menu, tr("打开文件夹") + "(&D)", self.main.openFolderDialog)
         self.main.action_folder_view = self._addAction(menu, tr("文件夹视图"), self.main.toggleFolderPanel)
 
         menu.addSeparator()
 
         self.main.action_save = self._addAction(menu, tr("保存") + "(&S)", self.main.saveFile, QKeySequence.StandardKey.Save)
-        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", self.main.saveAs, QKeySequence.StandardKey.SaveAs)
+        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", lambda: self.main._file_controller.saveFileAs(), QKeySequence.StandardKey.SaveAs)
 
         menu.addSeparator()
 
         favorites_menu = QMenu(tr("收藏夹"), self.main)
         menu.addMenu(favorites_menu)
         self.main.favorites_menu = favorites_menu
-        self.main._update_favorites_menu()
+        self.main._updateFavoritesMenu()
 
         recent_menu = QMenu(tr("最近打开"), self.main)
         menu.addMenu(recent_menu)
         self.main.recent_menu = recent_menu
-        self.main._update_recent_menu()
+        self.main._updateRecentMenu()
 
         menu.addSeparator()
 
@@ -375,9 +375,9 @@ class MenuControl:
                 action.triggered.connect(callback)
                 encoding_menu.addAction(action)
 
-        addEncItems(tr("以 {} 编码打开"), self.main._on_encoding_open_triggered)
+        addEncItems(tr("以 {} 编码打开"), self.main._encodingOpen)
         encoding_menu.addSeparator()
-        addEncItems(tr("保存为 {} 编码"), self.main._on_encoding_save_triggered)
+        addEncItems(tr("保存为 {} 编码"), self.main._encodingSave)
 
         text_process_menu = QMenu(tr("文本处理"), self.main)
         menu.addMenu(text_process_menu)
@@ -439,7 +439,7 @@ def managePlugins(parent=None):
         plugin = pm.plugins.get(name)
         if plugin:
             return f"{plugin.description} ({status})"
-        cls = pm.getPluginClass(name)
+        cls = pm.pluginClass(name)
         display = getattr(cls, "description", name) if cls else name
         return f"{display} ({status})"
 

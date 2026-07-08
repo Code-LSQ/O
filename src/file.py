@@ -390,7 +390,7 @@ class FileControl:
         from src.gui.tab import EditorTab
 
         if not self.main.config.get("Edit.multi_tab", False):
-            editor = self.main.getCurrentEditor()
+            editor = self.main.getEditor()
             self._doOpenFile(file_path)
             return
 
@@ -459,7 +459,7 @@ class FileControl:
     def _tryPlugin(self, file_path: str) -> bool:
         """尝试使用插件处理文件"""
         plugin_manager = getPluginManager(self.main)
-        for plugin_name, plugin in plugin_manager.getAllPlugin().items():
+        for plugin_name, plugin in plugin_manager.plugins.copy().items():
             if hasattr(plugin, 'is_supported') and callable(plugin.is_supported) and plugin.is_supported(file_path):
                 logger.info(f"使用插件 {plugin_name} 打开文件: {file_path}")
                 if self._handlePlugin(plugin, file_path):
@@ -508,7 +508,7 @@ class FileControl:
 
     def saveFile(self) -> bool:
         """保存当前文件（支持大文件翻页合并保存）"""
-        editor = self.main.getCurrentEditor()
+        editor = self.main.getEditor()
         if not editor:
             return False
 
@@ -548,7 +548,7 @@ class FileControl:
 
     def saveFileAs(self) -> bool:
         """另存为"""
-        editor = self.main.getCurrentEditor()
+        editor = self.main.getEditor()
         if not editor:
             return False
 
@@ -562,7 +562,7 @@ class FileControl:
 
     def openWithEnc(self, encoding: str):
         """以指定编码打开当前文件"""
-        editor = self.main.getCurrentEditor()
+        editor = self.main.getEditor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return
@@ -591,7 +591,7 @@ class FileControl:
 
     def saveWithEnc(self, encoding: str):
         """以指定编码保存当前文件"""
-        editor = self.main.getCurrentEditor()
+        editor = self.main.getEditor()
         if not editor:
             self.main.statusBar().showMessage("没有打开的文件", 2000)
             return

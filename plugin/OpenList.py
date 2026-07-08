@@ -22,6 +22,8 @@ from src.plugin import PluginBase
 from src.file import fileTree, filterFiles
 from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox
 
+PluginLib = ["queue"]
+
 """
 有时候迅雷或什么存储失效会导致空指针然后程序会直接启动失败，需要在 cmd 中手动列出存储和禁用
 
@@ -490,9 +492,9 @@ class FileConfirmDialog(QDialog):
         self.mode = mode
         self.setWindowTitle("确认同步操作")
         self.setMinimumSize(600, 500)
-        self._initUi()
+        self._initUI()
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         # 统计信息
@@ -570,9 +572,9 @@ class SyncResultDialog(QDialog):
         self.result = result
         self.setWindowTitle("同步结果")
         self.setMinimumSize(600, 500)
-        self._initUi()
+        self._initUI()
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         status = self.result.get("status", "unknown")
@@ -828,7 +830,7 @@ class SyncWorker(QThread):
                     self.log(f"  旧文件已备份为: {backup_name}")
                 else:
                     self.result.rename_failed += 1
-                    self.log(f"  旧文件备份失败（可能已被删除），继续上传")
+                    self.log("  旧文件备份失败（可能已被删除），继续上传")
 
             self._emitProgress(f"上传: {rel_path}", i + 1, total)
             self.log_queue.put(f"[{i+1}/{total}] 上传: {rel_path}")
@@ -839,7 +841,7 @@ class SyncWorker(QThread):
 
             # 上传文件（自动重试3次）
             mtime = file_info.get("mtime", 0) * 1000
-            success = self._uploadFileWithRetry(local_file, remote_file, rel_path, mtime=mtime)
+            success = self._uploadWithRetry(local_file, remote_file, rel_path, mtime=mtime)
             if success:
                 self.result.upload_success += 1
                 self.result.uploaded_size += file_info["size"]
@@ -861,7 +863,7 @@ class SyncWorker(QThread):
             self._deleteRemoteFiles(to_delete)
             self.log(f"删除完成: 成功 {self.result.delete_success}，失败 {self.result.delete_failed}")
 
-    def _uploadFileWithRetry(self, local_file: str, remote_file: str,
+    def _uploadWithRetry(self, local_file: str, remote_file: str,
                                 rel_path: str = "", max_retries: int = 3, mtime: int = 0) -> bool:
         """上传单个文件，失败自动重试（指数退避）"""
         for attempt in range(1, max_retries + 1):
@@ -878,7 +880,7 @@ class SyncWorker(QThread):
         logger.error(f"OpenList 上传失败，已重试{max_retries}次: {rel_path}")
         return False
 
-    def _deleteFileWithRetry(self, remote_dir: str, file_name: str,
+    def _deleteWithRetry(self, remote_dir: str, file_name: str,
                                 file_path: str = "", max_retries: int = 3) -> bool:
         """删除远程文件，失败自动重试（指数退避）"""
         for attempt in range(1, max_retries + 1):
@@ -1238,7 +1240,7 @@ class SyncWorker(QThread):
                 self._emitProgress(f"删除: {file_path}", count, total)
                 self.log_queue.put(f"[{count}/{total}] 删除: {file_path}")
 
-                success = self._deleteFileWithRetry(remote_dir, file_name, file_path)
+                success = self._deleteWithRetry(remote_dir, file_name, file_path)
                 if success:
                     self.result.delete_success += 1
                     self.result.delete_success_files.append(file_path)
@@ -1259,10 +1261,10 @@ class TaskEditDialog(QDialog):
         self.task = task or TaskConfig()
         self.setWindowTitle("编辑任务" if task else "新建任务")
         self.setMinimumSize(500, 400)
-        self._initUi()
+        self._initUI()
         self._loadTask()
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
@@ -1452,10 +1454,10 @@ class RemoteDirDialog(QDialog):
         self.selected_path = "/"
         self.setWindowTitle("选择远程目录")
         self.setMinimumSize(400, 500)
-        self._initUi()
+        self._initUI()
         self._loadDir("/")
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         self.tree = QTreeWidget()
@@ -1514,11 +1516,11 @@ class OpenListWidget(QWidget):
         self.main_window = main_window
         self.plugin = plugin
         self.sync_worker = None
-        self._initUi()
+        self._initUI()
         self._loadSettings()
         self.log_signal.connect(self._appendLog)
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
 
         # OpenList 路径配置

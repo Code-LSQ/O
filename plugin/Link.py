@@ -543,7 +543,7 @@ class LinkManage(QDialog):
                 link_target = os.readlink(source_path)
                 if os.path.exists(link_target):
                     status = NORMAL
-                    source_type = "符号链接" + (f" (文件夹)" if source_is_dir else " (文件)")
+                    source_type = "符号链接" + (" (文件夹)" if source_is_dir else " (文件)")
                 else:
                     status = BROKEN
                     source_type = "符号链接 (目标不存在)"

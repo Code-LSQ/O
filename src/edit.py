@@ -30,16 +30,16 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.app = app
         self.config = getConfig()
         self._main_window = main_window
-        self._init_core_attributes()
+        self._initCoreAttributes()
         self.initUI()
         self.applyConfig()
         if sys.platform == "win32" and self.config.get("context_menu", False) and not isMenuRegister():
             logger.info("正在注册右键菜单")
             setWindowsMenu(True)
-        self._init_state_from_config(file_path)
+        self._initFromConfig(file_path)
         self._initialization_complete = True
     
-    def _init_core_attributes(self):
+    def _initCoreAttributes(self):
         """初始化核心属性"""
         self.file_op = FileOperation()
         self.find_replace_dialog = None
@@ -52,7 +52,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.action_minimize.triggered.connect(self.showMinimized)
         self.addAction(self.action_minimize)
 
-    def _init_state_from_config(self, file_path) -> str:
+    def _initFromConfig(self, file_path) -> str:
         """从配置恢复状态"""
         self._loadOpenFiles()
         if file_path:
@@ -76,7 +76,7 @@ class EditorWindow(WindowMouse, QMainWindow):
                 self._usage_monitor.resume(getattr(self, '_usage_timer_was_active', False))
         super().changeEvent(event)
     
-    def _on_toolbar_double_click(self, event):
+    def _onToolbarDoubleClick(self, event):
         """工具栏双击事件 - 最大化/还原窗口"""
         if event.button() == Qt.MouseButton.LeftButton:
             self._toggleMax()
@@ -92,7 +92,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         
         self._menu_controller = MenuControl(self)
         self._toolbar = self._menu_controller.createToolbar()
-        self._toolbar.mouseDoubleClickEvent = self._on_toolbar_double_click
+        self._toolbar.mouseDoubleClickEvent = self._onToolbarDoubleClick
         
         # CPU / 内存 显示标签
         self.cpu_label = QLabel(self)
@@ -135,9 +135,9 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.tab_widget.setTabsClosable(True)
             self.tab_widget.setMovable(True)
             self.tab_widget.tabCloseRequested.connect(self.closeTab)
-            self.tab_widget.currentChanged.connect(self._on_tab_changed)
+            self.tab_widget.currentChanged.connect(self._onTabChanged)
             self.tab_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            self.tab_widget.customContextMenuRequested.connect(self._show_tab_context_menu)
+            self.tab_widget.customContextMenuRequested.connect(self._tabContextMenu)
             tab_layout.addWidget(self.tab_widget)
             
             editor_layout.addWidget(tab_container)
@@ -188,7 +188,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         content_layout.addWidget(self.splitter)
         
         # 初始化文件夹面板管理器（在splitter创建之后）
-        self._init_folder_panel_manager()
+        self._folder_panel_manager = FolderPanelManager(self, self.file_op, self.splitter, self.config, self._folder_placeholder, self)
         
         # 初始化状态栏
         self.setStatusBar(QStatusBar(self))
@@ -205,13 +205,9 @@ class EditorWindow(WindowMouse, QMainWindow):
 
         # 单标签页模式下直接创建编辑器
         if not self._use_tabs:
-            self._init_single_editor(editor_layout)
+            self._initSingleEditor(editor_layout)
     
-    def _init_folder_panel_manager(self):
-        """初始化文件夹面板管理器"""
-        self._folder_panel_manager = FolderPanelManager(self, self.file_op, self.splitter, self.config, self._folder_placeholder, self)
-    
-    def _on_folder_header_clicked(self, event):
+    def _onFolderHeaderClicked(self, event):
         """点击父文件夹标签时切换到上级目录"""
         self._folder_panel_manager._onHeaderClicked(event)
 
@@ -225,15 +221,11 @@ class EditorWindow(WindowMouse, QMainWindow):
         """加载文件夹"""
         self._folder_panel_manager.load(folder_path)
     
-    def closeFolder(self):
-        """关闭并删除文件夹视图"""
-        self._folder_panel_manager.close()
-        self.statusBar().showMessage(tr("已关闭文件夹视图"), 2000)
-    
     def toggleFolderPanel(self):
         """切换文件夹面板 - 只有加载和删除两种状态"""
         if self._folder_panel_manager.isVisible():
-            self.closeFolder()
+            self._folder_panel_manager.close()
+            self.statusBar().showMessage(tr("已关闭文件夹视图"), 2000)
         else:
             folder = str(root)
             if not os.path.isdir(folder):
@@ -242,15 +234,15 @@ class EditorWindow(WindowMouse, QMainWindow):
                     return
             self.loadFolder(folder)
     
-    def _init_single_editor(self, parent_layout):
+    def _initSingleEditor(self, parent_layout):
         """初始化单标签页模式的编辑器"""
         self.single_editor = EditorTab()
         self.single_editor.setContent("")
         self.single_editor.file_opened.connect(self.openFilePath)
         self.single_editor.folder_opened.connect(self.loadFolder)
-        self._connect_cursor_position(self.single_editor)
+        self._connectCursorPosition(self.single_editor)
         
-        self._apply_editor_settings(self.single_editor)
+        self._applyEditorSettings(self.single_editor)
         
         parent_layout.addWidget(self.single_editor)
         
@@ -270,12 +262,12 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.tab_widget.setTabsClosable(True)
             self.tab_widget.setDocumentMode(True)
         
-        self._apply_editor_settings()
-        self._reload_editor_shortcuts()
+        self._applyEditorSettings()
+        self._reloadEditorShortcuts()
         
-        self._setup_auto_save()
+        self._setupAutoSave()
     
-    def _iter_editors(self):
+    def _iterEditors(self):
         """遍历所有编辑器（tabs 模式和单标签模式统一）"""
         if self._use_tabs and self.tab_widget:
             for i in range(self.tab_widget.count()):
@@ -285,7 +277,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         elif hasattr(self, 'single_editor') and self.single_editor:
             yield self.single_editor
     
-    def _apply_editor_settings(self, editor: EditorTab = None):
+    def _applyEditorSettings(self, editor: EditorTab = None):
         """应用编辑器设置（字体、行距等）"""
         auto_wrap = self.config.get("Edit.wrap", False)
         line_numbers = self.config.get("Edit.line_numbers", False)
@@ -301,15 +293,15 @@ class EditorWindow(WindowMouse, QMainWindow):
         if editor:
             applyToEditor(editor)
         else:
-            for ed in self._iter_editors():
+            for ed in self._iterEditors():
                 applyToEditor(ed)
 
-    def _reload_editor_shortcuts(self):
-        for ed in self._iter_editors():
+    def _reloadEditorShortcuts(self):
+        for ed in self._iterEditors():
             if hasattr(ed, 'text_edit') and hasattr(ed.text_edit, '_reloadShortcuts'):
                 ed.text_edit._reloadShortcuts()
 
-    def _setup_auto_save(self):
+    def _setupAutoSave(self):
         """设置自动保存"""
         if self.auto_save_timer:
             self.auto_save_timer.stop()
@@ -319,12 +311,12 @@ class EditorWindow(WindowMouse, QMainWindow):
         if self.config.get("Edit.auto_save", False):
             interval = self.config.get("Edit.auto_save_interval", 60) * 1000
             self.auto_save_timer = QTimer(self)
-            self.auto_save_timer.timeout.connect(self._do_auto_save)
+            self.auto_save_timer.timeout.connect(self._doAutoSave)
             self.auto_save_timer.start(interval)
     
-    def _do_auto_save(self):
+    def _doAutoSave(self):
         """执行自动保存"""
-        for i, editor in enumerate(self._iter_editors()):
+        for i, editor in enumerate(self._iterEditors()):
             file_path = editor.file_path
             if editor._is_viewing_archive_image or not file_path or not editor.is_modified:
                 continue
@@ -361,7 +353,7 @@ class EditorWindow(WindowMouse, QMainWindow):
                         self.openFilePath(file_path)
                     event.acceptProposedAction()
     
-    def getCurrentEditor(self) -> EditorTab:
+    def getEditor(self) -> EditorTab:
         """获取当前编辑器"""
         if self._use_tabs and self.tab_widget:
             widget = self.tab_widget.currentWidget()
@@ -371,7 +363,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             return self.single_editor
         return None
     
-    def _connect_cursor_position(self, editor: EditorTab):
+    def _connectCursorPosition(self, editor: EditorTab):
         """连接编辑器光标信号到状态栏标签"""
         if not editor:
             return
@@ -385,13 +377,13 @@ class EditorWindow(WindowMouse, QMainWindow):
         if hasattr(self, 'cursor_pos_label'):
             self.cursor_pos_label.setText(f"行 {line}, 列 {col}")
 
-    def _on_tab_changed(self, index: int):
+    def _onTabChanged(self, index: int):
         """切换标签页时更新编码显示及光标位置"""
         if not hasattr(self, 'encoding_label'):
             return
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if editor:
-            self._connect_cursor_position(editor)
+            self._connectCursorPosition(editor)
             if editor.is_image:
                 self.encoding_label.setVisible(False)
             else:
@@ -409,13 +401,13 @@ class EditorWindow(WindowMouse, QMainWindow):
             editor.setFilePath(file_path)
         editor.setContent(content)
         
-        self._apply_editor_settings(editor)
+        self._applyEditorSettings(editor)
         
         editor.file_opened.connect(self.openFilePath)
         editor.folder_opened.connect(self.loadFolder)
-        editor.file_changed.connect(self._on_editor_file_changed)
-        editor.markdown_mode_changed.connect(self._on_markdown_mode_changed)
-        self._connect_cursor_position(editor)
+        editor.file_changed.connect(self._onFileChanged)
+        editor.markdown_mode_changed.connect(self._onMarkdownModeChanged)
+        self._connectCursorPosition(editor)
         
         title = editor.getTitle()
         self.tab_widget.addTab(editor, title)
@@ -423,14 +415,14 @@ class EditorWindow(WindowMouse, QMainWindow):
         
         return editor
     
-    def _on_editor_file_changed(self, changed: bool):
+    def _onFileChanged(self, changed: bool):
         """处理编辑器文件更改信号"""
         editor = self.sender()
         if not editor or not isinstance(editor, EditorTab):
             return
         self.updateTabTitle(editor)
     
-    def _on_markdown_mode_changed(self, is_markdown: bool):
+    def _onMarkdownModeChanged(self, is_markdown: bool):
         """处理markdown模式切换"""
         editor = self.sender()
         if not editor or not isinstance(editor, EditorTab):
@@ -448,11 +440,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         index = self.tab_widget.indexOf(editor)
         if index >= 0:
             self.tab_widget.setTabText(index, editor.getTitle())
-    
-    def closeCurrentTab(self):
-        """关闭当前标签页"""
-        if self.tab_widget:
-            self.closeTab(self.tab_widget.currentIndex())
     
     def closeTab(self, index: int):
         """关闭指定索引的标签页"""
@@ -488,7 +475,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor._is_zip_gallery = False
         editor._archive_type = None
         if hasattr(editor, 'image_label') and hasattr(editor.image_label, '_comic_view_enabled') and editor.image_label._comic_view_enabled:
-            editor.image_label._exit_comic_view()
+            editor.image_label._exitComicView()
         editor.deleteLater()
         
         self._toc_panel.hidePanel()
@@ -496,7 +483,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         if self.tab_widget.count() == 0:
             self.addTab()
     
-    def _show_tab_context_menu(self, pos):
+    def _tabContextMenu(self, pos):
         """显示标签页右键菜单"""
         tab_bar = self.tab_widget.tabBar()
         index = tab_bar.tabAt(pos)
@@ -509,7 +496,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         file_path = editor.file_path if editor and not editor._is_viewing_archive_image else None
         
         rename_action = QAction(tr("重命名"), self)
-        rename_action.triggered.connect(lambda checked, i=index: self._rename_tab_file(i))
+        rename_action.triggered.connect(lambda checked, i=index: self._renameTabFile(i))
         menu.addAction(rename_action)
         
         open_folder_action = QAction(tr("在文件资源管理器中显示"), self)
@@ -531,7 +518,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         
         menu.exec_(tab_bar.mapToGlobal(pos))
     
-    def _rename_tab_file(self, index: int):
+    def _renameTabFile(self, index: int):
         """重命名标签页对应的文件"""
         editor = self.tab_widget.widget(index)
         if not editor:
@@ -555,17 +542,13 @@ class EditorWindow(WindowMouse, QMainWindow):
             except Exception as e:
                 messageBox(self, tr("错误"), tr("重命名失败") + f": {e}", 1)
     
-    def newFile(self):
-        self.addTab()
-        self.statusBar().showMessage(tr("新建文件"), 3000)
-    
-    def _update_favorites_menu(self):
+    def _updateFavoritesMenu(self):
         """更新收藏夹菜单"""
         if not hasattr(self, 'favorites_menu'):
             return
         self.favorites_menu.clear()
         
-        favorites = self.config.getFavorites()
+        favorites = self.config.get("Edit.favorites", [])
         if not favorites:
             empty_action = QAction(tr("无收藏文件"), self)
             empty_action.setEnabled(False)
@@ -576,16 +559,16 @@ class EditorWindow(WindowMouse, QMainWindow):
                 name = os.path.basename(normalized_path) if os.path.basename(normalized_path) else normalized_path
                 action = QAction(name, self)
                 action.setData(normalized_path)
-                action.triggered.connect(lambda checked, p=normalized_path: self._open_favorite_item(p))
+                action.triggered.connect(lambda checked, p=normalized_path: self._openFavoriteItem(p))
                 self.favorites_menu.addAction(action)
         
         self.favorites_menu.addSeparator()
         
         clear_action = QAction(tr("清空收藏夹"), self)
-        clear_action.triggered.connect(self._clear_favorites)
+        clear_action.triggered.connect(self._clearFavorites)
         self.favorites_menu.addAction(clear_action)
     
-    def _open_favorite_item(self, file_path: str):
+    def _openFavoriteItem(self, file_path: str):
         """打开收藏项（文件或文件夹）"""
         normalized_path = os.path.normpath(file_path)
         if os.path.isdir(normalized_path):
@@ -593,13 +576,13 @@ class EditorWindow(WindowMouse, QMainWindow):
         elif os.path.isfile(normalized_path):
             self.openFilePath(normalized_path)
     
-    def _clear_favorites(self):
+    def _clearFavorites(self):
         """清空收藏夹"""
         self.config.set("Edit.favorites", [])
-        self._update_favorites_menu()
+        self._updateFavoritesMenu()
         self.statusBar().showMessage(tr("已清空收藏夹"), 2000)
     
-    def _update_recent_menu(self):
+    def _updateRecentMenu(self):
         """更新最近打开菜单"""
         if not hasattr(self, 'recent_menu'):
             return
@@ -621,12 +604,12 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.recent_menu.addSeparator()
         
         clear_action = QAction(tr("清空最近记录"), self)
-        clear_action.triggered.connect(self._clear_recent)
+        clear_action.triggered.connect(self._clearRecent)
         self.recent_menu.addAction(clear_action)
     
-    def _clear_recent(self):
+    def _clearRecent(self):
         self.config.set("Edit.recent", [])
-        self._update_recent_menu()
+        self._updateRecentMenu()
         self.statusBar().showMessage(tr("已清空最近记录"), 2000)
     
     def addFav(self, file_path: str):
@@ -634,19 +617,15 @@ class EditorWindow(WindowMouse, QMainWindow):
         if file_path:
             normalized_path = os.path.normpath(file_path)
             self.config.addFavorite(normalized_path)
-            self._update_favorites_menu()
+            self._updateFavoritesMenu()
             self.statusBar().showMessage(tr("已添加到收藏夹") + f": {os.path.basename(normalized_path)}", 2000)
     
     def delFav(self, file_path: str):
         """从收藏夹移除"""
         if file_path:
             self.config.removeFavorite(file_path)
-            self._update_favorites_menu()
+            self._updateFavoritesMenu()
             self.statusBar().showMessage(tr("已从收藏夹移除") + f": {os.path.basename(file_path)}", 2000)
-    
-    def chooseFile(self):
-        """打开文件对话框"""
-        self._file_controller.openFile()
     
     def openFilePath(self, file_path: str):
         """打开指定路径的文件"""
@@ -656,54 +635,51 @@ class EditorWindow(WindowMouse, QMainWindow):
         """保存当前文件"""
         return self._file_controller.saveFile()
     
-    def saveAs(self) -> bool:
-        """另存为"""
-        return self._file_controller.saveFileAs()
-    
+
     def undo(self):
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if editor:
             editor.text_edit.undo()
     
     def redo(self):
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if editor:
             editor.text_edit.redo()
     
     def selectAll(self):
         """全选"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if editor:
             editor.text_edit.selectAll()
     
-    def _get_find_dialog(self):
+    def _getFindDialog(self):
         """获取或创建查找替换对话框"""
         if self.find_replace_dialog is None:
             self.find_replace_dialog = FindReplaceDialog(self, self.config)
-            self.find_replace_dialog.find_requested.connect(self._on_find_requested)
-            self.find_replace_dialog.replace_requested.connect(self._on_replace_requested)
-            self.find_replace_dialog.replace_all_requested.connect(self._on_replace_all_requested)
+            self.find_replace_dialog.find_requested.connect(self._onFindRequested)
+            self.find_replace_dialog.replace_requested.connect(self._onReplaceRequested)
+            self.find_replace_dialog.replace_all_requested.connect(self._onReplaceAll)
         return self.find_replace_dialog
     
-    def _on_find_requested(self, text: str, case_sensitive: bool, regex: bool, forward: bool):
+    def _onFindRequested(self, text: str, case_sensitive: bool, regex: bool, forward: bool):
         """处理查找请求"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if not editor:
             return
         editor.findText(text, forward, case_sensitive, regex)
     
-    def _on_replace_requested(self, find_text: str, replace_text: str, 
+    def _onReplaceRequested(self, find_text: str, replace_text: str, 
                               case_sensitive: bool, regex: bool):
         """处理替换请求"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if not editor:
             return
         editor.replaceText(find_text, replace_text, case_sensitive, regex)
     
-    def _on_replace_all_requested(self, find_text: str, replace_text: str,
+    def _onReplaceAll(self, find_text: str, replace_text: str,
                                   case_sensitive: bool, regex: bool):
         """处理全部替换请求"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if not editor:
             return
         content = editor.text_edit.toPlainText()
@@ -746,25 +722,27 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def showFindRe(self):
         """显示查找对话框"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if editor:
             # 如果有选中的文本，设置为查找内容
             cursor = editor.text_edit.textCursor()
             if cursor.hasSelection():
                 selected = cursor.selectedText()
-                dialog = self._get_find_dialog()
+                dialog = self._getFindDialog()
                 dialog.setFindText(selected)
-        dialog = self._get_find_dialog()
-        dialog.showFindRe()
+        dialog = self._getFindDialog()
+        dialog.find_edit.setFocus()
+        dialog.find_edit.selectAll()
+        dialog.show()
     
-    def _on_encoding_open_triggered(self):
+    def _encodingOpen(self):
         action = self.sender()
         if action and hasattr(action, 'data'):
             encoding = action.data()
             if encoding:
                 self._file_controller.openWithEnc(encoding)
     
-    def _on_encoding_save_triggered(self):
+    def _encodingSave(self):
         action = self.sender()
         if action and hasattr(action, 'data'):
             encoding = action.data()
@@ -773,7 +751,7 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def setViewMode(self, mode: str):
         """改变查看模式"""
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if not editor:
             return
 
@@ -798,18 +776,14 @@ class EditorWindow(WindowMouse, QMainWindow):
         """显示设置对话框"""
         dialog = SettingsDialog(self.config, self)
         dialog.settings_changed.connect(self.onSettingsChanged)
-        dialog.multi_tab_changed.connect(self._on_multi_tab_changed)
+        dialog.multi_tab_changed.connect(lambda enabled: restartApplication(self))
         dialog.restart_required.connect(lambda: restartApplication(self))
         dialog.exec()
     
-    def _on_multi_tab_changed(self, enabled: bool):
-        """多标签页设置变化，重启应用"""
-        restartApplication(self)
-    
     def onSettingsChanged(self, settings: dict):
         """设置更改后应用"""
-        self._setup_auto_save()
-        self._apply_editor_settings()
+        self._setupAutoSave()
+        self._applyEditorSettings()
         if self._main_window:
             self._main_window.applyTheme(self)
         
@@ -821,7 +795,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         self.statusBar().showMessage(tr("设置已保存"), 2000)
 
     
-    def _check_unsaved_files(self, editors: list) -> bool:
+    def _checkUnsavedFiles(self, editors: list) -> bool:
         """检查未保存的文件，返回是否取消关闭"""
         for i, editor in enumerate(editors):
             if not isinstance(editor, EditorTab):
@@ -839,56 +813,49 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def closeEvent(self, event: QCloseEvent):
         """窗口关闭事件"""
-        editors = list(self._iter_editors())
-        if self._check_unsaved_files(editors):
+        editors = list(self._iterEditors())
+        if self._checkUnsavedFiles(editors):
             event.ignore()
             return
         
-        self._save_before_close()
-        
-        event.accept()
-    
-    def _save_before_close(self):
-        """保存窗口状态"""
         self.config.updateWindowGeometry(self.geometry())
         self._saveOpenFiles()
         self.config.save()
+        
+        event.accept()
     
-    TEXT_PROCESS_METHODS = {
-        "removeEmptyLines": ("去除空行", "已去除 {count} 行空行"),
-        "stripLeadingSpace": ("去除行首空格", "已去除行首空格"),
-        "stripTrailingSpace": ("去除行尾空格", "已去除行尾空格"),
-        "indentLines": ("行首缩进", "已添加行首缩进"),
-    }
-
     def removeEmptyLines(self):
-        self._exec_text_process("removeEmptyLines", True)
-
-    def stripLeadingSpace(self):
-        self._exec_text_process("stripLeadingSpace")
-
-    def stripTrailingSpace(self):
-        self._exec_text_process("stripTrailingSpace")
-
-    def indentLines(self):
-        self._exec_text_process("indentLines")
-
-    def _exec_text_process(self, method_name: str, has_count: bool = False):
-        editor = self.getCurrentEditor()
+        editor = self.getEditor()
         if not editor:
             return
-        _, msg_template = self.TEXT_PROCESS_METHODS[method_name]
-        if has_count:
-            count = getattr(editor, method_name)()
-            self.statusBar().showMessage(str(count) + " " + tr("行空行已去除"), 2000)
-        else:
-            getattr(editor, method_name)()
-            self.statusBar().showMessage(tr(msg_template), 2000)
+        count = editor.stripEmptyLines()
+        self.statusBar().showMessage(str(count) + " " + tr("行空行已去除"), 2000)
+
+    def stripLeadingSpace(self):
+        editor = self.getEditor()
+        if not editor:
+            return
+        editor.stripLeading()
+        self.statusBar().showMessage(tr("已去除行首空格"), 2000)
+
+    def stripTrailingSpace(self):
+        editor = self.getEditor()
+        if not editor:
+            return
+        editor.stripTrailing()
+        self.statusBar().showMessage(tr("已去除行尾空格"), 2000)
+
+    def indentLines(self):
+        editor = self.getEditor()
+        if not editor:
+            return
+        editor.indentLines()
+        self.statusBar().showMessage(tr("已添加行首缩进"), 2000)
     
     def _saveOpenFiles(self):
         """保存当前打开的文件列表"""
         openFiles = []
-        for editor in self._iter_editors():
+        for editor in self._iterEditors():
             file_path = editor.file_path
             if not editor._is_viewing_archive_image and file_path:
                 openFiles.append(file_path)
@@ -945,7 +912,7 @@ class TocPanel:
         self.list_widget = QListWidget()
         self.list_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.list_widget.setObjectName("toc_list")
-        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.itemClicked.connect(self._onItemClicked)
         layout.addWidget(self.list_widget)
         
         return self.panel
@@ -971,13 +938,13 @@ class TocPanel:
             item.setFont(font)
             self.list_widget.addItem(item)
     
-    def _on_item_clicked(self, item):
+    def _onItemClicked(self, item):
         """标题项点击事件"""
         heading = item.data(Qt.ItemDataRole.UserRole)
         if not heading:
             return
         
-        editor = self.main_window.getCurrentEditor()
+        editor = self.main_window.getEditor()
         if not editor or not hasattr(editor, 'text_edit') or not editor.text_edit:
             return
         

@@ -41,7 +41,7 @@ class MarkdownRenderer(Singleton):
         html_body = self._renderer.convert(content)
         if html_body is None:
             return None
-        html_body = _enhanceHtmlWithFeatures(html_body)
+        html_body = _enhanceHtml(html_body)
         return self._buildFullHtml(html_body)
     
     def _buildFullHtml(self, html_body: str) -> str:
@@ -162,7 +162,7 @@ def extractToc(content: str) -> List[Dict[str, str]]:
     
     return headings
 
-def _convertImageToDataUri(file_path: str, image_path: str) -> Optional[str]:
+def _imageToDataUri(file_path: str, image_path: str) -> Optional[str]:
     """将本地图片转换为data URI"""
     try:
         if not file_path:
@@ -227,7 +227,7 @@ def _processHtmlImgTags(content: str, file_path: str) -> str:
         if _isRemoteUrl(src):
             return match.group(0)
         if file_path:
-            new_src = _convertImageToDataUri(file_path, src)
+            new_src = _imageToDataUri(file_path, src)
             if new_src:
                 new_attrs = re.sub(r'src\s*=\s*["\'][^"\']+["\']', '', attrs).strip()
                 new_attrs = re.sub(r'\s*width\s*=\s*["\'][^"\']*["\']', '', new_attrs).strip()
@@ -248,7 +248,7 @@ def _processImagePaths(content: str, file_path: str) -> str:
         if _isRemoteUrl(src):
             return match.group(0)
         if file_path:
-            new_src = _convertImageToDataUri(file_path, src)
+            new_src = _imageToDataUri(file_path, src)
             if new_src is None:
                 return match.group(0)
             if title:
@@ -293,7 +293,7 @@ def _processRelativeLinks(content: str, file_path: str) -> str:
         return content
 
 
-def _enhanceHtmlWithFeatures(html_body: Optional[str]) -> str:
+def _enhanceHtml(html_body: Optional[str]) -> str:
     """增强HTML功能"""
     if html_body is None:
         return ""

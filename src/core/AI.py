@@ -763,7 +763,7 @@ class AIClient:
             return 2000
         return int(tokens)
     
-    def getPromptByName(self, name: str) -> Optional[str]:
+    def getPrompt(self, name: str) -> Optional[str]:
         """根据名称获取提示词内容"""
         return self.config.get("prompts", {}).get(name)
     
@@ -785,13 +785,13 @@ class AIClient:
     def _prepareMessages(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> List[Dict]:
         request_messages = []
 
-        system_prompt = self.getPromptByName("系统提示词")
+        system_prompt = self.getPrompt("系统提示词")
         if system_prompt:
             request_messages.append({"role": "system", "content": system_prompt})
 
         prompt_content = None
         if prompt_name:
-            prompt_content = self.getPromptByName(prompt_name)
+            prompt_content = self.getPrompt(prompt_name)
             if prompt_content:
                 final_prompt = self._buildPromptContent(prompt_content, self._extractUserMessage(messages))
                 request_messages.append({"role": "system", "content": final_prompt})

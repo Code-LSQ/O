@@ -7,7 +7,6 @@ from PySide6.QtCore import Qt, Signal, QThread, QTimer, QByteArray
 
 from src.plugin import PluginBase
 from src.util import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp, FileDrop, imageBase64, EXTENSION, urlToPath
-
 from src.core.AI import AI_ADAPTER, getAIClient, resolveImageUrls, getAdapterEndpoint, getAdapterUrl, OllamaAdapter
 
 AI_dir = data_dir / "AI"
@@ -92,7 +91,7 @@ class AIExtendPlugin(PluginBase):
         self._loadHistory()
         self._ensureContent()
 
-    def _get_editor_window(self):
+    def _getEditorWindow(self):
         if hasattr(self._launcher, '_editor_window') and self._launcher._editor_window:
             return self._launcher._editor_window
         return None
@@ -575,7 +574,7 @@ class AIExtendPlugin(PluginBase):
             layout2.addLayout(row)
             items.append((name, cb, status))
 
-        def _run_test(selected_only):
+        def _runTest(selected_only):
             for pname, cb, status in items:
                 if selected_only and not cb.isChecked():
                     continue
@@ -614,10 +613,10 @@ class AIExtendPlugin(PluginBase):
 
         btn_layout = QHBoxLayout()
         test_sel_btn = QPushButton(tr("测试已选"))
-        test_sel_btn.clicked.connect(lambda: _run_test(True))
+        test_sel_btn.clicked.connect(lambda: _runTest(True))
         btn_layout.addWidget(test_sel_btn)
         test_all_btn = QPushButton(tr("测试全部"))
-        test_all_btn.clicked.connect(lambda: _run_test(False))
+        test_all_btn.clicked.connect(lambda: _runTest(False))
         btn_layout.addWidget(test_all_btn)
         btn_layout.addStretch()
         close_btn = QPushButton(tr("关闭"))
@@ -726,7 +725,7 @@ class AIExtendPlugin(PluginBase):
 
     # ── 提示词管理 ──
 
-    def _createUi(self, editor):
+    def _createUI(self, editor):
         if self.dock is not None:
             return
 
@@ -750,11 +749,11 @@ class AIExtendPlugin(PluginBase):
         self.dock.hide()
 
     def _ensureDockInEditor(self):
-        editor = self._get_editor_window()
+        editor = self._getEditorWindow()
         if not editor:
             return
         if self.dock is None:
-            self._createUi(editor)
+            self._createUI(editor)
         elif self.dock.parent() is not editor:
             editor.addDockWidget(Qt.RightDockWidgetArea, self.dock)
             self.dock.setStyleSheet(editor.styleSheet())
@@ -897,7 +896,7 @@ class AIExtendPlugin(PluginBase):
         self._message_layout.addStretch()
 
         self._message_scroll.setWidget(self._message_content)
-        self._loadMessagesToUi()
+        self._loadMessages()
 
         layout.addWidget(self._message_scroll, 1)
 
@@ -966,7 +965,7 @@ class AIExtendPlugin(PluginBase):
         conv_id = self._conv_combo.currentData()
         if conv_id:
             self._current_conv_id = conv_id
-            self._loadMessagesToUi()
+            self._loadMessages()
 
     def _newConversation(self):
         conv_id = getTimestamp()
@@ -1126,7 +1125,7 @@ class AIExtendPlugin(PluginBase):
             if conv_id:
                 self._current_conv_id = conv_id
                 self._reloadConversationList(select_id=conv_id)
-                self._loadMessagesToUi()
+                self._loadMessages()
                 dlg.accept()
 
         result_list.itemClicked.connect(onResultClicked)
@@ -1201,7 +1200,7 @@ class AIExtendPlugin(PluginBase):
                 self._conv_combo.setCurrentIndex(idx)
                 self._current_conv_id = target
         self._conv_combo.blockSignals(False)
-        self._loadMessagesToUi()
+        self._loadMessages()
 
     def _onVisibilityChanged(self, visible):
         if visible:
@@ -1312,13 +1311,13 @@ class AIExtendPlugin(PluginBase):
             if conv:
                 conv["messages"] = []
                 self._saveHistory()
-        self._loadMessagesToUi()
+        self._loadMessages()
 
     # ── UI 交互 ───────────────────────────────────────
 
     def _togglePanel(self):
         self.initialize()
-        editor = self._get_editor_window()
+        editor = self._getEditorWindow()
         if editor:
             if self.dock and self.dock.isVisible():
                 self._destroyDock()
@@ -1480,7 +1479,7 @@ class AIExtendPlugin(PluginBase):
             self._pending_files.remove(path)
         self._refreshPreviewBar()
 
-    def _loadMessagesToUi(self):
+    def _loadMessages(self):
         if not self._message_layout:
             return
         self._clearMessageWidgets()
@@ -1511,7 +1510,7 @@ class AIExtendPlugin(PluginBase):
             widget._lp_timer = QTimer()
             widget._lp_timer.setSingleShot(True)
             widget._lp_timer.setInterval(500)
-            widget._lp_timer.timeout.connect(lambda: _on_long_press())
+            widget._lp_timer.timeout.connect(lambda: _onLongPress())
             widget._lp_timer.start()
             if orig_press:
                 orig_press(e)
@@ -1527,7 +1526,7 @@ class AIExtendPlugin(PluginBase):
             if orig_release:
                 orig_release(e)
 
-        def _on_long_press():
+        def _onLongPress():
             widget._long_pressed = True
             if isinstance(widget, QLabel):
                 widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -1853,7 +1852,7 @@ class AIDialog(QDialog):
         if not text:
             return
         if self._main_window:
-            editor = self._main_window.getCurrentEditor()
+            editor = self._main_window.getEditor()
             if editor:
                 editor.text_edit.textCursor().insertText(text)
         self.close()
@@ -1865,7 +1864,7 @@ class AIDialog(QDialog):
         if self._main_window:
             self._main_window.activateWindow()
             self._main_window.raise_()
-            editor = self._main_window.getCurrentEditor()
+            editor = self._main_window.getEditor()
             if editor:
                 editor.text_edit.setFocus()
                 editor.text_edit.textCursor().insertText(text)
@@ -1947,10 +1946,10 @@ class OCRDialog(QDialog):
         self.setWindowTitle("AI OCR 识别")
         self.setMinimumSize(600, 450)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
-        self._initUi()
+        self._initUI()
         self.ocr_thread = None
 
-    def _initUi(self):
+    def _initUI(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -2148,10 +2147,8 @@ class OCRDialog(QDialog):
     def _openFileWithApp(self, file_path: str):
         try:
             main_window = self.parent()
-            if main_window and hasattr(main_window, 'openFilePath'):
-                main_window.openFilePath(file_path)
-            elif main_window and hasattr(main_window, 'open_file'):
-                main_window.open_file()
+            if main_window and hasattr(main_window, "_openEditor"):
+                main_window._openEditor(file_path)
             else:
                 os.startfile(file_path)
         except Exception:

@@ -137,7 +137,7 @@ class GlobalHotkeyListener(Singleton):
                 self._checkToolHotkeys(pressed_keys_copy)
                 
             except Exception:
-                logger.exception(f"按键处理错误")
+                logger.exception("按键处理错误")
         
         def onRelease(key):
             nonlocal ctrl_was_held

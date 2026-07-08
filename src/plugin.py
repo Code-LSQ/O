@@ -201,7 +201,7 @@ class PluginManager(Singleton):
         self._scan_cache[module_key] = (entry[0], entry[1], obj)
         return obj
     
-    def getPluginClass(self, plugin_name: str) -> Optional[Type[PluginBase]]:
+    def pluginClass(self, plugin_name: str) -> Optional[Type[PluginBase]]:
         entry = self._scan_cache.get(plugin_name)
         if entry is None:
             return None
@@ -297,10 +297,6 @@ class PluginManager(Singleton):
     def isPluginEnabled(self, plugin_name: str) -> bool:
         """检查插件是否已启用"""
         return self.enabled_plugins.get(plugin_name, False)
-    
-    def getAllPlugin(self) -> Dict[str, PluginBase]:
-        """获取所有已加载的插件"""
-        return self.plugins.copy()
     
     def registerFileHandler(self, can_handle: callable, open_file: callable):
         """注册文件处理器。can_handle(file_path)->bool, open_file(file_path, main_window)"""
