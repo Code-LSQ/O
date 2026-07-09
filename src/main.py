@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon
+from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon, Interpret
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
@@ -1358,20 +1358,20 @@ class MainWindow(WindowMouse, QMainWindow):
     def _presetMenu(self, global_pos):
         """显示预设项菜单"""
         menu = QMenu(self)
-        
-        # 编辑器子菜单
+
         in_menu = menu.addMenu("功能")
-        for name, path, note in [
-            ("编辑器", "editor", "打开编辑器窗口"),
-            ("插件管理", "plugin_manager", "管理插件启用/禁用"),
-            ("重载插件", "reload_plugins", "重新加载插件"),
-            ("打开日志", "openLog", "打开日志文件"),
-            ("打开配置", "openConfig", "打开配置文件"),
-            ("重启程序", "restart_app", "重启本程序"),
-            ("退出", "quit_app", "退出本程序"),
+        for name, path in [
+            ("编辑器", "editor"),
+            ("插件管理", "pluginManager"),
+            ("重载插件", "reloadPlugins"),
+            ("检查更新", "checkUpdate"),
+            ("打开日志", "openLog"),
+            ("打开配置", "openConfig"),
+            ("重启程序", "restartApp"),
+            ("退出", "quitApp"),
         ]:
             action = QAction(name, self)
-            action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._addPreset(n, p, nt))
+            action.triggered.connect(lambda checked, n=name, p=path: self._addPreset(n, p, ""))
             in_menu.addAction(action)
 
         # 系统子菜单
@@ -1393,7 +1393,7 @@ class MainWindow(WindowMouse, QMainWindow):
                         menu.addMenu(sub_menu)
                         continue
                 action = QAction(name, self)
-                action.triggered.connect(lambda checked, n=name, p=path, nt=note: self._addPreset(n, p, nt))
+                action.triggered.connect(lambda checked, n=name, p=path: self._addPreset(n, p, ""))
                 menu.addAction(action)
         
         menu.exec(global_pos)
@@ -1614,6 +1614,14 @@ class MainWindow(WindowMouse, QMainWindow):
                 else:
                     os.environ[k] = v
 
+    def _checkUpdate(self):
+        """检查更新"""
+        if Interpret:
+            messageBox(self, tr("提示"), tr("开发模式下不支持更新"), 1)
+            return
+        from src.gui.widget import UpdateDialog
+        UpdateDialog.checkAndUpdate(self)
+
     def runPreset(self, tool: dict):
         """运行预设工具"""
         path = tool.get("path") or ""
@@ -1625,12 +1633,13 @@ class MainWindow(WindowMouse, QMainWindow):
         
         func_act = {
             "editor": lambda: self._openEditor(),
-            "restart_app": lambda: restartApplication(self),
-            "quit_app": QApplication.quit,
-            "plugin_manager": lambda: managePlugins(self),
-            "reload_plugins": lambda: getPluginManager().initConfig(getConfig()),
+            "restartApp": lambda: restartApplication(self),
+            "quitApp": QApplication.quit,
+            "pluginManager": lambda: managePlugins(self),
+            "reloadPlugins": lambda: getPluginManager().initConfig(getConfig()),
             "openLog": lambda: self._openEditor(str(log_file)),
             "openConfig": lambda: self._openEditor(str(config_file)),
+            "checkUpdate": lambda: self._checkUpdate(),
         }
         action = func_act.get(path)
         if action:

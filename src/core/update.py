@@ -1,44 +1,94 @@
 import os
 import sys
-import threading
+import zipfile
+import shutil
 from urllib.parse import urlparse
 
 import requests
 
 from src.util import APP_NAME, VERSION, root, data_dir, logger, arch
 
-# GitHub API 对未认证的匿名请求存在频率限制，如果要自动更新，每小时检查一次更新足够了，手动更新可以不用写额外线程
+# GitHub API 对未认证的匿名请求存在频率限制，手动更新无需额外线程
 
 URL = f"https://api.github.com/repos/Code-LSQ/{APP_NAME}/releases/latest"
 
-def checkUpdate(url, current_version):
+UPDATE_ZIP = data_dir / "update.zip"
+UPDATE_DIR = data_dir / "update"
+
+
+def getReleaseInfo(url=None):
+    """获取最新版本信息，返回 {"version": str, "body": str, "assets": [...]} 或 None"""
+    if url is None:
+        url = URL
     try:
-        # 发送请求如果请求失败(如404, 403)，抛出异常
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
-        # 解析返回的JSON数据
         data = response.json()
-        # 获取最新版本的tag_name，并去除开头的'v'
-        latest_version = data["tag_name"].lstrip('v')
-
-        # 与当前版本比较
-        if latest_version != current_version:
-            logger.info(f"发现新版本 {latest_version}！当前版本为 {current_version}。")
-
-            return True
-        else:
-            logger.info("当前已是最新版本。")
-            return False
-
+        return {
+            "version": data["tag_name"].lstrip("v"),
+            "body": data.get("body", ""),
+            "assets": data.get("assets", []),
+        }
     except requests.exceptions.RequestException:
         logger.exception("检查更新时发生网络错误")
-        return False
     except KeyError:
         logger.exception("解析API响应时出错，未找到预期字段")
-        return False
     except Exception:
         logger.exception("发生未知错误")
-        return False
+    return None
+
+
+def extractUpdate(zip_path, extract_dir):
+    """解压 zip 到目标目录"""
+    try:
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(extract_dir)
+        logger.info(f"已解压更新包到 {extract_dir}")
+        return True
+    except zipfile.BadZipFile:
+        logger.exception("更新包损坏")
+    except Exception:
+        logger.exception("解压更新包时出错")
+    return False
+
+
+def writeUpdateScript():
+    """在 root 生成 update.cmd"""
+    update_cmd = root / "update.cmd"
+    content = r"""@echo off
+chcp 65001 >nul
+:wait
+tasklist /fi "imagename eq O.exe" 2>nul | find /i "O.exe" >nul
+if not errorlevel 1 (
+    timeout /t 2 /nobreak >nul
+    goto wait
+)
+cd /d "%~dp0"
+for /f "delims=" %%i in ('dir /b /a-d 2^>nul ^| findstr /v /i "^data$"') do del /f /q "%%i" 2>nul
+for /f "delims=" %%i in ('dir /b /ad 2^>nul ^| findstr /v /i "^data$"') do rmdir /s /q "%%i" 2>nul
+xcopy /s /e /y "data\update\*" "." >nul
+rmdir /s /q "data\update" >nul 2>nul
+if exist "data\update.zip" del /f /q "data\update.zip" >nul 2>nul
+start "" "O.exe"
+del /f /q "%~f0" >nul 2>nul
+exit
+"""
+    update_cmd.write_text(content, encoding="utf-8")
+    logger.info(f"已生成更新脚本 {update_cmd}")
+    return update_cmd
+
+
+def cleanTemp():
+    """清理临时文件"""
+    try:
+        if UPDATE_ZIP.exists():
+            UPDATE_ZIP.unlink()
+        if UPDATE_DIR.exists():
+            shutil.rmtree(UPDATE_DIR)
+    except Exception:
+        logger.exception("清理临时文件时出错")
 
 
 def urlConvert(url: str):
@@ -62,4 +112,3 @@ def urlConvert(url: str):
         tag = parts[4] if len(parts) > 4 else 'latest'
         return f"https://api.github.com/repos/{author}/{repo}/releases/tags/{tag}"
     return f"https://api.github.com/repos/{author}/{repo}/releases/latest"
-

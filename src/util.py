@@ -801,22 +801,31 @@ def formatFileSize(size: int) -> str:
         return f"{size / (1024 ** 4):.2f} TB"
 
 
-def download(url: str):
-    """下载文件
+def download(url: str, path: Path, report=None):
+    """下载文件，path 若为文件夹路径，则尝试从服务器获取文件名，若为指定的文件路径，则直接下载为该路径，若已存在，则需重命名为 name(1).zip 类似。
     从 HTTP 响应获取文件的最后修改时间，作为 os.utime() 的参数，格式为 Unix 时间戳"""
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10, stream=True)
+        response.raise_for_status()
         disposition = response.headers.get("Content-Disposition")
         size = response.headers.get("Content-Length")
         last_modified = response.headers.get("Last-Modified")
+        downloaded = 0
 
-        if "filename=" in disposition:
+        if path.is_dir() and "filename=" in disposition:
             name = disposition.split("filename=")[1].strip("'\"")
+            path = path / name
+        elif path.exists() and path.is_file():
+            ext = path.suffix.lower()
+            path = path
 
-        path = data_dir / name
-
-        # with open(path) as f:
-        #     f.write()
+        with open(path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if report:
+                        report(downloaded, size)
 
         if last_modified:
             dt = datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z")
@@ -827,8 +836,12 @@ def download(url: str):
         else:
             logger.info("服务器未返回最后修改时间")
     
+        return True
+    except requests.exceptions.RequestException:
+        logger.exception("网络错误")
     except Exception:
-        logger.exception("下载错误")
+        logger.exception("未知下载错误")
+    return False
 
 
 def folderLastModified(path):
