@@ -16,7 +16,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 import requests
-from psutil import Process, cpu_count, disk_usage, net_if_stats, net_if_addrs, net_io_counters
+from psutil import Process, cpu_count, disk_usage
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QPushButton, QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFileDialog, QLayout
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
 from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo
@@ -242,22 +242,12 @@ def showFile(path: str, parent=None):
         logger.exception("打开资源管理器失败")
 
 
-def getDisk():
+def getDevice(app: QApplication, logic=False):
+    """输出磁盘信息到日志，获取屏幕逻辑分辨率、缩放和像素密度(DPI)，logic 为 True 输出逻辑分辨率，为 False 输出物理分辨率"""
+
     disk = disk_usage("/")
-    logger.info(
-        f"磁盘信息\n总空间: {disk.total / (1024**3):.2f} GB\n已使用: {disk.used / (1024**3):.2f} GB\n使用率: {disk.percent}%"
-    )
+    logger.info(f"磁盘信息 - 总空间 {disk.total / (1024**3):.2f} GB，已使用 {disk.used / (1024**3):.2f} GB，使用率 {disk.percent}%")
 
-
-def getNet():
-    stats = net_if_stats()
-    addr = net_if_addrs()
-    counter = net_io_counters()
-    pass
-
-
-def getScreen(app: QApplication, logic=False):
-    """获取屏幕逻辑分辨率、缩放和像素密度(DPI)，logic 为 True 输出逻辑分辨率，为 False 输出物理分辨率"""
     try:
         screen = app.primaryScreen()
         size = screen.size()
@@ -274,15 +264,6 @@ def getScreen(app: QApplication, logic=False):
     except Exception:
         logger.exception("获取屏幕信息失败")
     return 1920, 1200, 60, 1.0, 96.0
-
-
-def getDevice(app: QApplication):
-    try:
-        getDisk()
-        getNet()
-        getScreen(app)
-    except Exception:
-        logger.exception("获取设备信息失败")
 
 
 def systemLanguage() -> str:

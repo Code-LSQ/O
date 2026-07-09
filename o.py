@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # 兼容嵌入版 Python
 
 from src.main import MainWindow, setApp
-from src.util import APP_NAME, VERSION, ExceptSign, logger, getScreen
+from src.util import APP_NAME, VERSION, ExceptSign, logger, getDevice
 
 AUTHOR = "Code-LSQ"
 
@@ -42,7 +42,7 @@ def main():
     app.setOrganizationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
     setApp(app)
-    getScreen(app)
+    getDevice(app)
 
     window = MainWindow(app, sys.argv[1] if len(sys.argv) > 1 else None)
     window.show()

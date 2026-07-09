@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor
+from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile
 from src.file import FileControl, FileOperation, ArchiveItemModel
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
@@ -500,7 +500,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         menu.addAction(rename_action)
         
         open_folder_action = QAction(tr("在文件资源管理器中显示"), self)
-        open_folder_action.triggered.connect(lambda checked, fp=file_path: self._folder_panel_manager.show_in_explorer(fp))
+        open_folder_action.triggered.connect(lambda checked, fp=file_path: showFile(fp, self))
         open_folder_action.setEnabled(bool(file_path))
         menu.addAction(open_folder_action)
         
