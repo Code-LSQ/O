@@ -9,11 +9,11 @@ if sys.platform == "win32":
 from pathlib import Path
 
 from psutil import Process, process_iter, NoSuchProcess, AccessDenied
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QLabel, QPushButton, QToolButton, QLineEdit, QComboBox, QMenu, QFormLayout, QFrame, QFileIconProvider, QCheckBox, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QLabel, QPushButton, QToolButton, QLineEdit, QComboBox, QMenu, QFormLayout, QFrame, QFileIconProvider, QCheckBox, QSystemTrayIcon, QPlainTextEdit
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
 
-from src.util import logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, APP_NAME, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon, Interpret
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon, Interpret, ExceptSign
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
@@ -735,6 +735,52 @@ class MainWindow(WindowMouse, QMainWindow):
 
         if self.app:
             self.app.aboutToQuit.connect(lambda: (self._saveGeometry(), getConfig().save()))
+
+        ExceptSign.catchException.connect(self.alertException)
+        # 1 / 0  # 方便的异常窗口测试
+
+    def alertException(self, message: str):
+        """未捕获异常弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("程序发生异常"))
+        dialog.setMinimumSize(450, 300)
+
+        layout = QVBoxLayout(dialog)
+
+        text = QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(message)
+        text.setStyleSheet("background: transparent;")
+        layout.addWidget(text)
+
+        btn_layout = QHBoxLayout()
+        ignore_btn = QPushButton(tr("无视"))
+        ignore_btn.setFixedSize(120, 36)
+        log_btn = QPushButton(tr("查看日志"))
+        log_btn.setFixedSize(120, 36)
+        feedback_btn = QPushButton(tr("反馈页面"))
+        feedback_btn.setFixedSize(120, 36)
+        btn_layout.addStretch()
+        btn_layout.addWidget(ignore_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(log_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(feedback_btn)
+        btn_layout.addStretch()
+
+        ignore_btn.clicked.connect(dialog.reject)
+        log_btn.clicked.connect(lambda: (
+            self._openEditor(str(log_file)),
+            dialog.accept()
+        ))
+        feedback_btn.clicked.connect(lambda: (
+            QApplication.clipboard().setText(message),
+            webbrowser.open(f"https://github.com/{AUTHOR}/{APP_NAME}/issues"),
+            dialog.accept()
+        ))
+        layout.addLayout(btn_layout)
+
+        dialog.exec()
 
     def _syncTools(self):
         """同步 _tools 到配置"""

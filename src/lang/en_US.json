@@ -458,5 +458,9 @@
     "无法连接到": "Cannot connect to",
     "，请检查配置": ", check configuration",
     "请仅在不对云文件夹进行手动操作时启用": "Enable only if not manually modifying cloud folder",
-    "打包成 tar 的文件夹（上传 tar，对文件夹本身不同步）": "Folders to pack as tar (upload tar, skip folder itself)"
+    "打包成 tar 的文件夹（上传 tar，对文件夹本身不同步）": "Folders to pack as tar (upload tar, skip folder itself)",
+    "程序发生异常": "Program Exception",
+    "查看日志": "View Log",
+    "反馈页面": "Feedback Page",
+    "无视": "Ignore"
 }

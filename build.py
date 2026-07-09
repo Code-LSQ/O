@@ -14,10 +14,10 @@ dist = root / ".." / "dist"
 work = root / ".." / "build"
 mainpy = str(root / "o.py")
 
-# 预计发行版
+# 发行版计划，Linux 和 macOS 目前是计划中状态。
 # Windows，两种，x64、ARM64 的 .zip。
-# Linux，两种，x64、ARM64的  .AppImage ，可能会加上 .deb。
-# macOS，两种，x64、ARM64的 .dmg，可能会加上 .app。
+# Linux，两种，x64、ARM64的  .AppImage。
+# macOS，两种，x64、ARM64的 .dmg，内部是 .app。
 
 
 def pluginLib():

@@ -13,6 +13,7 @@ if sys.platform == "win32":
     from ctypes import windll
 from pathlib import Path
 from datetime import datetime
+from urllib.parse import urlparse
 from logging.handlers import RotatingFileHandler
 
 import requests
@@ -21,8 +22,11 @@ from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBox
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
 from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo
 
+AUTHOR = "Code-LSQ"
 APP_NAME = "O"
 VERSION = "0.5.0"
+REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
+UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
 root = Path(__file__).resolve().parent.parent
 plugin_dir = root / "plugin"
@@ -59,6 +63,21 @@ if arch in ("x86_64", "amd64"):
     arch = "x64"
 elif arch in ("arm64", "aarch64"):
     arch = "arm64"
+
+
+def compareVersions(v1: str, v2: str) -> int:
+    """语义化版本比较，返回 -1 (v1<v2) / 0 (相等) / 1 (v1>v2)"""
+    parts1 = [int(x) for x in v1.split(".")]
+    parts2 = [int(x) for x in v2.split(".")]
+    max_len = max(len(parts1), len(parts2))
+    parts1 += [0] * (max_len - len(parts1))
+    parts2 += [0] * (max_len - len(parts2))
+    for a, b in zip(parts1, parts2):
+        if a < b:
+            return -1
+        if a > b:
+            return 1
+    return 0
 
 
 EXTENSION = {
@@ -136,7 +155,6 @@ def service(services: list, action, timeout):
 
 class ExceptSignal(QObject):
     catchException = Signal(str)
-    showMainWindow = Signal()
 
 ExceptSign = ExceptSignal()
 
@@ -808,16 +826,27 @@ def download(url: str, path: Path, report=None):
         response = requests.get(url, timeout=10, stream=True)
         response.raise_for_status()
         disposition = response.headers.get("Content-Disposition")
-        size = response.headers.get("Content-Length")
+        size_str = response.headers.get("Content-Length")
+        size = int(size_str) if size_str else 0
         last_modified = response.headers.get("Last-Modified")
         downloaded = 0
 
-        if path.is_dir() and "filename=" in disposition:
-            name = disposition.split("filename=")[1].strip("'\"")
+        if path.is_dir():
+            name = None
+            if disposition and "filename=" in disposition:
+                name = disposition.split("filename=")[1].strip("'\"")
+            if not name:
+                name = Path(urlparse(url).path).name or "download"
             path = path / name
-        elif path.exists() and path.is_file():
-            ext = path.suffix.lower()
-            path = path
+
+        # 到这里则 path 一定是文件了
+        if path.exists():
+            stem = path.stem
+            suffix = path.suffix
+            counter = 1
+            while path.exists():
+                path = path.with_name(f"{stem}({counter}){suffix}")
+                counter += 1
 
         with open(path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -835,13 +864,36 @@ def download(url: str, path: Path, report=None):
             logger.info(f"{path} 的最后修改时间为 {time_info}")
         else:
             logger.info("服务器未返回最后修改时间")
-    
+
         return True
     except requests.exceptions.RequestException:
         logger.exception("网络错误")
     except Exception:
         logger.exception("未知下载错误")
     return False
+
+
+def urlConvert(url: str):
+    """把 https://github.com/{author}/{repo}  https://github.com/{author}/{repo}/releases  一类的网址，转化成 https://api.github.com/repos/{author}/{repo}/releases/latest """
+    if not url:
+        return ""
+    if '://' not in url:
+        url = 'https://' + url
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or '').removeprefix('www.')
+    if hostname != 'github.com':
+        return url
+    path = parsed.path.strip('/')
+    if path.endswith('.git'):
+        path = path[:-4]
+    parts = path.split('/')
+    if len(parts) < 2:
+        return url
+    author, repo = parts[0], parts[1]
+    if len(parts) >= 4 and parts[2] == 'releases' and parts[3] == 'tag':
+        tag = parts[4] if len(parts) > 4 else 'latest'
+        return f"https://api.github.com/repos/{author}/{repo}/releases/tags/{tag}"
+    return f"https://api.github.com/repos/{author}/{repo}/releases/latest"
 
 
 def folderLastModified(path):
@@ -1205,7 +1257,6 @@ def fetchWebTitle(url):
 def fetchWebIcon(url):
     """获取网站图标，保存到 data/url/ 并返回路径，失败返回 None"""
     try:
-        from urllib.parse import urlparse
         if not url.startswith("http"):
             url = "https://" + url
         parsed = urlparse(url)

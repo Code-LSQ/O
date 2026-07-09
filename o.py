@@ -10,8 +10,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # 兼容嵌入�
 from src.main import MainWindow, setApp
 from src.util import APP_NAME, VERSION, ExceptSign, logger, getDevice
 
-AUTHOR = "Code-LSQ"
-
 
 def exceptionHook(exc_type, value, tb):
     exceptionInfo = (exc_type, value, tb)

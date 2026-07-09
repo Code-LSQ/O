@@ -1,16 +1,12 @@
-import os
-import sys
 import zipfile
 import shutil
-from urllib.parse import urlparse
 
 import requests
 
-from src.util import APP_NAME, VERSION, root, data_dir, logger, arch
+from src.util import root, data_dir, logger, UPDATE
 
 # GitHub API 对未认证的匿名请求存在频率限制，手动更新无需额外线程
 
-URL = f"https://api.github.com/repos/Code-LSQ/{APP_NAME}/releases/latest"
 
 UPDATE_ZIP = data_dir / "update.zip"
 UPDATE_DIR = data_dir / "update"
@@ -19,7 +15,7 @@ UPDATE_DIR = data_dir / "update"
 def getReleaseInfo(url=None):
     """获取最新版本信息，返回 {"version": str, "body": str, "assets": [...]} 或 None"""
     if url is None:
-        url = URL
+        url = UPDATE
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -89,26 +85,3 @@ def cleanTemp():
             shutil.rmtree(UPDATE_DIR)
     except Exception:
         logger.exception("清理临时文件时出错")
-
-
-def urlConvert(url: str):
-    """把 https://github.com/{author}/{repo}  https://github.com/{author}/{repo}/releases  一类的网址，转化成 https://api.github.com/repos/{author}/{repo}/releases/latest """
-    if not url:
-        return ""
-    if '://' not in url:
-        url = 'https://' + url
-    parsed = urlparse(url)
-    hostname = (parsed.hostname or '').removeprefix('www.')
-    if hostname != 'github.com':
-        return url
-    path = parsed.path.strip('/')
-    if path.endswith('.git'):
-        path = path[:-4]
-    parts = path.split('/')
-    if len(parts) < 2:
-        return url
-    author, repo = parts[0], parts[1]
-    if len(parts) >= 4 and parts[2] == 'releases' and parts[3] == 'tag':
-        tag = parts[4] if len(parts) > 4 else 'latest'
-        return f"https://api.github.com/repos/{author}/{repo}/releases/tags/{tag}"
-    return f"https://api.github.com/repos/{author}/{repo}/releases/latest"

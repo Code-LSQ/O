@@ -4,49 +4,69 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-
 
 jobs:
   build-windows:
-    runs-on: windows-2022
     strategy:
       matrix:
-        architecture: [ x64, arm64 ]
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-arm64
+
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v7
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        env:
+          PIP_NO_INDEX: false
+
+      - name: Build with PyInstaller
+        run: python build.py
+
+      - name: Package zip
+        shell: pwsh
+        run: Compress-Archive -Path ../dist/O -DestinationPath Windows_${{ matrix.arch }}.zip
+
+      - name: Create Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ github.ref_name }} --generate-notes
+
+      - name: Upload Release Asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload ${{ github.ref_name }} Windows_*.zip --clobber
 
   build-linux:
     strategy:
       matrix:
         include:
           - arch: x64
-            runner: ubuntu-22.04
-            deb_arch: amd64
-            appimage_arch: x64
+            os: ubuntu-22.04
           - arch: arm64
-            runner: ubuntu-24.04-arm
-            deb_arch: arm64
-            appimage_arch: aarch64
-    runs-on: ${{ matrix.runner }}
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
 
   build-macos:
     strategy:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            os: macos-14
             openssl_workaround: 'false'
           - arch: x64
-            runner: macos-15-intel
+            os: macos-15-intel
             openssl_workaround: 'true'
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.os }}

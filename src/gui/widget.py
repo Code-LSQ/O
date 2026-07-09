@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QMen
 from PySide6.QtCore import Qt, Signal, QRect, QByteArray, QTimer, QSize, QBuffer, QObject, QThread
 from PySide6.QtGui import QPainter, QColor, QTextCursor, QTextCharFormat, QAction, QKeySequence, QPixmap, QTextDocument, QImage, QImageReader, QPalette, qGray
 
-from src.util import logger, EXTENSION, inputDialog, tr, messageBox, arch, root, VERSION, download
+from src.util import logger, EXTENSION, inputDialog, tr, messageBox, arch, root, VERSION, download, compareVersions
 from src.config import getConfig, DEFAULT_CONFIG
 from src.core.update import getReleaseInfo, extractUpdate, writeUpdateScript, cleanTemp, UPDATE_ZIP, UPDATE_DIR
 
@@ -1421,6 +1421,7 @@ class UpdateDialog(QDialog):
         self._release_info = None
         self._downloading = False
         self._installing = False
+        self._checking = False
         self._download_url = None
         self._initUI()
 
@@ -1465,10 +1466,16 @@ class UpdateDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-    def reject(self):
-        if not self._installing:
-            cleanTemp()
-        super().reject()
+    def closeEvent(self, event):
+        if self._downloading:
+            messageBox(self, tr("提示"), tr("正在下载更新，请等待下载完成"), 1)
+            event.ignore()
+            return
+        if self._installing:
+            event.ignore()
+            return
+        cleanTemp()
+        event.accept()
 
     @staticmethod
     def checkAndUpdate(parent):
@@ -1476,16 +1483,19 @@ class UpdateDialog(QDialog):
         dialog._check()
         dialog.exec()
 
-    def _setButtonsEnabled(self, enabled):
+    def _setCheckEnabled(self, enabled):
         self._check_btn.setEnabled(enabled)
 
     def _check(self):
+        if self._checking:
+            return
+        self._checking = True
         self._release_info = None
         self._download_btn.setEnabled(False)
         self._notes_text.hide()
         self._notes_label.hide()
         self._version_label.setText(tr("检查中..."))
-        self._setButtonsEnabled(False)
+        self._setCheckEnabled(False)
 
         self._thread = QThread()
         self._worker = _CheckWorker()
@@ -1498,14 +1508,15 @@ class UpdateDialog(QDialog):
         self._thread.start()
 
     def _onCheckResult(self, info):
-        self._setButtonsEnabled(True)
+        self._checking = False
+        self._setCheckEnabled(True)
         if info is None:
             messageBox(self, tr("错误"), tr("检查更新失败"), 1)
             self._version_label.setText(tr("检查更新失败"))
             return
 
         version = info["version"]
-        if version == VERSION:
+        if compareVersions(version, VERSION) <= 0:
             self._version_label.setText(tr("当前已是最新版本"))
             return
 
@@ -1572,7 +1583,7 @@ class UpdateDialog(QDialog):
             return
 
         self._installing = True
-        self._setButtonsEnabled(False)
+        self._setCheckEnabled(False)
         self._close_btn.setEnabled(False)
         self._version_label.setText(tr("准备更新..."))
 
@@ -1580,7 +1591,7 @@ class UpdateDialog(QDialog):
             messageBox(self, tr("错误"), tr("解压更新包失败"), 1)
             self._installing = False
             self._close_btn.setEnabled(True)
-            self._setButtonsEnabled(True)
+            self._setCheckEnabled(True)
             return
 
         try:
@@ -1596,7 +1607,7 @@ class UpdateDialog(QDialog):
             messageBox(self, tr("错误"), tr("启动更新脚本失败"), 1)
             self._installing = False
             self._close_btn.setEnabled(True)
-            self._setButtonsEnabled(True)
+            self._setCheckEnabled(True)
             return
 
         QTimer.singleShot(500, QApplication.quit)
