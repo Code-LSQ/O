@@ -392,7 +392,7 @@ class SettingsDialog(QDialog):
         # 启动快捷键
         self.launcher_hotkey_edit = QLineEdit()
         self.launcher_hotkey_edit.setText(launcher_config.get("hotkey", ""))
-        self.launcher_hotkey_edit.setPlaceholderText("点击输入快捷键")
+        self.launcher_hotkey_edit.setToolTip(tr("点击输入快捷键"))
         self.launcher_key_capture_filter = KeyCaptureFilter(self)
         self.launcher_key_capture_filter.key_captured.connect(self._onHotkeyCapture)
         self.launcher_hotkey_edit.installEventFilter(self.launcher_key_capture_filter)
@@ -472,7 +472,7 @@ class SettingsDialog(QDialog):
 
         # 环境变量
         self.temp_paths_edit = QTextEdit()
-        self.temp_paths_edit.setPlaceholderText("KEY=VALUE 或文件夹路径，每行一个")
+        self.temp_paths_edit.setToolTip(tr("KEY=VALUE 或文件夹路径，每行一个"))
         self.temp_paths_edit.setStyleSheet("background: #dddddd")
         Temp_Path = self.config.get("Launch.Runtime.Temp_Path", [])
         self.temp_paths_edit.setPlainText("\n".join(Temp_Path))

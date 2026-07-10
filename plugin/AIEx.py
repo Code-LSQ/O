@@ -1000,7 +1000,7 @@ class AIExtendPlugin(PluginBase):
         conv_id = self._conv_combo.currentData()
         if not conv_id:
             return
-        if not messageBox(self.dock, "删除对话", "确定要删除当前对话吗？", 2):
+        if not messageBox(self.dock, tr("删除对话"), tr("是否确认删除当前对话")):
             return
         profile = self._getProfileName()
         if profile in self._history and conv_id in self._history[profile]:

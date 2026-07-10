@@ -256,7 +256,7 @@ def showFile(path: str, parent=None):
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-R", path])
         if parent:
-            parent.statusBar().showMessage(f"已打开: {path}", 2000)
+            parent.statusBar().showMessage(tr("已打开") + ": " + path, 2000)
     except Exception:
         logger.exception("打开资源管理器失败")
 
@@ -355,7 +355,7 @@ def tr(key: str) -> str:
     使用规范：
     程序原生使用中文，应尽可能追求简洁的中文表达，并将变量单独放在首部或尾部，不要在中间位置。tr() 不要在 f"" 内部。如有类似情况发生，应考虑更改中文表达。
 
-    语言文件中不包含 " "、": "、"%"、"\n" 等字符，以及专有名词（Markdown、JSON、OpenList、AI、API Key、Token、Ctrl、OCR、1920x1080 等），此类内容不用 tr() 包裹，以 tr("文本") + "\n" 的形式拼接。
+    语言文件中不包含 " "、": "、"%"、"\n" 等字符，以及专有名词（Python、Java、Markdown、JSON、OpenList、AI、API Key、Token、Ctrl、OCR、1920x1080 等），此类内容不用 tr() 包裹，以 tr("文本") + "\n" 的形式拼接。
 
     文本中的英文与中文之间、专有名词与其他字符之间、字符串与变量之间，要有空格，不要在翻译中加，用 " " 拼接。如 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接。专有名词与特殊字符相邻，可以合并。如 "API " + tr("接口")，tr("最大") + " Token"。
 
@@ -377,7 +377,7 @@ def getAppPath():
 
 
 def restartApplication(parent=None):
-    if not messageBox(parent, tr("重启"), tr("确定重启应用？") + "\n" + tr("未保存的更改将丢失")):
+    if not messageBox(parent, tr("重启"), tr("确定重启应用？")):
         return
     if Interpret:
         QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
@@ -565,7 +565,7 @@ class FileDrop(QLabel):
         self.setFixedHeight(100)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("color: gray; border: 2px dashed gray;")
-        self.setText("拖拽文件或文件夹到此处")
+        self.setText(tr("拖拽文件或文件夹到此处"))
 
     def _filterFiles(self, files: list) -> list:
         if not self._file_filter:
@@ -613,7 +613,7 @@ class FileDrop(QLabel):
             self.filesDropped.emit(files)
             if len(files) == 1:
                 self.fileDropped.emit(files[0])
-            self.fileOrFolderDropped.emit(files[0] if len(files) == 1 else f"{len(files)} 个文件")
+            self.fileOrFolderDropped.emit(files[0] if len(files) == 1 else str(len(files)) + " " + tr("个文件"))
 
         event.acceptProposedAction()
 
@@ -703,7 +703,7 @@ env = RuntimeManager()
 
 
 def openTerminal(path):
-    """打开命令行"""
+    """打开终端"""
     if not path:
         logger.warning(f"无效的路径: {path!r}")
         return False
@@ -719,10 +719,10 @@ def openTerminal(path):
             subprocess.Popen(["xdg-terminal"], cwd=path, start_new_session=True)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-a", "Terminal", path], cwd=path)
-        logger.info(f"已打开命令行: {path}")
+        logger.info(f"已打开终端: {path}")
         return True
     except Exception:
-        logger.exception("打开命令行失败")
+        logger.exception("打开终端失败")
         return False
 
 
@@ -1039,7 +1039,7 @@ def inputDialog(parent, title, text="", default=""):
         if dialogBox(vlayout, dialog):
             if edit.text().strip():
                 return edit.text().strip()
-            messageBox(parent, "警告", "不能为空", 1)
+            messageBox(parent, tr("警告"), tr("不能为空"), 1)
             continue
 
         return None
@@ -1054,14 +1054,14 @@ def dictDialog(parent, title, name="名称", value="值", name_text="", value_te
         vlayout = QVBoxLayout(dialog)
         layout = QFormLayout()
         name_edit = QLineEdit(name_text)
-        layout.addRow(name, name_edit)
+        layout.addRow(tr(name), name_edit)
 
         if textedit:
             value_edit = QTextEdit(value_text)
             value_edit.setAcceptRichText(False)
         else:
             value_edit = QLineEdit(value_text)
-        layout.addRow(value, value_edit)
+        layout.addRow(tr(value), value_edit)
         vlayout.addLayout(layout)
 
         if dialogBox(vlayout, dialog):
@@ -1070,7 +1070,7 @@ def dictDialog(parent, title, name="名称", value="值", name_text="", value_te
                 value_edit.toPlainText().strip() if textedit else value_edit.text().strip()
             )
             if not name_result:
-                messageBox(parent, "警告", f"{name}不能为空", 1)
+                messageBox(parent, tr("警告"), name + " " + tr("不能为空"), 1)
                 name_text, value_text = name_result, value_result
                 continue
             return name_result, value_result
@@ -1148,9 +1148,9 @@ class ManagePair(QDialog):
         # 创建控件
         self.pair_list = QListWidget()
         self.pair_list.setStyleSheet("QListWidget::item { height: 30px; }")
-        self.add_btn = QPushButton("添加")
-        self.edit_btn = QPushButton("编辑")
-        self.delete_btn = QPushButton("删除")
+        self.add_btn = QPushButton(tr("添加"))
+        self.edit_btn = QPushButton(tr("编辑"))
+        self.delete_btn = QPushButton(tr("删除"))
 
         # 布局
         main_layout = QVBoxLayout(self)
@@ -1203,7 +1203,7 @@ class ManagePair(QDialog):
 
     def add(self):
         """添加新配对"""
-        name, value = self.pairDialog("添加")
+        name, value = self.pairDialog(tr("添加"))
         if name:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, value)
@@ -1212,13 +1212,13 @@ class ManagePair(QDialog):
     def edit(self):
         current_item = self.pair_list.currentItem()
         if not current_item:
-            messageBox(self, "警告", "请先选择一个要编辑的项", 1)
+            messageBox(self, tr("警告"), tr("请先选择一项"), 1)
             return
 
         old_name = current_item.text()
         old_value = current_item.data(Qt.ItemDataRole.UserRole)
 
-        name, value = self.pairDialog("编辑", old_name, old_value)
+        name, value = self.pairDialog(tr("编辑"), old_name, old_value)
         if name:
             current_item.setText(name)
             current_item.setData(Qt.ItemDataRole.UserRole, value)
@@ -1226,10 +1226,10 @@ class ManagePair(QDialog):
     def delete(self):
         current_item = self.pair_list.currentItem()
         if not current_item:
-            messageBox(self, "警告", "请先选择一个要删除的项", 1)
+            messageBox(self, tr("警告"), tr("请先选择一项"), 1)
             return
 
-        if messageBox(self, "确认删除", f"确定要删除 '{current_item.text()}' 吗？"):
+        if messageBox(self, tr("确认删除"), tr("是否确认删除") + " '" + current_item.text() + "'"):
             row = self.pair_list.row(current_item)
             self.pair_list.takeItem(row)
 

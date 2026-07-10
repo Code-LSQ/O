@@ -12,7 +12,7 @@ from typing import Tuple, Optional
 from PySide6.QtWidgets import QDialog, QLabel, QTextEdit, QFileDialog, QVBoxLayout
 from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from src.util import Singleton, data_dir, logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, getFilePath, dialogBox, messageBox
+from src.util import Singleton, data_dir, logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, getFilePath, dialogBox, messageBox, tr
 from src.plugin import getPluginManager
 from src.core.md import renderMarkdown
 
@@ -371,7 +371,7 @@ class FileControl:
 
     def openFile(self):
         """打开文件对话框"""
-        file_path = getFilePath(self.main, "打开文件", "所有文件 (*.*);;文本文件 (*.txt *.md)")
+        file_path = getFilePath(self.main, tr("打开文件"), tr("所有文件") + " (*.*);;" + tr("文本文件") + " (*.txt *.md)")
         if not file_path:
             return
 
@@ -399,7 +399,7 @@ class FileControl:
                 editor = self.main.tab_widget.widget(i)
                 if isinstance(editor, EditorTab) and editor.file_path == file_path:
                     self.main.tab_widget.setCurrentIndex(i)
-                    self.main.statusBar().showMessage(f"文件已在标签页中打开: {file_path}", 3000)
+                    self.main.statusBar().showMessage(tr("文件已在标签页中打开") + ": " + str(file_path), 3000)
                     return
 
         self._doOpenFile(file_path)
@@ -407,7 +407,7 @@ class FileControl:
     def _doOpenFile(self, file_path: str):
         """实际打开文件的逻辑"""
         if not file_path or not os.path.isfile(file_path):
-            messageBox(self.main, "打开失败", f"文件不存在或路径无效: {file_path}", 1)
+            messageBox(self.main, tr("打开失败"), tr("文件不存在或路径无效") + ": " + str(file_path), 1)
             return
 
         for handler in self._fileHandlers:
@@ -448,7 +448,7 @@ class FileControl:
         except (FileNotFoundError, UnicodeDecodeError, ValueError):
             pass
         except Exception as e:
-            messageBox(self.main, "打开失败", f"读取文件时发生错误: {e}", 1)
+            messageBox(self.main, tr("打开失败"), tr("读取文件时发生错误") + ": " + str(e), 1)
             return
 
         if self._tryPlugin(file_path):
@@ -499,12 +499,12 @@ class FileControl:
             self.main.config.addRecentFile(file_path)
             if truncated > 0:
                 self.main.statusBar().showMessage(
-                    f"已打开: {os.path.abspath(file_path)} （显示 {loaded_lines}/{total_lines} 行）", 5000)
+                    tr("已打开") + ": " + os.path.abspath(file_path) + " " + tr("显示") + f" {loaded_lines}/{total_lines} " + tr("行"), 5000)
             else:
-                self.main.statusBar().showMessage(f"已打开: {os.path.abspath(file_path)}", 3000)
+                self.main.statusBar().showMessage(tr("已打开") + ": " + os.path.abspath(file_path), 3000)
         except Exception as e:
             logger.exception("设置编辑器内容时发生错误")
-            messageBox(self.main, "打开失败", f"设置编辑器内容时发生错误: {e}", 1)
+            messageBox(self.main, tr("打开失败"), tr("设置编辑器内容时发生错误") + ": " + str(e), 1)
 
     def saveFile(self) -> bool:
         """保存当前文件（支持大文件翻页合并保存）"""
@@ -537,13 +537,13 @@ class FileControl:
                 self.main.tab_widget.setTabText(self.main.tab_widget.currentIndex(), editor.getTitle())
 
             if backup_path:
-                self.main.statusBar().showMessage(f"已保存: {file_path} ({encoding}) [已备份]", 3000)
+                self.main.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + encoding + " " + tr("已备份"), 3000)
             else:
-                self.main.statusBar().showMessage(f"已保存: {file_path} ({encoding})", 3000)
+                self.main.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + encoding, 3000)
             return True
 
         except Exception as e:
-            messageBox(self.main, "保存失败", f"保存文件时发生错误: {e}", 1)
+            messageBox(self.main, tr("保存失败"), tr("保存文件时发生错误") + ": " + str(e), 1)
             return False
 
     def saveFileAs(self) -> bool:
@@ -552,7 +552,7 @@ class FileControl:
         if not editor:
             return False
 
-        file_path, _ = QFileDialog.getSaveFileName(self.main, "另存为", "", "所有文件 (*.*);;文本文件 (*.txt)")
+        file_path, _ = QFileDialog.getSaveFileName(self.main, tr("另存为"), "", tr("所有文件") + " (*.*);;" + tr("文本文件") + " (*.txt)")
 
         if not file_path:
             return False
@@ -564,12 +564,12 @@ class FileControl:
         """以指定编码打开当前文件"""
         editor = self.main.getEditor()
         if not editor:
-            self.main.statusBar().showMessage("没有打开的文件", 2000)
+            self.main.statusBar().showMessage(tr("没有打开的文件"), 2000)
             return
 
         file_path = editor.file_path
         if editor._is_viewing_archive_image or not file_path:
-            self.main.statusBar().showMessage("文件未保存，无法以指定编码打开", 2000)
+            self.main.statusBar().showMessage(tr("文件未保存，无法以指定编码打开"), 2000)
             return
 
         actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
@@ -585,20 +585,20 @@ class FileControl:
                 editor.clearTruncated()
             display = encodingName(actual_encoding)
             self.main.encoding_label.setText(display)
-            self.main.statusBar().showMessage(f"已以 {display} 编码重新打开: {file_path}", 3000)
+            self.main.statusBar().showMessage(tr("已重新打开") + ": " + file_path + " - " + display, 3000)
         except Exception as e:
-            messageBox(self.main, "打开失败", f"以 {encoding} 编码读取文件失败: {e}", 1)
+            messageBox(self.main, tr("打开失败"), tr("编码读取文件失败") + " - " + encoding + ": " + str(e), 1)
 
     def saveWithEnc(self, encoding: str):
         """以指定编码保存当前文件"""
         editor = self.main.getEditor()
         if not editor:
-            self.main.statusBar().showMessage("没有打开的文件", 2000)
+            self.main.statusBar().showMessage(tr("没有打开的文件"), 2000)
             return
 
         file_path = editor.file_path
         if editor._is_viewing_archive_image or not file_path:
-            self.main.statusBar().showMessage("文件未保存，请先保存文件", 2000)
+            self.main.statusBar().showMessage(tr("文件未保存，请先保存文件"), 2000)
             return
 
         actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
@@ -609,9 +609,9 @@ class FileControl:
             editor.encoding = actual_encoding
             display = encodingName(actual_encoding)
             self.main.encoding_label.setText(display)
-            self.main.statusBar().showMessage(f"已以 {display} 编码保存: {file_path}", 3000)
+            self.main.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + display, 3000)
         except Exception as e:
-            messageBox(self.main, "保存失败", f"以 {encoding} 编码保存文件失败: {e}", 1)
+            messageBox(self.main, tr("保存失败"), tr("编码保存文件失败") + " - " + encoding + ": " + str(e), 1)
 
 
 class FileHandler:
@@ -644,9 +644,9 @@ class _ImageFileHandler(FileHandler):
     def open(self, file_path: str, main):
         editor = self._createEditor(file_path)
         if editor.loadImage(file_path):
-            main.statusBar().showMessage(f"已打开图片: {os.path.abspath(file_path)}", 3000)
+            main.statusBar().showMessage(tr("图像") + " " + tr("已打开") + ": " + os.path.abspath(file_path), 3000)
         else:
-            messageBox(main, "打开失败", "无法读取图片文件", 1)
+            messageBox(main, tr("打开失败"), tr("无法读取图片文件"), 1)
 
 
 class _ArchiveFileHandler(FileHandler):
@@ -656,7 +656,7 @@ class _ArchiveFileHandler(FileHandler):
 
     def open(self, file_path: str, main):
         self._createEditor(file_path)
-        main.statusBar().showMessage(f"已打开: {os.path.abspath(file_path)} (右键进入图库模式)", 3000)
+        main.statusBar().showMessage(tr("已打开") + ": " + os.path.abspath(file_path) + " - " + tr("右键进入图库模式"), 3000)
 
 
 class _PdfFileHandler(FileHandler):
@@ -667,16 +667,16 @@ class _PdfFileHandler(FileHandler):
     def open(self, file_path: str, main):
         editor = self._createEditor(file_path)
         if pdfView(editor, file_path):
-            main.statusBar().showMessage(f"已打开PDF: {os.path.abspath(file_path)}", 3000)
+            main.statusBar().showMessage(tr("已打开") + " PDF: " + os.path.abspath(file_path), 3000)
         else:
-            messageBox(main, "打开失败", "无法渲染PDF页面", 1)
+            messageBox(main, tr("打开失败"), tr("无法渲染PDF页面"), 1)
 
 class FileSelect(QDialog):
     """文件选择对话框，支持拖放和排除规则"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("选择文件夹")
+        self.setWindowTitle(tr("选择文件夹"))
         self.resize(500, 400)
         self.setAcceptDrops(True)
 

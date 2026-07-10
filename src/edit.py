@@ -193,7 +193,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         # 初始化状态栏
         self.setStatusBar(QStatusBar(self))
         
-        self.cursor_pos_label = QLabel("行 1, 列 1")
+        self.cursor_pos_label = QLabel("")
         self.cursor_pos_label.setMinimumWidth(120)
         self.cursor_pos_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.cursor_pos_label.setStyleSheet("background: transparent;")
@@ -369,13 +369,13 @@ class EditorWindow(WindowMouse, QMainWindow):
             return
         def callback(line: int, col: int):
             if hasattr(self, 'cursor_pos_label'):
-                self.cursor_pos_label.setText(f"行 {line}, 列 {col}")
+                self.cursor_pos_label.setText(tr("行") + f" {line}, " + tr("列") + f" {col}")
         editor._cursor_position_callback = callback
         tc = editor.text_edit.textCursor()
         line = tc.blockNumber() + 1
         col = tc.columnNumber() + 1
         if hasattr(self, 'cursor_pos_label'):
-            self.cursor_pos_label.setText(f"行 {line}, 列 {col}")
+            self.cursor_pos_label.setText(tr("行") + f" {line}, " + tr("列") + f" {col}")
 
     def _onTabChanged(self, index: int):
         """切换标签页时更新编码显示及光标位置"""
@@ -451,14 +451,14 @@ class EditorWindow(WindowMouse, QMainWindow):
             return
         
         if editor.is_modified:
-            reply = messageBox(self, "保存确认", f"是否保存 \"{editor.getTitle()}\" 的更改?", 3)
-            
+            reply = messageBox(self, tr("保存确认"), tr("是否保存更改") + " \"" + editor.getTitle() + "\"?", 3)
+
             if reply == QMessageBox.StandardButton.Save:
                 if not self.saveFile():
                     return
             elif reply == QMessageBox.StandardButton.Cancel:
                 return
-        
+
         self.tab_widget.removeTab(index)
         if hasattr(editor, '_exitPdf'):
             editor._exitPdf()
@@ -802,7 +802,7 @@ class EditorWindow(WindowMouse, QMainWindow):
                 continue
             if editor.is_modified and self.tab_widget:
                 self.tab_widget.setCurrentIndex(i)
-                reply = messageBox(self, "保存确认", f"是否保存 \"{editor.getTitle()}\" 的更改?", 3)
+                reply = messageBox(self, tr("保存确认"), tr("是否保存更改") + " \"" + editor.getTitle() + "\"?", 3)
                 
                 if reply == QMessageBox.StandardButton.Save:
                     if not self.saveFile():

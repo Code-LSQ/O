@@ -275,10 +275,10 @@ class FolderPanelManager:
                 logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
                 return
             if openTerminal(path):
-                self.parent.statusBar().showMessage(tr("已打开命令行") + f": {os.path.normpath(path)}", 2000)
+                self.parent.statusBar().showMessage(tr("已打开终端") + f": {os.path.normpath(path)}", 2000)
         except Exception:
-            logger.exception("打开命令行失败")
-            self.parent.statusBar().showMessage(tr("打开命令行失败"), 2000)
+            logger.exception("打开终端失败")
+            self.parent.statusBar().showMessage(tr("打开终端失败"), 2000)
     
     def _onHeaderClicked(self, event):
         """点击父文件夹标签时切换到上级目录"""

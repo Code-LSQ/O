@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QAction, QImage
 
 from src.file import FileOperation, pdfView, readEncoding
-from src.util import logger, EXTENSION, messageBox, urlToPath
+from src.util import logger, EXTENSION, messageBox, urlToPath, tr
 from src.core.syntax import createHighlighter
 from src.core.md import renderForView
 from src.core.timer import LRUCache
@@ -82,12 +82,12 @@ class EditorTab(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.text_edit = EditorTextEdit()
-        self.text_edit.setPlaceholderText("新建文件...")
+        self.text_edit.setPlaceholderText(tr("新建文件..."))
         self.text_edit.textChanged.connect(self._onTextChanged)
         self.text_edit._parent_tab = self
         self.text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.text_edit.installEventFilter(self)
-        self.text_edit.setZoomCallback(lambda zf: self.window().statusBar().showMessage(f"当前缩放 {int(zf * 100)}%", 1500))
+        self.text_edit.setZoomCallback(lambda zf: self.window().statusBar().showMessage(tr("当前缩放") + f" {int(zf * 100)}%", 1500))
         self.text_edit.cursor_position_changed.connect(self._onCursorPos)
         self._cursor_position_callback = None
 
@@ -101,21 +101,21 @@ class EditorTab(QWidget):
         pag_layout.setContentsMargins(8, 2, 8, 2)
         pag_layout.setSpacing(6)
 
-        self._prev_page_btn = QPushButton("上一页")
+        self._prev_page_btn = QPushButton(tr("上一页"))
         self._prev_page_btn.setFixedWidth(80)
         self._prev_page_btn.clicked.connect(lambda: self._goToPage(self._current_page - 1) if self._current_page > 0 else None)
         pag_layout.addWidget(self._prev_page_btn)
 
-        self._page_label = QLabel("第 0 / 0 页")
+        self._page_label = QLabel("")
         self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         pag_layout.addWidget(self._page_label, 1)
 
-        self._next_page_btn = QPushButton("下一页")
+        self._next_page_btn = QPushButton(tr("下一页"))
         self._next_page_btn.setFixedWidth(80)
         self._next_page_btn.clicked.connect(self._onNextPage)
         pag_layout.addWidget(self._next_page_btn)
 
-        self._load_all_btn = QPushButton("加载全部")
+        self._load_all_btn = QPushButton(tr("加载全部"))
         self._load_all_btn.setFixedWidth(100)
         self._load_all_btn.clicked.connect(lambda: self.loadAllContent())
         pag_layout.addWidget(self._load_all_btn)
@@ -125,7 +125,7 @@ class EditorTab(QWidget):
         self.image_scroll = QScrollArea()
         self.image_scroll.setWidgetResizable(True)
         self.image_label = ImageLabel()
-        self.image_label.setZoomCallback(lambda zf: self.window().statusBar().showMessage(f"当前缩放 {int(zf * 100)}%", 1500))
+        self.image_label.setZoomCallback(lambda zf: self.window().statusBar().showMessage(tr("当前缩放") + f" {int(zf * 100)}%", 1500))
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_scroll.setWidget(self.image_label)
         self.image_scroll.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -146,12 +146,12 @@ class EditorTab(QWidget):
         gallery_toolbar_layout = QHBoxLayout(self._gallery_toolbar)
         gallery_toolbar_layout.setContentsMargins(5, 0, 5, 0)
         
-        self._gallery_back_btn = QPushButton("← 返回编辑器")
+        self._gallery_back_btn = QPushButton(tr("← 返回编辑器"))
         self._gallery_back_btn.setFixedWidth(120)
         self._gallery_back_btn.clicked.connect(self._exitGallery)
         self._gallery_back_btn.setStyleSheet("border: none; padding: 5px;")
         
-        self._gallery_title_label = QLabel("ZIP 图库")
+        self._gallery_title_label = QLabel("ZIP " + tr("图库"))
         self._gallery_title_label.setStyleSheet("font-weight: bold; color: #333333;")
         
         gallery_toolbar_layout.addWidget(self._gallery_back_btn)
@@ -524,7 +524,7 @@ class EditorTab(QWidget):
         if self.file_path:
             name = os.path.basename(self.file_path)
         else:
-            name = "未命名"
+            name = tr("未命名")
         if self.is_modified:
             name += " *"
         return name
@@ -702,11 +702,11 @@ class EditorTab(QWidget):
             return False
 
         if not os.path.exists(self.file_path):
-            messageBox(self, "重新加载失败", f"文件不存在: {self.file_path}", 1)
+            messageBox(self, tr("重新加载失败"), tr("文件不存在") + ": " + str(self.file_path), 1)
             return False
 
         if self.is_modified:
-            if not messageBox(self, "未保存的修改", "文件已修改但未保存。\n是否重新加载并丢弃修改？"):
+            if not messageBox(self, tr("未保存的修改"), tr("是否重新加载并丢弃修改")):
                 return False
 
         old_cursor_pos = self.text_edit.textCursor().position()
@@ -772,7 +772,7 @@ class EditorTab(QWidget):
                     self.setContent(content, emit_changed=False)
                     self.encoding = encoding
         except Exception as e:
-            messageBox(self, "重新加载失败", f"无法重新加载文件: {e}", 1)
+            messageBox(self, tr("重新加载失败"), tr("无法重新加载文件") + ": " + str(e), 1)
             return False
 
         self.is_modified = False
@@ -839,7 +839,7 @@ class EditorTab(QWidget):
             return
         total = self._total_pages
         cur = self._current_page + 1
-        self._page_label.setText(f"第 {cur} / {total} 页")
+        self._page_label.setText(tr("第") + f" {cur} / {total} " + tr("页"))
         self._prev_page_btn.setEnabled(cur > 1)
         self._next_page_btn.setEnabled(cur < total)
 
@@ -966,7 +966,7 @@ class EditorTab(QWidget):
         self.text_edit.setVisible(False)
         self.image_scroll.setVisible(True)
         self._gallery_toolbar.setVisible(True)
-        self._gallery_title_label.setText(f"{self._archive_type.upper()} - {member_name}")
+        self._gallery_title_label.setText(self._archive_type.upper() + " - " + member_name)
         self.update()
 
     def _loadArcList(self, archive_path: str):
@@ -980,7 +980,7 @@ class EditorTab(QWidget):
     def _showImgMenu(self, pos, widget):
         """显示图片右键菜单"""
         menu = QMenu(self)
-        action = QAction("图库模式", menu)
+        action = QAction(tr("图库模式"), menu)
         if self._archive_type:
             action.triggered.connect(self._enterArcGallery)
         else:

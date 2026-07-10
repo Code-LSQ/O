@@ -20,7 +20,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
 from src.file import fileTree, filterFiles
-from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox
+from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr
 
 PluginLib = ["queue"]
 
@@ -1736,7 +1736,7 @@ class OpenListWidget(QWidget):
             messageBox(self, "警告", "请先选择要删除的任务", 1)
             return
 
-        if not messageBox(self, "确认删除", f"确定要删除任务 '{task.name}' 吗?", 2):
+        if not messageBox(self, "确认删除", tr("是否确认删除") + " " + task.name, 2):
             self.plugin.tasks = [t for t in self.plugin.tasks if t.name != task.name]
             self.plugin.saveConfig()
             self._refreshTaskCombo()

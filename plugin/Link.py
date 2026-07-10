@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 
 from src.plugin import PluginBase
-from src.util import isAdmin, runAdmin, ManagePair, logger, checksum, messageBox, dialogBox
+from src.util import isAdmin, runAdmin, ManagePair, logger, checksum, messageBox, dialogBox, tr
 
 SOURCE_NOT_EXISTS = "源路径不存在"
 SOURCE_SYMLINK = "源路径是符号链接"
@@ -380,7 +380,7 @@ class LinkManage(QDialog):
             return
         current_item = selected[0]
 
-        if not messageBox(self, "确认删除", f"确定要删除配置 '{current_item.text()}' 吗？", 2):
+        if not messageBox(self, "确认删除", tr("是否确认删除配置") + " " + current_item.text()):
             row = self.pair_manage.pair_list.row(current_item)
             self.pair_manage.pair_list.takeItem(row)
 
