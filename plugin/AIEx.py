@@ -270,7 +270,6 @@ class AIExtendPlugin(PluginBase):
 
         self._settings_endpoint_combo.currentTextChanged.connect(self._onSettingsEndpointChanged)
         self._settings_custom_url_edit = QLineEdit()
-        self._settings_custom_url_edit.setPlaceholderText(tr("输入API地址"))
         endpoint_layout.addRow(tr("接口地址"), self._settings_custom_url_edit)
         layout.addLayout(endpoint_layout)
 
@@ -368,7 +367,6 @@ class AIExtendPlugin(PluginBase):
     def _onSettingsEndpointChanged(self, text):
         if text == "自定义":
             self._settings_custom_url_edit.clear()
-            self._settings_custom_url_edit.setPlaceholderText(tr("输入自定义API地址"))
         else:
             for name, cls, url in AI_ADAPTER:
                 if name == text:
@@ -456,7 +454,7 @@ class AIExtendPlugin(PluginBase):
         if len(self._edit_profiles) <= 1:
             messageBox(parent, tr("警告"), tr("至少保留一个配置，不能删除"), 1)
             return
-        if messageBox(parent, tr("确认删除"), f"{tr('确定要删除配置')} \"{current}\" {tr('吗')}？"):
+        if messageBox(parent, tr("确认删除"), tr("是否确认删除配置") + " " + current):
             self._edit_profiles.pop(current, None)
             self._settings_profile_combo.removeItem(self._settings_profile_combo.currentIndex())
             if self._edit_profiles:
@@ -472,11 +470,11 @@ class AIExtendPlugin(PluginBase):
         api_url = profile.get("api_url", "")
         endpoint_name = profile.get("endpoint", "")
         if not api_url:
-            messageBox(parent, tr("警告"), tr("请先设置 API 地址"), 1)
+            messageBox(parent, tr("警告"), tr("请先设置") + " API URL", 1)
             return
         is_ollama = isinstance(getAdapterUrl(api_url, self.main_window.config, api_key=api_key), OllamaAdapter)
         if not is_ollama and not api_key:
-            messageBox(parent, tr("警告"), tr("请先设置 API Key"), 1)
+            messageBox(parent, tr("警告"), tr("请先设置") + " API Key", 1)
             return
         original_text = self._settings_refresh_btn.text()
         original_enabled = self._settings_refresh_btn.isEnabled()
@@ -497,9 +495,9 @@ class AIExtendPlugin(PluginBase):
                         self._settings_model_combo.setCurrentIndex(idx)
                 else:
                     self._settings_model_combo.setCurrentIndex(0)
-            messageBox(parent, tr("刷新成功"), f"{tr('已获取')} {len(models)} {tr('个模型')}", 1)
+            messageBox(parent, tr("刷新成功"), tr("已获取模型数") + " " + str(len(models)), 1)
         except Exception as e:
-            messageBox(parent, tr("刷新失败"), f"{tr('获取模型列表失败')}: {str(e)}", 1)
+            messageBox(parent, tr("刷新失败"), tr("获取模型列表失败") + ": " + str(e), 1)
         finally:
             self._settings_refresh_btn.setText(original_text)
             self._settings_refresh_btn.setEnabled(original_enabled)
@@ -515,7 +513,10 @@ class AIExtendPlugin(PluginBase):
         lb_enable_cb.setChecked(self._edit_load_balance.get("enabled", False))
         layout2.addWidget(lb_enable_cb)
 
-        layout2.addWidget(QLabel(tr("优先级（0 禁用，1-10 值越小越优先）；权重：同优先级内按比例分配")))
+        layout2.addWidget(QLabel(
+            tr("优先级") + "（0 " + tr("禁用") + "，1-10 " + tr("值越小越优先") + "）\n"
+            + tr("权重") + "：" + tr("同优先级内按比例分配")
+        ))
         existing = self._edit_load_balance.get("profiles", {})
         rows = []
         scroll = QScrollArea()
@@ -719,7 +720,7 @@ class AIExtendPlugin(PluginBase):
         if name in ("系统提示词",):
             messageBox(self._settings_prompt_list, tr("禁止删除"), tr("内置提示词不可删除"), 1)
             return
-        if messageBox(self._settings_prompt_list, tr("确认删除"), f"{tr('确定要删除')} '{current_item.text()}' {tr('吗')}？"):
+        if messageBox(self._settings_prompt_list, tr("确认删除"), tr("是否确认删除") + " " + current_item.text()):
             self._edit_prompts.pop(name, None)
             self._settingsReloadPromptList()
 

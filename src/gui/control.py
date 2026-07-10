@@ -188,14 +188,9 @@ class WindowControl:
         self.main.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main.close_btn.clicked.connect(self.main.close)
 
-        if isinstance(container, QToolBar):
-            container.addWidget(self.main.min_btn)
-            container.addWidget(self.main.max_btn)
-            container.addWidget(self.main.close_btn)
-        else:
-            container.addWidget(self.main.min_btn)
-            container.addWidget(self.main.max_btn)
-            container.addWidget(self.main.close_btn)
+        container.addWidget(self.main.min_btn)
+        container.addWidget(self.main.max_btn)
+        container.addWidget(self.main.close_btn)
 
     def updateMaxBtn(self, is_maximized: bool):
         if hasattr(self.main, 'max_btn'):
@@ -368,16 +363,16 @@ class MenuControl:
         encoding_menu = QMenu(tr("编码"), self.main)
         menu.addMenu(encoding_menu)
 
-        def addEncItems(format_str, callback):
+        def addEncItems(suffix, callback):
             for enc in ENCODING_MAP:
-                action = QAction(format_str.format(enc), self.main)
+                action = QAction(enc + " " + suffix, self.main)
                 action.setData(enc)
                 action.triggered.connect(callback)
                 encoding_menu.addAction(action)
 
-        addEncItems(tr("以 {} 编码打开"), self.main._encodingOpen)
+        addEncItems(tr("编码打开"), self.main._encodingOpen)
         encoding_menu.addSeparator()
-        addEncItems(tr("保存为 {} 编码"), self.main._encodingSave)
+        addEncItems(tr("编码保存"), self.main._encodingSave)
 
         text_process_menu = QMenu(tr("文本处理"), self.main)
         menu.addMenu(text_process_menu)
@@ -480,7 +475,7 @@ def managePlugins(parent=None):
             return
         name = available[row]
         if not messageBox(dialog, tr("确认删除"),
-                          tr("确定要删除插件") + f" '{name}' " + tr("吗？") + "\n" +
+                          tr("是否确认删除插件") + " " + name + "\n" +
                           tr("这将同时删除插件文件和相关数据")):
             return
         errors = pm.deletePlugin(name)
@@ -488,7 +483,7 @@ def managePlugins(parent=None):
         if errors:
             messageBox(dialog, tr("删除失败"), tr("删除过程出现问题") + "\n".join(errors), 1)
         else:
-            messageBox(dialog, tr("删除成功"), tr("插件") + name + tr("已完全删除"), 1)
+            messageBox(dialog, tr("删除成功"), tr("已完全删除插件") + " " + name, 1)
         dialog.close()
         pm.reloadPlugins()
 

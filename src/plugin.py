@@ -288,7 +288,7 @@ class PluginManager(Singleton):
             try:
                 plugin.cleanup()
             except Exception:
-                    logger.exception(f"插件 {plugin_name} 清理失败")
+                logger.exception(f"插件 {plugin_name} 清理失败")
         
         plugin.enabled = False
         self.enabled_plugins[plugin_name] = False

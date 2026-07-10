@@ -538,9 +538,9 @@ class EditorWindow(WindowMouse, QMainWindow):
                 os.rename(file_path, new_path)
                 editor.setFilePath(new_path)
                 self.tab_widget.setTabText(index, editor.getTitle())
-                self.statusBar().showMessage(tr("已重命名为") + f": {new_name}", 2000)
+                self.statusBar().showMessage(tr("已重命名为") + ": " + new_name, 2000)
             except Exception as e:
-                messageBox(self, tr("错误"), tr("重命名失败") + f": {e}", 1)
+                messageBox(self, tr("错误"), tr("重命名失败") + ": " + str(e), 1)
     
     def _updateFavoritesMenu(self):
         """更新收藏夹菜单"""
@@ -618,14 +618,14 @@ class EditorWindow(WindowMouse, QMainWindow):
             normalized_path = os.path.normpath(file_path)
             self.config.addFavorite(normalized_path)
             self._updateFavoritesMenu()
-            self.statusBar().showMessage(tr("已添加到收藏夹") + f": {os.path.basename(normalized_path)}", 2000)
+            self.statusBar().showMessage(tr("已添加到收藏夹") + ": " + os.path.basename(normalized_path), 2000)
     
     def delFav(self, file_path: str):
         """从收藏夹移除"""
         if file_path:
             self.config.removeFavorite(file_path)
             self._updateFavoritesMenu()
-            self.statusBar().showMessage(tr("已从收藏夹移除") + f": {os.path.basename(file_path)}", 2000)
+            self.statusBar().showMessage(tr("已从收藏夹移除") + ": " + os.path.basename(file_path), 2000)
     
     def openFilePath(self, file_path: str):
         """打开指定路径的文件"""
@@ -770,7 +770,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             else:
                 editor.setViewMode(mode)
 
-        self.statusBar().showMessage(tr("查看模式") + f": {mode}", 2000)
+        self.statusBar().showMessage(tr("查看模式") + ": " + mode, 2000)
     
     def showSettings(self):
         """显示设置对话框"""

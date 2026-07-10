@@ -236,9 +236,10 @@ class Singleton:
         return cls._instance
 
     def __init__(self, *args, **kwargs):
-        if self._initialized:
-            return
-        self._initialized = True
+        with self.__lock:
+            if self._initialized:
+                return
+            self._initialized = True
         self._init(*args, **kwargs)
 
     def _init(self, *args, **kwargs):
@@ -352,17 +353,13 @@ def tr(key: str) -> str:
     翻译函数，使用字符串替换
 
     使用规范：
-    程序原生使用中文，应尽可能追求简洁的中文表达并将变量单独放在首部或尾部。
-    专有名词不用 tr() 包裹，也不在语言文件中，注意与其他需翻译文本加空格隔开。如  "API " + tr("接口")，tr("最大") + " Token"
-    专有名词列表： Markdown、JSON、OpenList、AI、API Key、Token、Ctrl、OCR、1920x1080、
-    注意文本中的英文与中文之间要有空格，
+    程序原生使用中文，应尽可能追求简洁的中文表达，并将变量单独放在首部或尾部，不要在中间位置。tr() 不要在 f"" 内部。如有类似情况发生，应考虑更改中文表达。
 
-    语言文件中不包含 ":" "%" 等字符，此类特殊字符不用 tr() 包裹，如 tr("文件") + "(&F)"
-    ": " 用 tr("文本")+": " 进行拼接，": " 后有变量则 tr("文本") + f": {var}"
-    其余含变量情况用 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接，将变量放在首部或尾部，中间需要空格
-    "\n" 不用 tr() 包裹，换行使用  + "\n" +  进行拼接
+    语言文件中不包含 " "、": "、"%"、"\n" 等字符，以及专有名词（Markdown、JSON、OpenList、AI、API Key、Token、Ctrl、OCR、1920x1080 等），此类内容不用 tr() 包裹，以 tr("文本") + "\n" 的形式拼接。
 
-    尽可能减少相似度较高的翻译，对其进行复用。统一中文表述。
+    文本中的英文与中文之间、专有名词与其他字符之间、字符串与变量之间，要有空格，不要在翻译中加，用 " " 拼接。如 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接。专有名词与特殊字符相邻，可以合并。如 "API " + tr("接口")，tr("最大") + " Token"。
+
+    统一中文表述，尽可能减少相似度较高的翻译，对其进行复用。
 
     """
     return Translator().tr(key)
@@ -484,7 +481,7 @@ def monitor():
         if _cpu_count:
             cpu = cpu / _cpu_count
         mem = process.memory_info().rss / (1024 * 1024)
-        usage = f"CPU {cpu:.1f}% | {tr('内存')} {mem:.0f} MB"
+        usage = f"CPU {cpu:.1f}%" + " | " + tr("内存") + f" {mem:.0f} MB"
         return usage
     except Exception:
         logger.exception("获取资源占用异常")
@@ -966,8 +963,8 @@ def filePathWidget(parent, form: QFormLayout, name, title="", filter="", mode="f
     edit = QLineEdit()
     hbox.addWidget(edit)
 
-    btn = QPushButton("选择")
-    btn.setFixedWidth(50)
+    btn = QPushButton(tr("选择"))
+    btn.setMinimumWidth(50)
     btn.clicked.connect(lambda: getFilePath(parent, title, filter, mode, edit))
     hbox.addWidget(btn)
 

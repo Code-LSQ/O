@@ -5,7 +5,7 @@ import zipfile
 import hashlib
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QTextEdit, QMenu
-from PySide6.QtCore import Qt, Signal, QEvent, QObject
+from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QAction, QImage
 
 from src.file import FileOperation, pdfView, readEncoding
@@ -207,7 +207,6 @@ class EditorTab(QWidget):
     def eventFilter(self, obj, event):
         if obj == self.text_edit and event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type and self.file_path:
             return self._onArcDblClick(event)
-        return False
         return super().eventFilter(obj, event)
     
     def _onArcDblClick(self, event):
@@ -933,18 +932,7 @@ class EditorTab(QWidget):
         lines = content.split('\n')
         indented_lines = ['    ' + line for line in lines]
         self.text_edit.setPlainText('\n'.join(indented_lines))
-    
-    def _createFilter(self):
-        """创建事件过滤器用于捕获双击"""
-        filter_obj = QObject()
-        def eventFilter(obj, event):
-            if event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type:
-                self._loadArcImg(event.position().toPoint())
-                return True
-            return False
-        filter_obj.eventFilter = eventFilter
-        return filter_obj
-    
+
     def _loadArcImg(self, pos):
             """根据鼠标位置加载压缩包中的图片"""
             if not self._archive_type or not self.file_path:

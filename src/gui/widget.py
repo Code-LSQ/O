@@ -585,7 +585,7 @@ class EditorTextEdit(QTextEdit):
         if selected_text:
             urls = self._extractUrls(selected_text)
             if urls:
-                action_openUrl = QAction(len(urls) + tr("个网址"), self)
+                action_openUrl = QAction(str(len(urls)) + " " + tr("个网址"), self)
                 action_openUrl.triggered.connect(lambda checked, urls=urls: self._openUrls(urls))
                 menu.addAction(action_openUrl)
                 menu.addSeparator()
@@ -597,7 +597,7 @@ class EditorTextEdit(QTextEdit):
                 search_engines = config.get("Edit.engine", {})
                 if search_engines:
                     for name, url in search_engines.items():
-                        action = QAction(tr("使用") + " " + name + " " + tr("搜索"), self)
+                        action = QAction(name + " " + tr("搜索"), self)
                         action.triggered.connect(lambda checked, u=url, t=selected_text: self._searchWith(u, t))
                         menu.addAction(action)
                     menu.addSeparator()

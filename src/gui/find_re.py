@@ -137,7 +137,7 @@ class FindReplaceDialog(QDialog):
             self.current_preset_rules = []
             self.find_edit.clear()
             self.replace_edit.clear()
-            messageBox(self, tr("格式错误"), tr("预设规则格式不正确") + f":\n{str(e)}\n\n" + tr("正确格式示例") + ":\n" + '["find1","replace1"],["find2","replace2"]', 1)
+            messageBox(self, tr("格式错误"), tr("预设规则格式不正确") + ":\n" + str(e) + "\n\n" + tr("正确格式示例") + ":\n" + '["find1","replace1"],["find2","replace2"]', 1)
 
     def _managePresets(self):
         dialog = QDialog(self)
@@ -184,7 +184,7 @@ class FindReplaceDialog(QDialog):
             except json.JSONDecodeError:
                 return False, "JSON" + tr("格式错误")
             except Exception as e:
-                return False, tr("验证错误") + f": {str(e)}"
+                return False, tr("验证错误") + ": " + str(e)
 
         def addItem():
             result = dictDialog(dialog, tr("添加"), name=tr("名称"), value=tr("规则"),

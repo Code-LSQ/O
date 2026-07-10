@@ -1386,7 +1386,7 @@ class _AutoSearchManager:
 
     def _openFile(self, file_path: str, line: int):
         if not Path(file_path).exists():
-            messageBox(self._popup, tr("错误"), tr("文件不存在") + file_path, 1)
+            messageBox(self._popup, tr("错误"), tr("文件不存在") + " " + file_path, 1)
             return
         mw = self.parent
         open_method = getattr(mw, 'openFilePath', None)
