@@ -52,6 +52,8 @@ logo_ico = icon_dir / "Logo.ico"
 logo_png = icon_dir / "Logo.png"
 logo_icn = icon_dir / "Logo.icns"
 
+backup_dir = data_dir / "backup"
+
 if getattr(sys, "frozen", False) or "__compiled__" in globals():
     Interpret = False
 else:
@@ -1296,6 +1298,18 @@ def fetchWebIcon(url):
     except Exception:
         logger.exception("获取网站图标失败")
     return None
+
+
+def fileType(path: str, mode: str) -> bool:
+    """判断文件类型，无法判断 .tar.gz 这样的类型"""
+    return Path(path).suffix.lower() in EXTENSION[mode]
+
+
+def sortKey(path):
+    """自然排序 key：提取文件名中的数字用于排序"""
+    basename = os.path.basename(path)
+    parts = re.split(r'(\d+)', basename)
+    return [int(p) if p.isdigit() else p for p in parts]
 
 
 # Windows 11 右键一级菜单

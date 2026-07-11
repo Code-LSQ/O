@@ -1,10 +1,8 @@
-import os
-
 from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy, QDialog, QLabel, QListWidget, QPushButton, QHBoxLayout, QVBoxLayout
 from PySide6.QtGui import QKeySequence, QAction, QIcon, QMouseEvent
 from PySide6.QtCore import Qt, Signal, QPoint
 
-from src.util import tr, ENCODING_MAP, EXTENSION, icon_dir, messageBox, logger
+from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger
 from src.plugin import getPluginManager
 from src.config import DEFAULT_CONFIG, getConfig
 from src.gui.view import ViewMode
@@ -270,28 +268,14 @@ class MenuControl:
             action.setChecked(mode == current)
 
     def _getModes(self, editor):
-        if not editor or not editor.file_path:
+        if not editor:
             return [ViewMode.TEXT, ViewMode.HEX]
-
-        ext = os.path.splitext(editor.file_path)[1].lower()
-        supported = [ViewMode.TEXT, ViewMode.HEX]
-
-        for mode, keys in ViewMode.EXT_KEYS.items():
-            if any(ext in EXTENSION[k] for k in keys):
-                supported.append(mode)
-
-        return supported
+        return ViewMode.supportedModes(editor.file_path)
 
     def _detectMode(self, editor):
         if not editor:
             return ViewMode.TEXT
-        if editor._comic_view_enabled or editor._is_zip_gallery:
-            return ViewMode.GALLERY
-        if editor._is_pdf:
-            return ViewMode.PDF
-        if editor.is_image:
-            return ViewMode.IMAGE
-        return editor.view_mode
+        return ViewMode.getCurrent(editor)
 
     def createMenuButton(self, title: str) -> tuple[QToolButton, QMenu]:
         btn = QToolButton()

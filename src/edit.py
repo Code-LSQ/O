@@ -9,11 +9,11 @@ from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
 from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile
-from src.file import FileControl, FileOperation, ArchiveItemModel
+from src.file import FileControl, ArchiveItemModel, FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
-from src.gui.view import FolderPanelManager, ViewMode
+from src.gui.view import ViewMode
 from src.gui.control import WindowMouse, WindowControl, MenuControl
 
 
@@ -41,7 +41,6 @@ class EditorWindow(WindowMouse, QMainWindow):
     
     def _initCoreAttributes(self):
         """初始化核心属性"""
-        self.file_op = FileOperation()
         self.find_replace_dialog = None
         self.auto_save_timer = None
         self._file_controller = FileControl(self)
@@ -114,7 +113,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         # 左侧文件夹视图（延迟创建）
         self._folder_panel_wrapper = None
         self._folder_placeholder = None
-        self.archive_model = ArchiveItemModel(self.file_op)
+        self.archive_model = ArchiveItemModel()
         
         # 编辑器区域
         editor_widget = QWidget()
@@ -188,7 +187,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         content_layout.addWidget(self.splitter)
         
         # 初始化文件夹面板管理器（在splitter创建之后）
-        self._folder_panel_manager = FolderPanelManager(self, self.file_op, self.splitter, self.config, self._folder_placeholder, self)
+        self._folder_panel_manager = FolderPanelManager(self, self.splitter, self.config, self._folder_placeholder, self)
         
         # 初始化状态栏
         self.setStatusBar(QStatusBar(self))
@@ -323,7 +322,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             
             try:
                 encoding = editor.encoding
-                self.file_op.createBackup(file_path, self.config)
+                createBackup(file_path, self.config)
                 with open(file_path, "w", encoding=encoding) as f:
                     f.write(editor.text_edit.toPlainText())
                 editor.markSaved()
@@ -383,8 +382,12 @@ class EditorWindow(WindowMouse, QMainWindow):
             return
         editor = self.getEditor()
         if editor:
+            from src.gui.view import ViewMode
+            if editor._current_mode:
+                handler = editor.getHandler(editor._current_mode)
+                handler.activate(editor)
             self._connectCursorPosition(editor)
-            if editor.is_image:
+            if editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
                 self.encoding_label.setVisible(False)
             else:
                 self.encoding_label.setVisible(True)
@@ -394,12 +397,13 @@ class EditorWindow(WindowMouse, QMainWindow):
             self.encoding_label.setVisible(True)
             self.encoding_label.setText("UTF-8")
     
-    def addTab(self, file_path: str = None, content: str = "") -> EditorTab:
+    def addTab(self, file_path: str = None, content: str = None) -> EditorTab:
         """添加新的编辑器标签页"""
         editor = EditorTab()
         if file_path:
             editor.setFilePath(file_path)
-        editor.setContent(content)
+        if content is not None:
+            editor.setContent(content)
         
         self._applyEditorSettings(editor)
         
@@ -428,7 +432,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         if not editor or not isinstance(editor, EditorTab):
             return
         
-        if is_markdown and editor.is_markdown:
+        if is_markdown and editor._current_mode == ViewMode.MARKDOWN:
             self._toc_panel.updateToc(editor._original_content)
         else:
             self._toc_panel.hidePanel()
@@ -460,10 +464,9 @@ class EditorWindow(WindowMouse, QMainWindow):
                 return
 
         self.tab_widget.removeTab(index)
-        if hasattr(editor, '_exitPdf'):
-            editor._exitPdf()
-        if hasattr(editor, '_exitGallery'):
-            editor._exitGallery()
+        cur_handler = editor.getHandler(editor._current_mode)
+        cur_handler.deactivate(editor)
+        cur_handler.close(editor)
         if hasattr(editor, '_markdown_cache'):
             editor._markdown_cache.clear()
         if hasattr(editor, 'highlighter') and editor.highlighter:
@@ -472,10 +475,10 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor._tar_image_paths = []
         editor._archive_current_image = None
         editor._is_viewing_archive_image = False
-        editor._is_zip_gallery = False
         editor._archive_type = None
-        if hasattr(editor, 'image_label') and hasattr(editor.image_label, '_comic_view_enabled') and editor.image_label._comic_view_enabled:
-            editor.image_label._exitComicView()
+        gallery = editor.getHandler(ViewMode.GALLERY)
+        if gallery._gallery_view_enabled:
+            gallery._exitGalleryView(editor)
         editor.deleteLater()
         
         self._toc_panel.hidePanel()
@@ -755,20 +758,17 @@ class EditorWindow(WindowMouse, QMainWindow):
         if not editor:
             return
 
-        if mode == ViewMode.IMAGE:
-            if editor.file_path:
-                editor.loadImage(editor.file_path)
-        elif mode == ViewMode.GALLERY:
-            editor._enterFolderComic()
-        elif mode == ViewMode.PDF:
-            if editor.file_path:
-                from src.file import pdfView
-                pdfView(editor, editor.file_path)
-        else:
-            if editor.view_mode == mode:
-                editor.setViewMode(ViewMode.TEXT)
+        if editor.view_mode == mode:
+            if mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+                handler = editor.getHandler(mode)
+                handler.deactivate(editor)
+                handler.close(editor)
+                handler.open(editor, editor.file_path)
+                handler.activate(editor)
             else:
-                editor.setViewMode(mode)
+                ViewMode.switchMode(editor, ViewMode.TEXT)
+        else:
+            ViewMode.switchMode(editor, mode)
 
         self.statusBar().showMessage(tr("查看模式") + ": " + mode, 2000)
     

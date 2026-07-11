@@ -1,20 +1,20 @@
 import os
 import re
-import tarfile
-import zipfile
 import shutil
 import fnmatch
 import time
 from pathlib import Path
-from datetime import datetime
+from functools import partial
 from typing import Tuple, Optional
 
-from PySide6.QtWidgets import QDialog, QLabel, QTextEdit, QFileDialog, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QDialog, QTextEdit, QFileDialog, QVBoxLayout, QLabel, QMenu, QFileSystemModel, QTreeView
 from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from src.util import Singleton, data_dir, logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, getFilePath, dialogBox, messageBox, tr
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QAction
+
+from src.util import logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, getFilePath, dialogBox, messageBox, tr, openTerminal, showFile, formatFileSize, backup_dir, fileType
 from src.plugin import getPluginManager
-from src.core.md import renderMarkdown
+from src.gui.view import ViewMode, listArchive, readArchive, readFileLimit
+
 
 SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
 
@@ -53,314 +53,52 @@ def readEncoding(file_path: str, encoding: str = "utf-8", auto_detect: bool = Tr
     except Exception:
         raise ValueError(f"无法使用支持的编码读取文件: {file_path}")
 
-def pdfView(tab, file_path: str) -> bool:
-    """使用 QPdfView 渲染 PDF（懒加载 QtPdf DLL）"""
-    from PySide6.QtPdf import QPdfDocument
-    from PySide6.QtPdfWidgets import QPdfView
 
-    class _PdfViewer(QPdfView):
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            self._zoom_factor = 1.0
-            self.setPageMode(QPdfView.PageMode.MultiPage)
-            self.setZoomMode(QPdfView.ZoomMode.FitInView)
-            self.setZoomFactor(1.0)
-            self.setAutoFillBackground(True)
-            palette = self.palette()
-            palette.setColor(self.backgroundRole(), Qt.GlobalColor.white)
-            self.setPalette(palette)
-            self.setZoomMode(QPdfView.ZoomMode.Custom)
-
-        def wheelEvent(self, event):
-            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                delta = event.angleDelta().y()
-                if delta > 0:
-                    self._zoom_factor *= 1.1
-                else:
-                    self._zoom_factor /= 1.1
-                self._zoom_factor = max(0.1, min(10.0, self._zoom_factor))
-                self.setZoomFactor(self._zoom_factor)
-                event.accept()
-                return
-            super().wheelEvent(event)
-
+def createBackup(file_path: str, config=None) -> Optional[str]:
+    """创建文件备份，返回备份路径；config 中 history_backup 为 False 时跳过"""
+    if config is not None and not config.get("Edit.backup", True):
+        return None
+        
+    file_path = Path(file_path)
+    if not file_path.exists():
+        return None
+    
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    backup_name = f"{file_path.stem}_{getTimestamp()}{file_path.suffix}"
+    backup_path = backup_dir / backup_name
+    
     try:
-        pdf_document = QPdfDocument()
-        pdf_document.load(file_path)
-
-        error = pdf_document.error()
-        if error != QPdfDocument.Error.None_:
-            logger.error(f"PDF加载错误: {error}")
-            return False
-
-        page_count = pdf_document.pageCount()
-        if page_count <= 0:
-            logger.error(f"PDF页数为0: {file_path}")
-            return False
-
-        tab._is_pdf = True
-        tab._pdf_page_count = page_count
-        tab._pdf_file_path = file_path
-
-        pdf_view = _PdfViewer()
-        pdf_view.setDocument(pdf_document)
-
-        tab.text_edit.hide()
-        tab.image_scroll.hide()
-        if hasattr(tab, '_gallery_widget') and tab._gallery_widget:
-            tab._gallery_widget.hide()
-
-        tab._pdf_view = pdf_view
-        tab._pdf_document = pdf_document
-        tab.layout().addWidget(pdf_view)
-        pdf_view.show()
-
-        tab.is_image = True
-        tab.text_edit.setLineNumbersVisible(False)
-
-        logger.info(f"PDF渲染完成: {file_path}, 页数: {page_count}")
-        return True
+        shutil.copyfile(file_path, backup_path)
+        logger.info(f"文件备份成功: {backup_path}")
+        
+        _cleanBackups()
+        
+        return str(backup_path)
     except Exception:
-        logger.exception("渲染PDF失败")
-        return False
-
-
-class FileOperation(Singleton):
-    """文件操作核心类：读、写、备份、压缩包浏览、Markdown 渲染"""
-
-    def _init(self):
-        self.backup_dir = data_dir / "backup"
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-    def readFileLimit(self, file_path: str, max_lines: int = 50000, start_line: int = 0, encoding: str = None) -> Tuple[str, int, int, int, str]:
-        """读取文件，带行数限制，支持跳过行数（用于翻页）
-        Args:
-            file_path: 文件路径
-            max_lines: 最多读取行数
-            start_line: 起始行号（0-based，跳过前 start_line 行）
-            encoding: 指定编码（不为 None 时跳过自动检测）
-        
-        Returns:
-                content: 本次读取的内容
-                total_lines: 文件总行数
-                loaded_lines: 实际读取的行数
-                is_truncated: 1=有下一页, 0=已读完, -1=出错
-                encoding: 实际使用的编码
-        """
-        try:
-            _path = Path(file_path)
-            if encoding:
-                encodings_to_try = [encoding]
-            else:
-                encodings_to_try = ["utf-8"] + SUPPORTED_ENCODINGS
-            for enc in encodings_to_try:
-                try:
-                    lines = []
-                    total = 0
-                    with open(_path, "r", encoding=enc, newline="") as f:
-                        for line in f:
-                            if total >= start_line and len(lines) < max_lines:
-                                lines.append(line.rstrip('\n').rstrip('\r'))
-                            total += 1
-                    loaded = len(lines)
-                    if total > start_line + loaded:
-                        truncated = 1
-                    else:
-                        truncated = 0
-                    return '\n'.join(lines), total, loaded, truncated, enc
-                except (UnicodeDecodeError, UnicodeError):
-                    if encoding:
-                        with open(_path, "r", encoding=encoding, errors="replace", newline="") as f:
-                            lines = [line.rstrip('\n').rstrip('\r') for line in f]
-                        total = len(lines)
-                        return '\n'.join(lines), total, total, 0, encoding
-                    continue
-            lines = []
-            total = 0
-            with open(_path, "r", encoding="utf-8", errors="replace", newline="") as f:
-                for line in f:
-                    if total >= start_line and len(lines) < max_lines:
-                        lines.append(line.rstrip('\n').rstrip('\r'))
-                    total += 1
-            loaded = len(lines)
-            truncated = 1 if total > start_line + loaded else 0
-            return '\n'.join(lines), total, loaded, truncated, "utf-8"
-        except Exception:
-            logger.exception("带限制读取文件失败")
-            return "", 0, 0, -1, ""
-
-    def writeFile(self, file_path: str, content: str, encoding: str = "utf-8") -> bool:
-        """写入文件，自动创建父目录"""
-        try:
-            file_path = Path(file_path)
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(file_path, "w", encoding=encoding, newline="") as f:
-                f.write(content)
-            logger.info(f"文件写入成功: {file_path}")
-            return True
-        except Exception:
-            logger.exception("文件写入失败")
-            return False
-
-    def createBackup(self, file_path: str, config=None) -> Optional[str]:
-        """创建文件备份，返回备份路径；config 中 history_backup 为 False 时跳过"""
-        if config is not None and not config.get("Edit.backup", True):
-            return None
-            
-        file_path = Path(file_path)
-        if not file_path.exists():
-            return None
-        
-        backup_name = f"{file_path.stem}_{getTimestamp()}{file_path.suffix}"
-        backup_path = self.backup_dir / backup_name
-        
-        try:
-            shutil.copyfile(file_path, backup_path)
-            logger.info(f"文件备份成功: {backup_path}")
-            
-            self._cleanBackups(config)
-            
-            return str(backup_path)
-        except Exception:
-            logger.exception("备份创建失败")
-            return None
-
-    def _cleanBackups(self, config=None) -> None:
-        """清理超过指定天数的旧备份文件"""
-        try:
-            days_to_keep = 7
-            
-            if not self.backup_dir.exists():
-                return
-            
-            current_time = time.time()
-            cutoff_time = current_time - (days_to_keep * 86400)
-            
-            for backup_file in self.backup_dir.iterdir():
-                if backup_file.is_file():
-                    file_mtime = backup_file.stat().st_mtime
-                    if file_mtime < cutoff_time:
-                        backup_file.unlink()
-                        logger.info(f"已删除过期备份: {backup_file.name}")
-        except Exception:
-            logger.exception("清理旧备份失败")
-
-    def getFileInfo(self, file_path: str) -> dict:
-        """获取文件元信息：名称、路径、大小、修改/创建时间、扩展名"""
-        file_path = Path(file_path)
-        if not file_path.exists():
-            return {}
-        
-        stat = file_path.stat()
-        return {
-            "name": file_path.name,
-            "path": str(file_path.absolute()),
-            "size": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "created": datetime.fromtimestamp(stat.st_ctime).strftime("%Y-%m-%d %H:%M:%S"),
-            "extension": file_path.suffix,
-        }
-
-    def renderMarkdown(self, content: str = None, file_path: str = None) -> Optional[str]:
-        """渲染 Markdown 文本为 HTML（从文件读取或直接传内容）"""
-        try:
-            if file_path:
-                content, encoding = readEncoding(file_path)
-            elif content is None:
-                return None
-            
-            return renderMarkdown(content, file_path)
-        except Exception:
-            logger.exception("Markdown渲染失败")
-            return None
-
-    def isImageFile(self, file_path: str) -> bool:
-        """检查是否为图片文件"""
-        if not file_path:
-            return False
-        path = file_path.lower()
-        return any(path.endswith(ext) for ext in EXTENSION["IMAGE"])
-    
-    def isTarFile(self, file_path: str) -> bool:
-        """检查文件扩展名是否为 tar 压缩包格式"""
-        path = file_path.lower()
-        return any(path.endswith(ext) for ext in EXTENSION["TAR"])
-    
-    def isZipFile(self, file_path: str) -> bool:
-        """检查文件扩展名是否为 zip 压缩包格式"""
-        path = file_path.lower()
-        return any(path.endswith(ext) for ext in EXTENSION["ZIP"])
-
-    def listArchive(self, file_path: str) -> list:
-        """列出压缩包内部的文件和文件夹"""
-        file_path_obj = Path(file_path)
-        if not file_path_obj.exists():
-            return None
-        
-        file_path_lower = file_path.lower()
-        if any(file_path_lower.endswith(ext) for ext in EXTENSION["ZIP"]):
-            return self._listZip(file_path_obj)
-        elif any(file_path_lower.endswith(ext) for ext in EXTENSION["TAR"]):
-            return self._listTar(file_path_obj)
+        logger.exception("备份创建失败")
         return None
 
-    def _listZip(self, file_path: Path) -> Optional[list]:
-        """列出zip文件内容"""
-        try:
-            with zipfile.ZipFile(file_path, "r") as zf:
-                items = []
-                for info in zf.infolist():
-                    item = {
-                        "name": info.filename,
-                        "is_dir": info.is_dir(),
-                        "size": info.file_size,
-                        "compressed_size": info.compress_size,
-                    }
-                    items.append(item)
-                return items
-        except Exception:
-            logger.exception("读取ZIP文件失败")
-            return None
 
-    def _listTar(self, file_path: Path) -> Optional[list]:
-        """列出tar文件内容"""
-        try:
-            with tarfile.open(file_path, 'r:*') as tf:
-                items = []
-                for member in tf.getmembers():
-                    item = {
-                        "name": member.name,
-                        "is_dir": member.isdir(),
-                        "size": member.size,
-                        "type": member.type,
-                    }
-                    items.append(item)
-                return items
-        except Exception:
-            logger.exception("读取TAR文件失败")
-            return None
-
-    def readArchive(self, file_path: str, member_name: str) -> Optional[bytes]:
-        """读取压缩包内指定文件的内容"""
-        file_path_obj = Path(file_path)
-        if not file_path_obj.exists():
-            return None
+def _cleanBackups() -> None:
+    """清理超过指定天数的旧备份文件"""
+    try:
+        days_to_keep = 7
         
-        file_path_lower = file_path.lower()
-        try:
-            if any(file_path_lower.endswith(ext) for ext in EXTENSION["ZIP"]):
-                with zipfile.ZipFile(file_path_obj, "r") as zf:
-                    return zf.read(member_name)
-            elif any(file_path_lower.endswith(ext) for ext in EXTENSION["TAR"]):
-                with tarfile.open(file_path_obj, 'r:*') as tf:
-                    member = tf.getmember(member_name)
-                    if member.isfile():
-                        f = tf.extractfile(member)
-                        return f.read()
-        except Exception:
-            logger.exception("读取压缩包内文件失败")
-        return None
+        if not backup_dir.exists():
+            return
+        
+        current_time = time.time()
+        cutoff_time = current_time - (days_to_keep * 86400)
+        
+        for backup_file in backup_dir.iterdir():
+            if backup_file.is_file():
+                file_mtime = backup_file.stat().st_mtime
+                if file_mtime < cutoff_time:
+                    backup_file.unlink()
+                    logger.info(f"已删除过期备份: {backup_file.name}")
+    except Exception:
+        logger.exception("清理旧备份失败")
 
 
 class FileControl:
@@ -410,101 +148,31 @@ class FileControl:
             messageBox(self.main, tr("打开失败"), tr("文件不存在或路径无效") + ": " + str(file_path), 1)
             return
 
-        for handler in self._fileHandlers:
-            if handler.canHandle(file_path):
-                handler.open(file_path, self.main)
-                self.main.config.addRecentFile(file_path)
-                return
-
+        # 插件 fileHandlers 优先级最高
         for can_handle, open_file in getPluginManager(self.main).fileHandlers:
             if can_handle(file_path):
                 open_file(file_path, self.main)
                 self.main.config.addRecentFile(file_path)
                 return
 
-        self._openTextFile(file_path)
+        if self.main._use_tabs:
+            editor = self.main.addTab(file_path)
+        else:
+            editor = self.main.single_editor
+            editor.setFilePath(file_path)
 
-    @property
-    def _fileHandlers(self):
-        """获取文件处理器列表（惰性初始化）"""
-        if not hasattr(self, '_handlers_cache'):
-            self._handlers_cache = [
-                _ImageFileHandler(self.main),
-                _ArchiveFileHandler(self.main),
-                _PdfFileHandler(self.main),
-            ]
-        return self._handlers_cache
+        editor.file_path = file_path
+        editor.setupHighlighter()
 
-    def _openTextFile(self, file_path: str):
-        """打开文本文件（支持大文件翻页截断）"""
-        content, encoding = None, None
-        total_lines = 0
-        loaded_lines = 0
-        truncated = 0
+        ViewMode.openFile(editor, file_path)
+        if self.main._use_tabs:
+            self.main._onTabChanged(self.main.tab_widget.currentIndex())
 
-        try:
-            content, total_lines, loaded_lines, truncated, encoding = \
-                self.main.file_op.readFileLimit(file_path, max_lines=50000, start_line=0)
-        except (FileNotFoundError, UnicodeDecodeError, ValueError):
-            pass
-        except Exception as e:
-            messageBox(self.main, tr("打开失败"), tr("读取文件时发生错误") + ": " + str(e), 1)
-            return
-
-        if self._tryPlugin(file_path):
-            return
-
-        self._setupEditor(file_path, content, encoding, total_lines, loaded_lines, truncated)
-
-    def _tryPlugin(self, file_path: str) -> bool:
-        """尝试使用插件处理文件"""
-        plugin_manager = getPluginManager(self.main)
-        for plugin_name, plugin in plugin_manager.plugins.copy().items():
-            if hasattr(plugin, 'is_supported') and callable(plugin.is_supported) and plugin.is_supported(file_path):
-                logger.info(f"使用插件 {plugin_name} 打开文件: {file_path}")
-                if self._handlePlugin(plugin, file_path):
-                    return True
-        return False
-
-    def _handlePlugin(self, plugin, file_path: str) -> bool:
-        """未设置处理方式的文件尝试使用插件处理"""
-        try:
-            editor = None
-            if self.main._use_tabs:
-                editor = self.main.addTab(file_path, "")
-            else:
-                editor = self.main.single_editor
-                editor.setContent("")
-                editor.setFilePath(file_path)
-            return False
-        except Exception:
-            logger.exception("插件文件处理失败")
-            return False
-
-    def _setupEditor(self, file_path: str, content, encoding: str,
-                           total_lines: int = 0, loaded_lines: int = 0, truncated: int = 0):
-        """设置文本编辑器（支持大文件截断信息）"""
-        try:
-            if self.main._use_tabs:
-                editor = self.main.addTab(file_path, content)
-            else:
-                editor = self.main.single_editor
-                editor.setContent(content)
-                editor.setFilePath(file_path)
-            editor.encoding = encoding
-            if truncated > 0:
-                editor.setTruncated(total_lines, loaded_lines, file_path, encoding)
-            self.main.encoding_label.setText(encodingName(encoding) if encoding else "")
-            self.main._toc_panel.hidePanel()
-            self.main.config.addRecentFile(file_path)
-            if truncated > 0:
-                self.main.statusBar().showMessage(
-                    tr("已打开") + ": " + os.path.abspath(file_path) + " " + tr("显示") + f" {loaded_lines}/{total_lines} " + tr("行"), 5000)
-            else:
-                self.main.statusBar().showMessage(tr("已打开") + ": " + os.path.abspath(file_path), 3000)
-        except Exception as e:
-            logger.exception("设置编辑器内容时发生错误")
-            messageBox(self.main, tr("打开失败"), tr("设置编辑器内容时发生错误") + ": " + str(e), 1)
+        self.main.encoding_label.setText(encodingName(editor.encoding) if editor.encoding else "")
+        self.main._toc_panel.hidePanel()
+        self.main.config.addRecentFile(file_path)
+        self.main.statusBar().showMessage(
+            tr("已打开") + ": " + os.path.abspath(file_path), 3000)
 
     def saveFile(self) -> bool:
         """保存当前文件（支持大文件翻页合并保存）"""
@@ -521,7 +189,7 @@ class FileControl:
 
         backup_path = None
         if file_path:
-            backup_path = self.main.file_op.createBackup(file_path, self.main.config)
+            backup_path = createBackup(file_path, self.main.config)
 
         try:
             # 大文件翻页模式下：合并各页内容再写出
@@ -576,7 +244,7 @@ class FileControl:
 
         try:
             content, total_lines, loaded_lines, truncated, _ = \
-                self.main.file_op.readFileLimit(file_path, max_lines=50000, start_line=0, encoding=actual_encoding)
+                readFileLimit(file_path, max_lines=50000, start_line=0, encoding=actual_encoding)
             editor.setContent(content)
             editor.encoding = actual_encoding
             if truncated > 0 and hasattr(editor, 'setTruncated'):
@@ -613,63 +281,6 @@ class FileControl:
         except Exception as e:
             messageBox(self.main, tr("保存失败"), tr("编码保存文件失败") + " - " + encoding + ": " + str(e), 1)
 
-
-class FileHandler:
-    """文件处理器基类"""
-    def __init__(self, main):
-        self.main = main
-
-    def canHandle(self, file_path: str) -> bool:
-        raise NotImplementedError
-
-    def open(self, file_path: str, main):
-        raise NotImplementedError
-
-    def _createEditor(self, file_path: str):
-        """创建或复用编辑器"""
-        if self.main._use_tabs:
-            return self.main.addTab(file_path, "")
-        else:
-            editor = self.main.single_editor
-            editor.setContent("")
-            editor.setFilePath(file_path)
-            return editor
-
-
-class _ImageFileHandler(FileHandler):
-    """图片文件处理器"""
-    def canHandle(self, file_path: str) -> bool:
-        return self.main.file_op.isImageFile(file_path)
-
-    def open(self, file_path: str, main):
-        editor = self._createEditor(file_path)
-        if editor.loadImage(file_path):
-            main.statusBar().showMessage(tr("图像") + " " + tr("已打开") + ": " + os.path.abspath(file_path), 3000)
-        else:
-            messageBox(main, tr("打开失败"), tr("无法读取图片文件"), 1)
-
-
-class _ArchiveFileHandler(FileHandler):
-    """压缩文件处理器（zip/tar）"""
-    def canHandle(self, file_path: str) -> bool:
-        return self.main.file_op.isZipFile(file_path) or self.main.file_op.isTarFile(file_path)
-
-    def open(self, file_path: str, main):
-        self._createEditor(file_path)
-        main.statusBar().showMessage(tr("已打开") + ": " + os.path.abspath(file_path) + " - " + tr("右键进入图库模式"), 3000)
-
-
-class _PdfFileHandler(FileHandler):
-    """PDF文件处理器"""
-    def canHandle(self, file_path: str) -> bool:
-        return file_path.lower().endswith('.pdf')
-
-    def open(self, file_path: str, main):
-        editor = self._createEditor(file_path)
-        if pdfView(editor, file_path):
-            main.statusBar().showMessage(tr("已打开") + " PDF: " + os.path.abspath(file_path), 3000)
-        else:
-            messageBox(main, tr("打开失败"), tr("无法渲染PDF页面"), 1)
 
 class FileSelect(QDialog):
     """文件选择对话框，支持拖放和排除规则"""
@@ -897,9 +508,8 @@ class ArchiveFileItem:
 class ArchiveItemModel(QAbstractItemModel):
     """支持压缩包内容的自定义模型"""
     
-    def __init__(self, file_op, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.file_op = file_op
         self.root_item = ArchiveFileItem("", True)
         self.archive_path = ""
     
@@ -909,7 +519,7 @@ class ArchiveItemModel(QAbstractItemModel):
         self.beginResetModel()
         self.root_item = ArchiveFileItem("", True)
         
-        items = self.file_op.listArchive(archive_path)
+        items = listArchive(archive_path)
         if not items:
             self.endResetModel()
             return
@@ -991,6 +601,399 @@ class ArchiveItemModel(QAbstractItemModel):
         return parent_item.childCount() if parent_item else 0
 
 
+class FileSystemModel(QFileSystemModel):
+    """文件系统模型 - 只暴露名称和大小列，大小显示为 KB/MB"""
+    def columnCount(self, parent=QModelIndex()):
+        return 2
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
+            path = self.filePath(index)
+            if os.path.isfile(path):
+                return formatFileSize(os.path.getsize(path))
+            return ""
+        return super().data(index, role)
+
+
+class FolderPanelManager:
+    """文件夹面板管理器 - 管理文件夹树视图面板"""
+
+    def __init__(self, parent, splitter, config, placeholder, main_window):
+        self.parent = parent
+        self.splitter = splitter
+        self.config = config
+        self.placeholder = placeholder
+        self.main_window = main_window
+
+        self.panel = None
+        self.model = None
+        self.tree = None
+        self.header = None
+        self.folder_path = None
+        self.current_archive_path = None
+        self.archive_model = None
+        self._folder_panel_width = 300
+
+    def create(self) -> QWidget:
+        """创建文件夹面板"""
+
+        self.panel = QWidget()
+        layout = QVBoxLayout(self.panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.header = QLabel("..")
+        self.header.setObjectName("folder_header")
+        self.header.setToolTip(tr("点击返回上级文件夹"))
+        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header.mousePressEvent = self._onHeaderClicked
+        self.header.hide()
+        layout.addWidget(self.header)
+
+        self.model = FileSystemModel()
+        self.model.setRootPath("")
+        self.model.setNameFilters(['*'])
+        self.model.setNameFilterDisables(False)
+        self.model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
+
+        self.tree = QTreeView()
+        self.tree.setModel(self.model)
+        self.tree.setHeaderHidden(True)
+        self.tree.setAnimated(False)
+        self.tree.setAcceptDrops(True)
+        self.tree.setDragDropMode(QTreeView.DragDropMode.DragDrop)
+        self.tree.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.tree.setItemsExpandable(True)
+        self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
+
+        self.tree.doubleClicked.connect(self._onTreeDblClick)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._showTreeMenu)
+        self.tree.dragEnterEvent = self._treeDragEnter
+        self.tree.dragMoveEvent = self._treeDragMove
+        self.tree.dropEvent = self._treeDrop
+
+        layout.addWidget(self.tree)
+
+        return self.panel
+
+    def _onTreeDblClick(self, index):
+        """文件夹树双击事件"""
+        if self.current_archive_path:
+            self._dblClickArc(index)
+            return
+
+        file_path = self.model.filePath(index)
+
+        if not file_path:
+            return
+
+        if os.path.isdir(file_path):
+            self.load(file_path)
+        elif fileType(file_path, "TAR") or fileType(file_path, "ZIP"):
+            self.load(file_path)
+        else:
+            try:
+                self.parent.openFilePath(file_path)
+            except Exception as e:
+                messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
+
+    def _treeDragEnter(self, event):
+        if self.current_archive_path:
+            event.ignore()
+            return
+        QTreeView.dragEnterEvent(self.tree, event)
+
+    def _treeDragMove(self, event):
+        if self.current_archive_path:
+            event.ignore()
+            return
+        QTreeView.dragMoveEvent(self.tree, event)
+
+    def _treeDrop(self, event):
+        if self.current_archive_path:
+            event.ignore()
+            return
+        event.ignore()
+
+    def _dblClickArc(self, index):
+        """压缩包内文件双击事件"""
+        item = index.internalPointer()
+        if not item:
+            return
+
+        if item.is_dir:
+            if item.childCount() > 0:
+                if self.tree.isExpanded(index):
+                    self.tree.collapse(index)
+                else:
+                    self.tree.expand(index)
+        else:
+            name_lower = item.full_path.lower()
+            is_image = any(name_lower.endswith(ext) for ext in EXTENSION["IMAGE"])
+
+            content = readArchive(self.current_archive_path, item.full_path)
+            if content is None:
+                messageBox(self.parent, tr("错误"), tr("无法读取压缩包内文件"), 1)
+                return
+
+            archive_name = os.path.basename(self.current_archive_path)
+            display_path = f"{archive_name}/{item.full_path}"
+
+            if is_image:
+                if self.main_window._use_tabs:
+                    editor = self.main_window.addTab(display_path)
+                    editor.file_path = self.current_archive_path
+                    gallery = editor.getHandler(ViewMode.GALLERY)
+                    gallery.archive_type = "zip" if fileType(self.current_archive_path, "ZIP") else "tar"
+                    handler = editor.getHandler(ViewMode.IMAGE)
+                    handler.openArchiveImage(editor, self.current_archive_path, item.full_path)
+                else:
+                    editor = self.main_window.single_editor
+                    editor.file_path = self.current_archive_path
+                    gallery = editor.getHandler(ViewMode.GALLERY)
+                    gallery.archive_type = "zip" if fileType(self.current_archive_path, "ZIP") else "tar"
+                    handler = editor.getHandler(ViewMode.IMAGE)
+                    handler.openArchiveImage(editor, self.current_archive_path, item.full_path)
+            else:
+                try:
+                    content_str = content.decode("utf-8", errors="replace")
+                except Exception:
+                    content_str = str(content)
+
+                if self.main_window._use_tabs:
+                    editor = self.main_window.addTab(display_path, content_str)
+                else:
+                    editor = self.main_window.single_editor
+                    editor.setContent(content_str)
+                    editor.setFilePath(display_path)
+
+            self.main_window.config.addRecentFile(self.current_archive_path)
+            self.main_window.statusBar().showMessage(tr("已打开") + " " + display_path, 3000)
+
+    def _showTreeMenu(self, pos):
+        """显示文件夹树右键菜单"""
+        menu = QMenu(self.parent)
+
+        close_action = QAction(tr("关闭文件夹视图"), self.parent)
+        close_action.triggered.connect(self.close)
+        menu.addAction(close_action)
+
+        index = self.tree.indexAt(pos)
+        if index.isValid():
+            item_path = self.model.filePath(index)
+            if isinstance(item_path, str) and item_path:
+                openTerminal_action = QAction(tr("在终端中打开"), self.parent)
+                openTerminal_action.triggered.connect(partial(self.openTerminal, item_path))
+                menu.addAction(openTerminal_action)
+
+                show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
+                show_in_explorer_action.triggered.connect(lambda checked=False, fp=item_path: showFile(fp, self.parent))
+                menu.addAction(show_in_explorer_action)
+
+                menu.addSeparator()
+
+                item_path_norm = os.path.normpath(item_path)
+                if self.main_window.config.isFavorite(item_path_norm):
+                    remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
+                    remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.delFav(fp))
+                    menu.addAction(remove_fav_action)
+                else:
+                    add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
+                    add_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.addFav(fp))
+                    menu.addAction(add_fav_action)
+
+                if os.path.isfile(item_path):
+                    move_to_trash_action = QAction(tr("移动到回收站"), self.parent)
+                    move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.recycle(fp))
+                    menu.addAction(move_to_trash_action)
+        elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
+            openTerminal_action = QAction(tr("在终端中打开"), self.parent)
+            openTerminal_action.triggered.connect(partial(self.openTerminal, self.folder_path))
+            menu.addAction(openTerminal_action)
+
+            show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
+            show_in_explorer_action.triggered.connect(lambda: showFile(self.folder_path, self.parent))
+            menu.addAction(show_in_explorer_action)
+
+            menu.addSeparator()
+
+            folder_path_norm = os.path.normpath(self.folder_path)
+            if self.main_window.config.isFavorite(folder_path_norm):
+                remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
+                remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.delFav(fp))
+                menu.addAction(remove_fav_action)
+            else:
+                add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
+                add_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.addFav(fp))
+                menu.addAction(add_fav_action)
+
+        menu.exec_(self.tree.mapToGlobal(pos))
+
+    def recycle(self, item_path: str):
+        """移动文件到回收站"""
+        from src.system import moveTrash
+        if moveTrash(item_path):
+            self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
+            if self.panel is not None and self.folder_path:
+                self.load(self.folder_path)
+        else:
+            messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
+
+    def openTerminal(self, path):
+        """在终端中打开"""
+        try:
+            if not isinstance(path, str) or not path:
+                logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
+                return
+            if openTerminal(path):
+                self.parent.statusBar().showMessage(tr("已打开终端") + f": {os.path.normpath(path)}", 2000)
+        except Exception:
+            logger.exception("打开终端失败")
+            self.parent.statusBar().showMessage(tr("打开终端失败"), 2000)
+
+    def _onHeaderClicked(self, event):
+        """点击父文件夹标签时切换到上级目录"""
+        if self.current_archive_path:
+            parent_path = os.path.dirname(self.current_archive_path)
+            if parent_path and parent_path != self.current_archive_path:
+                self.load(parent_path)
+        elif self.folder_path:
+            parent_path = os.path.dirname(self.folder_path)
+            if parent_path and parent_path != self.folder_path:
+                self.load(parent_path)
+
+    def ensureCreated(self):
+        """确保面板已创建"""
+        if self.panel is not None:
+            return
+
+        self.create()
+
+        if self.placeholder is not None:
+            index = self.splitter.indexOf(self.placeholder)
+            if index >= 0:
+                self.splitter.replaceWidget(index, self.panel)
+            self.placeholder.deleteLater()
+            self.placeholder = None
+        else:
+            index = self.splitter.count() - 1
+            if index >= 0:
+                self.splitter.insertWidget(index, self.panel)
+
+        self.splitter.handle(0).setEnabled(True)
+        self.panel.setMinimumWidth(250)
+        self.panel.show()
+
+        if self.main_window:
+            self.setSizes(self.main_window.width())
+
+    def load(self, folder_path: str):
+        """加载文件夹"""
+        self.ensureCreated()
+
+        if fileType(folder_path, "TAR") or fileType(folder_path, "ZIP"):
+            self._loadArchive(folder_path)
+        else:
+            self.current_archive_path = None
+            self.folder_path = folder_path
+
+            self.model.setRootPath(folder_path)
+            root_index = self.model.index(folder_path)
+            if self.tree.model() is not self.model:
+                self.tree.setModel(self.model)
+                self.tree.setHeaderHidden(True)
+            self.tree.setRootIndex(root_index)
+
+            parent_path = os.path.dirname(folder_path)
+            if parent_path and parent_path != folder_path:
+                self.header.setText(f".. {os.path.basename(folder_path)}")
+                self.header.setToolTip(folder_path)
+                self.header.show()
+            else:
+                self.header.hide()
+
+            self.config.set("Edit.folder", folder_path)
+            self.config.save()
+
+            self.parent.statusBar().showMessage(tr("已加载文件夹") + f": {os.path.abspath(folder_path)}", 3000)
+
+        if self.main_window:
+            self.setSizes(self.main_window.width())
+
+    def _loadArchive(self, archive_path: str):
+        """加载压缩包内容"""
+        if self.archive_model is None:
+            self.archive_model = ArchiveItemModel()
+
+        self.current_archive_path = archive_path
+        self.archive_model.loadArchive(archive_path)
+
+        self.tree.setModel(self.archive_model)
+
+        parent_path = os.path.dirname(archive_path)
+        if parent_path:
+            self.header.setText(f".. {os.path.basename(archive_path)}")
+            self.header.setToolTip(archive_path)
+            self.header.show()
+        else:
+            self.header.hide()
+
+        self.parent.statusBar().showMessage(tr("已加载压缩包") + f": {os.path.abspath(archive_path)}", 3000)
+
+    def setSizes(self, available_width: int):
+        """设置面板尺寸"""
+        if not self.panel:
+            return
+
+        self.splitter.handle(0).setEnabled(True)
+
+        if available_width <= 0:
+            return
+
+        self.tree.setColumnWidth(0, 220)
+        self.tree.setColumnWidth(1, 70)
+        folder_width = 320
+
+        editor_width = available_width - folder_width
+        if editor_width < 400:
+            editor_width = 400
+            folder_width = available_width - editor_width
+
+        self.splitter.setSizes([folder_width, editor_width])
+
+    def close(self):
+        """关闭并删除文件夹视图"""
+        self.config.set("Edit.folder", "")
+        self.config.save()
+
+        if self.panel is not None:
+            panel_index = self.splitter.indexOf(self.panel)
+            if panel_index < 0:
+                panel_index = 1
+
+            self.panel.setParent(None)
+            self.panel.deleteLater()
+            self.panel = None
+            self.model = None
+            self.tree = None
+            self.header = None
+            self.folder_path = None
+            self.current_archive_path = None
+
+            if self.placeholder is None:
+                placeholder = QWidget()
+                self.splitter.insertWidget(panel_index, placeholder)
+                self.placeholder = placeholder
+            self.placeholder.setFixedWidth(0)
+            self.placeholder.hide()
+
+            if self.splitter.count() > 1:
+                self.splitter.handle(0).setEnabled(False)
+
+    def isVisible(self) -> bool:
+        return self.panel is not None
+
+
 # 文件树（支持保存为文件）
 def fileTree(directory: Path, prefix: str = "") -> list:
     """递归生成树状结构的文本行列表
@@ -1020,4 +1023,3 @@ def fileTree(directory: Path, prefix: str = "") -> list:
             lines.extend(fileTree(item, sub_prefix))
 
     return lines
-

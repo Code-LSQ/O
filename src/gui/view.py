@@ -1,19 +1,19 @@
 import os
-import sys
-import shutil
-import subprocess
-from functools import partial
+import tarfile
+import zipfile
+import hashlib
+from pathlib import Path
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QMenu, QFileSystemModel, QTreeView
-from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt, QDir, QModelIndex
+from PySide6.QtCore import Qt, QTimer, QObject
+from PySide6.QtGui import QPixmap, QImage, QImageReader, QAction
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMenu
+from PySide6.QtCore import QByteArray, QBuffer, QSize
 
-from src.util import logger, openTerminal, EXTENSION, showFile, messageBox, tr, formatFileSize
-from src.file import ArchiveItemModel
+from src.util import logger, EXTENSION, tr, fileType, sortKey, ENCODING_MAP
+from src.core.md import renderForView
 
 
 class ViewMode:
-    # 显示名称，同时也是程序内部判断时的名称
     TEXT = "文本"
     MARKDOWN = "Markdown"
     HEX = "十六进制"
@@ -30,396 +30,999 @@ class ViewMode:
         HEX: ("EXECUTE", "DISK"),
     }
 
-    HANDLERS = {}
+    _HANDLERS = {}
 
+    @classmethod
+    def register(cls, mode, handler_cls):
+        cls._HANDLERS[mode] = handler_cls
 
-class FileSystemModel(QFileSystemModel):
-    """文件系统模型 - 只暴露名称和大小列，大小显示为 KB/MB"""
-    def columnCount(self, parent=QModelIndex()):
-        return 2
+    @classmethod
+    def openFile(cls, tab, file_path):
+        mode = cls.detectInitial(file_path)
+        tab.view_mode = mode
+        tab._current_mode = mode
+        tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
+        tab.is_markdown = (mode == cls.MARKDOWN)
+        handler = tab.getHandler(mode)
+        if mode in (cls.TEXT, cls.MARKDOWN):
+            content, total_lines, loaded_lines, truncated, encoding = \
+                readFileLimit(file_path, max_lines=50000, start_line=0)
+            tab.encoding = encoding
+            if truncated:
+                tab.setTruncated(total_lines, loaded_lines, file_path, encoding)
+            handler.open(tab, content=content)
+        elif mode == cls.HEX:
+            handler.open(tab, file_path=file_path)
+        else:
+            handler.open(tab, file_path=file_path)
+        return mode
 
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
-            path = self.filePath(index)
-            if os.path.isfile(path):
-                return formatFileSize(os.path.getsize(path))
-            return ""
-        return super().data(index, role)
+    @classmethod
+    def detectInitial(cls, file_path):
+        path_lower = file_path.lower()
+        if path_lower.endswith(".pdf"):
+            return cls.PDF
+        for ext in EXTENSION["IMAGE"]:
+            if path_lower.endswith(ext):
+                return cls.IMAGE
+        for key in ("ZIP", "TAR"):
+            if any(path_lower.endswith(ext) for ext in EXTENSION[key]):
+                return cls.HEX
+        for mode, keys in cls.EXT_KEYS.items():
+            if mode == cls.GALLERY:
+                continue
+            for k in keys:
+                if any(path_lower.endswith(ext) for ext in EXTENSION[k]):
+                    return mode
+        return cls.TEXT
 
-
-class FolderPanelManager:
-    """文件夹面板管理器 - 管理文件夹树视图面板"""
-    
-    def __init__(self, parent, file_op, splitter, config, placeholder, main_window):
-        self.parent = parent
-        self.file_op = file_op
-        self.splitter = splitter
-        self.config = config
-        self.placeholder = placeholder
-        self.main_window = main_window
-        
-        self.panel = None
-        self.model = None
-        self.tree = None
-        self.header = None
-        self.folder_path = None
-        self.current_archive_path = None
-        self.archive_model = None
-        self._folder_panel_width = 300
-    
-    def create(self) -> QWidget:
-        """创建文件夹面板"""
-        
-        self.panel = QWidget()
-        layout = QVBoxLayout(self.panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.header = QLabel("..")
-        self.header.setObjectName("folder_header")
-        self.header.setToolTip(tr("点击返回上级文件夹"))
-        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.header.mousePressEvent = self._onHeaderClicked
-        self.header.hide()
-        layout.addWidget(self.header)
-        
-        self.model = FileSystemModel()
-        self.model.setRootPath("")
-        self.model.setNameFilters(['*'])
-        self.model.setNameFilterDisables(False)
-        self.model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
-        
-        self.tree = QTreeView()
-        self.tree.setModel(self.model)
-        self.tree.setHeaderHidden(True)
-        self.tree.setAnimated(False)
-        self.tree.setAcceptDrops(True)
-        self.tree.setDragDropMode(QTreeView.DragDropMode.DragDrop)
-        self.tree.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.tree.setItemsExpandable(True)
-        self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
-        
-        self.tree.doubleClicked.connect(self._onTreeDblClick)
-        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._showTreeMenu)
-        self.tree.dragEnterEvent = self._treeDragEnter
-        self.tree.dragMoveEvent = self._treeDragMove
-        self.tree.dropEvent = self._treeDrop
-        
-        layout.addWidget(self.tree)
-        
-        return self.panel
-    
-    def _onTreeDblClick(self, index):
-        """文件夹树双击事件"""
-        if self.current_archive_path:
-            self._dblClickArc(index)
-            return
-        
-        file_path = self.model.filePath(index)
-        
+    @classmethod
+    def supportedModes(cls, file_path=None):
+        modes = [cls.TEXT, cls.HEX]
         if not file_path:
+            return modes
+        path_lower = file_path.lower()
+        for mode, keys in cls.EXT_KEYS.items():
+            for k in keys:
+                if any(path_lower.endswith(ext) for ext in EXTENSION[k]):
+                    modes.append(mode)
+                    break
+        if path_lower.endswith(".pdf"):
+            modes.append(cls.PDF)
+        return modes
+
+    @classmethod
+    def getCurrent(cls, tab):
+        return getattr(tab, "_current_mode", tab.view_mode)
+
+    @classmethod
+    def switchMode(cls, tab, mode):
+        old = tab.view_mode
+        if old == mode:
             return
-        
-        if os.path.isdir(file_path):
-            self.load(file_path)
-        elif self.file_op.isTarFile(file_path) or self.file_op.isZipFile(file_path):
-            self.load(file_path)
+        old_handler = tab.getHandler(old)
+        new_handler = tab.getHandler(mode)
+        old_handler.deactivate(tab)
+        old_handler.close(tab)
+        tab._current_mode = mode
+        tab.view_mode = mode
+        tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
+        tab.is_markdown = (mode == cls.MARKDOWN)
+        if mode in (cls.TEXT, cls.MARKDOWN) and not tab._original_content and tab.file_path:
+            content, total_lines, loaded_lines, truncated, encoding = \
+                readFileLimit(tab.file_path, max_lines=50000, start_line=0)
+            tab.encoding = encoding
+            if truncated:
+                tab.setTruncated(total_lines, loaded_lines, tab.file_path, encoding)
+            new_handler.open(tab, content=content)
         else:
+            new_handler.open(tab, tab.file_path, None)
+        new_handler.activate(tab)
+        tab.markdown_mode_changed.emit(mode == cls.MARKDOWN)
+
+
+class TextMode:
+    def open(self, tab, file_path=None, content=None):
+        tab.image_scroll.hide()
+        if tab._pdf_widget:
+            tab._pdf_widget.hide()
+        tab.text_edit.show()
+        tab._pagination_bar.setVisible(bool(getattr(tab, "_is_truncated", False)))
+        if content is not None:
+            tab.setContent(content)
+        elif tab._original_content:
+            original = tab._original_content
+            tab._original_content = ""
+            tab.setContent(original)
+        tab.text_edit.setReadOnly(bool(getattr(tab, "_is_truncated", False)))
+
+    def close(self, tab):
+        pass
+
+    def activate(self, tab):
+        pass
+
+    def deactivate(self, tab):
+        pass
+
+
+class MarkdownMode:
+    def open(self, tab, file_path=None, content=None):
+        tab.image_scroll.hide()
+        tab.text_edit.show()
+        tab._pagination_bar.setVisible(False)
+        content_to_render = content if content is not None else tab._original_content
+        tab.setContent(content_to_render)
+        tab.text_edit.setReadOnly(False)
+
+    def close(self, tab):
+        pass
+
+    def activate(self, tab):
+        content_to_render = tab._original_content
+        if not content_to_render:
+            return
+        mtime = ""
+        if tab.file_path:
             try:
-                self.parent.openFilePath(file_path)
-            except Exception as e:
-                messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
-    
-    def _treeDragEnter(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        QTreeView.dragEnterEvent(self.tree, event)
-
-    def _treeDragMove(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        QTreeView.dragMoveEvent(self.tree, event)
-
-    def _treeDrop(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        event.ignore()
-
-    def _dblClickArc(self, index):
-        """压缩包内文件双击事件"""
-        item = index.internalPointer()
-        if not item:
-            return
-        
-        if item.is_dir:
-            if item.childCount() > 0:
-                if self.tree.isExpanded(index):
-                    self.tree.collapse(index)
-                else:
-                    self.tree.expand(index)
+                mtime = str(os.path.getmtime(tab.file_path))
+            except OSError:
+                pass
+        cache_key = hashlib.md5(
+            (content_to_render + (tab.file_path or "") + mtime).encode()
+        ).hexdigest()
+        md_cache = tab._markdown_cache
+        html = md_cache.get(cache_key)
+        if html is None:
+            html, success = renderForView(content_to_render, tab.file_path)
+            if success:
+                md_cache.set(cache_key, html)
+        if html is not None:
+            tab.text_edit.setMarkdownHtml(html)
+            tab.text_edit.setReadOnly(True)
         else:
-            name_lower = item.full_path.lower()
-            is_image = any(name_lower.endswith(ext) for ext in EXTENSION["IMAGE"])
-            
-            content = self.file_op.readArchive(self.current_archive_path, item.full_path)
-            if content is None:
-                messageBox(self.parent, tr("错误"), tr("无法读取压缩包内文件"), 1)
-                return
-            
-            archive_name = os.path.basename(self.current_archive_path)
-            display_path = f"{archive_name}/{item.full_path}"
-            
-            if is_image:
-                if self.main_window._use_tabs:
-                    editor = self.main_window.addTab(display_path, "")
-                    editor._archive_type = self.file_op.isZipFile(self.current_archive_path) and 'zip' or 'tar'
-                    editor.file_path = self.current_archive_path
-                    editor._loadSingleImg(item.full_path)
-                else:
-                    editor = self.main_window.single_editor
-                    editor._archive_type = self.file_op.isZipFile(self.current_archive_path) and 'zip' or 'tar'
-                    editor.file_path = self.current_archive_path
-                    editor._loadSingleImg(item.full_path)
-            else:
-                try:
-                    content_str = content.decode("utf-8", errors="replace")
-                except Exception:
-                    content_str = str(content)
-                
-                if self.main_window._use_tabs:
-                    editor = self.main_window.addTab(display_path, content_str)
-                else:
-                    editor = self.main_window.single_editor
-                    editor.setContent(content_str)
-                    editor.setFilePath(display_path)
-            
-            self.main_window.config.addRecentFile(self.current_archive_path)
-            self.main_window.statusBar().showMessage(tr("已打开") + " " + display_path, 3000)
-    
-    def _showTreeMenu(self, pos):
-        """显示文件夹树右键菜单"""
-        menu = QMenu(self.parent)
-        
-        close_action = QAction(tr("关闭文件夹视图"), self.parent)
-        close_action.triggered.connect(self.close)
-        menu.addAction(close_action)
-        
-        index = self.tree.indexAt(pos)
-        if index.isValid():
-            item_path = self.model.filePath(index)
-            if isinstance(item_path, str) and item_path:
-                openTerminal_action = QAction(tr("在终端中打开"), self.parent)
-                openTerminal_action.triggered.connect(partial(self.openTerminal, item_path))
-                menu.addAction(openTerminal_action)
+            tab.text_edit.setPlainText(content_to_render)
+            tab.text_edit.setReadOnly(False)
 
-                show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
-                show_in_explorer_action.triggered.connect(lambda checked=False, fp=item_path: showFile(fp, self.parent))
-                menu.addAction(show_in_explorer_action)
-                
-                menu.addSeparator()
-                
-                item_path_norm = os.path.normpath(item_path)
-                if self.main_window.config.isFavorite(item_path_norm):
-                    remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
-                    remove_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.delFav(fp))
-                    menu.addAction(remove_fav_action)
-                else:
-                    add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
-                    add_fav_action.triggered.connect(lambda checked, fp=item_path_norm: self.main_window.addFav(fp))
-                    menu.addAction(add_fav_action)
-                
-                if os.path.isfile(item_path):
-                    move_to_trash_action = QAction(tr("移动到回收站"), self.parent)
-                    move_to_trash_action.triggered.connect(lambda checked, fp=item_path: self.moveTrash(fp))
-                    menu.addAction(move_to_trash_action)
-        elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
-            openTerminal_action = QAction(tr("在终端中打开"), self.parent)
-            openTerminal_action.triggered.connect(partial(self.openTerminal, self.folder_path))
-            menu.addAction(openTerminal_action)
+    def deactivate(self, tab):
+        pass
 
-            show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
-            show_in_explorer_action.triggered.connect(lambda: showFile(self.folder_path, self.parent))
-            menu.addAction(show_in_explorer_action)
-            
-            menu.addSeparator()
-            
-            folder_path_norm = os.path.normpath(self.folder_path)
-            if self.main_window.config.isFavorite(folder_path_norm):
-                remove_fav_action = QAction(tr("从收藏夹移除"), self.parent)
-                remove_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.delFav(fp))
-                menu.addAction(remove_fav_action)
-            else:
-                add_fav_action = QAction(tr("添加到收藏夹"), self.parent)
-                add_fav_action.triggered.connect(lambda checked, fp=folder_path_norm: self.main_window.addFav(fp))
-                menu.addAction(add_fav_action)
 
-        menu.exec_(self.tree.mapToGlobal(pos))
-    
-    def moveTrash(self, item_path: str):
-        """移动文件到回收站"""
-        from src.system import moveTrash as _moveTrash
-        if _moveTrash(item_path):
-            self.parent.statusBar().showMessage(tr("已移动到回收站") + f": {item_path}", 2000)
-            if self.panel is not None and self.folder_path:
-                self.load(self.folder_path)
-        else:
-            messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
-    
-    def openTerminal(self, path):
-        """在终端中打开"""
+class HexMode:
+    def open(self, tab, file_path=None, content=None):
+        target = file_path or tab.file_path
+        if not target:
+            return
+        tab.image_scroll.hide()
+        tab.text_edit.show()
+        tab._pagination_bar.setVisible(False)
         try:
-            if not isinstance(path, str) or not path:
-                logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
-                return
-            if openTerminal(path):
-                self.parent.statusBar().showMessage(tr("已打开终端") + f": {os.path.normpath(path)}", 2000)
+            with open(target, "rb") as f:
+                data = f.read()
+            display = ""
+            for i in range(0, len(data), 16):
+                chunk = data[i:i+16]
+                hex_part = " ".join(f"{b:02X}" for b in chunk).ljust(48)
+                ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+                display += f"{i:08X}  {hex_part}  {ascii_part}\n"
+            tab.text_edit.setPlainText(display)
+            tab.text_edit.setReadOnly(True)
         except Exception:
-            logger.exception("打开终端失败")
-            self.parent.statusBar().showMessage(tr("打开终端失败"), 2000)
-    
-    def _onHeaderClicked(self, event):
-        """点击父文件夹标签时切换到上级目录"""
-        if self.current_archive_path:
-            parent_path = os.path.dirname(self.current_archive_path)
-            if parent_path and parent_path != self.current_archive_path:
-                self.load(parent_path)
-        elif self.folder_path:
-            parent_path = os.path.dirname(self.folder_path)
-            if parent_path and parent_path != self.folder_path:
-                self.load(parent_path)
-    
-    def ensureCreated(self):
-        """确保面板已创建"""
-        if self.panel is not None:
-            return
-        
-        self.create()
-        
-        if self.placeholder is not None:
-            index = self.splitter.indexOf(self.placeholder)
-            if index >= 0:
-                self.splitter.replaceWidget(index, self.panel)
-            self.placeholder.deleteLater()
-            self.placeholder = None
-        else:
-            index = self.splitter.count() - 1
-            if index >= 0:
-                self.splitter.insertWidget(index, self.panel)
-        
-        self.splitter.handle(0).setEnabled(True)
-        self.panel.setMinimumWidth(250)
-        self.panel.show()
+            logger.exception("显示十六进制失败")
 
-        if self.main_window:
-            self.setSizes(self.main_window.width())
-    
-    def load(self, folder_path: str):
-        """加载文件夹"""
-        self.ensureCreated()
-        
-        if self.file_op.isTarFile(folder_path) or self.file_op.isZipFile(folder_path):
-            self._loadArchive(folder_path)
+    def close(self, tab):
+        pass
+
+    def activate(self, tab):
+        pass
+
+    def deactivate(self, tab):
+        pass
+
+
+class ImageMode(QObject):
+    def __init__(self):
+        super().__init__()
+        self._pixmap = None
+        self._zoom_factor = 1.0
+        self._min_zoom = 0.1
+        self._max_zoom = 10.0
+        self._label = None
+        self._viewport_installed = False
+        self._filter_tab = None
+
+    def open(self, tab, file_path=None, content=None):
+        target = file_path or tab.file_path
+        if not target:
+            return
+        if self._label is None:
+            self._label = QLabel()
+            self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image = QImage(target)
+        if image.isNull():
+            return
+        pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            return
+        self._pixmap = pixmap
+        self._zoom_factor = 1.0
+        self._label.setPixmap(pixmap)
+        tab.image_scroll.setWidget(self._label)
+        if not self._viewport_installed:
+            self._filter_tab = tab
+            tab.image_scroll.viewport().installEventFilter(self)
+            self._viewport_installed = True
+        tab.text_edit.hide()
+        tab.image_scroll.show()
+        tab.text_edit.setLineNumbersVisible(False)
+        tab.is_image = True
+
+    def openArchiveImage(self, tab, archive_path, member_name):
+        content = readArchive(archive_path, member_name)
+        if content is None:
+            return
+        image = QImage.fromData(content)
+        if image.isNull():
+            return
+        pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            return
+        if self._label is None:
+            self._label = QLabel()
+            self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._pixmap = pixmap
+        self._zoom_factor = 1.0
+        self._label.setPixmap(pixmap)
+        tab.image_scroll.setWidget(self._label)
+        if not self._viewport_installed:
+            self._filter_tab = tab
+            tab.image_scroll.viewport().installEventFilter(self)
+            self._viewport_installed = True
+        tab.text_edit.hide()
+        tab.image_scroll.show()
+
+    def eventFilter(self, obj, event):
+        if event.type() == event.Type.Wheel:
+            modifiers = event.modifiers()
+            if modifiers & Qt.KeyboardModifier.ControlModifier:
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    self._zoom_factor += 0.1
+                elif delta < 0:
+                    self._zoom_factor -= 0.1
+                self._zoom_factor = max(self._min_zoom, min(self._max_zoom, self._zoom_factor))
+                tab = self._filter_tab
+                if tab:
+                    self._applyZoom(tab)
+                event.accept()
+                return True
+        return False
+
+    def _applyZoom(self, tab):
+        if self._pixmap and not self._pixmap.isNull():
+            new_width = int(self._pixmap.width() * self._zoom_factor)
+            new_height = int(self._pixmap.height() * self._zoom_factor)
+            if new_width > 0 and new_height > 0:
+                scaled = self._pixmap.scaled(
+                    new_width, new_height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self._label.setPixmap(scaled)
+                w = tab.window()
+                if hasattr(w, 'statusBar'):
+                    w.statusBar().showMessage(tr("当前缩放") + f" {int(self._zoom_factor * 100)}%", 1500)
+
+    def close(self, tab):
+        if self._viewport_installed:
+            tab.image_scroll.viewport().removeEventFilter(self)
+            self._viewport_installed = False
+            self._filter_tab = None
+        self._pixmap = None
+        self._zoom_factor = 1.0
+        if self._label:
+            self._label.clear()
+
+    def activate(self, tab):
+        pass
+
+    def deactivate(self, tab):
+        pass
+
+
+class GalleryMode(QObject):
+    def __init__(self):
+        super().__init__()
+        self.archive_type = None
+        self.zip_image_paths = []
+        self.tar_image_paths = []
+        self.archive_current_image = None
+        self.is_viewing_archive_image = False
+
+        self._gallery_view_enabled = False
+        self._gallery_container = None
+        self._gallery_layout = None
+        self._gallery_base_width = 800
+        self._archive_gallery = False
+        self._archive_images_data = []
+        self._archive_gallery_layout = None
+        self._archive_gallery_container = None
+        self._archive_gallery_base_width = 800
+        self._zoom_factor = 1.0
+        self._gallery_items = []
+        self._gallery_item_count = 0
+        self._gallery_window_size = 2
+        self._gallery_loaded = set()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        self._gallery_label_tops = []
+        self._gallery_total_height = 0
+        self._gallery_scroll_value = 0
+        self._gallery_scrollbar = None
+        self._filter_tab = None
+
+    def open(self, tab, file_path=None, content=None):
+        if self.archive_type:
+            self._enterArcGallery(tab)
         else:
-            self.current_archive_path = None
-            self.folder_path = folder_path
-            
-            self.model.setRootPath(folder_path)
-            root_index = self.model.index(folder_path)
-            if self.tree.model() is not self.model:
-                self.tree.setModel(self.model)
-                self.tree.setHeaderHidden(True)
-            self.tree.setRootIndex(root_index)
-            
-            parent_path = os.path.dirname(folder_path)
-            if parent_path and parent_path != folder_path:
-                self.header.setText(f".. {os.path.basename(folder_path)}")
-                self.header.setToolTip(folder_path)
-                self.header.show()
+            self._enterFolderGallery(tab)
+
+    def openFolderGallery(self, tab):
+        self._enterFolderGallery(tab)
+
+    def openArchiveGallery(self, tab, archive_path):
+        self.archive_type = None
+        if fileType(archive_path, "ZIP"):
+            self.archive_type = "zip"
+        elif fileType(archive_path, "TAR"):
+            self.archive_type = "tar"
+        self._enterArcGallery(tab)
+
+    def _enterFolderGallery(self, tab):
+        file_path = tab.file_path
+        if not file_path or not os.path.exists(file_path):
+            return
+        folder = os.path.dirname(file_path)
+        if not folder:
+            return
+        image_files = self._getFolderImages(folder)
+        if not image_files:
+            return
+        scroll_area = tab.image_scroll
+        avail_width = scroll_area.viewport().width() - 20
+        if avail_width <= 0:
+            avail_width = 800
+        self._gallery_view_enabled = True
+        self._gallery_base_width = avail_width
+        self._zoom_factor = 1.0
+        self._gallery_items = image_files
+        self._gallery_item_count = len(image_files)
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_path in image_files:
+            reader = QImageReader(img_path)
+            size = reader.size()
+            if not size.isValid():
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calcHeight(size))
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        self._gallery_container = QWidget()
+        self._gallery_container.setStyleSheet("background-color: white;")
+        self._gallery_layout = QVBoxLayout(self._gallery_container)
+        self._gallery_layout.setSpacing(0)
+        self._gallery_layout.setContentsMargins(0, 0, 0, 0)
+        self._gallery_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for i, img_path in enumerate(image_files):
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumHeight(self._gallery_image_heights[i])
+            label.mousePressEvent = lambda e, p=img_path: None
+            self._gallery_layout.addWidget(label)
+        self._gallery_container.setMinimumHeight(self._gallery_total_height)
+        self._gallery_container.setCursor(Qt.CursorShape.ArrowCursor)
+        scroll_area.setCursor(Qt.CursorShape.ArrowCursor)
+        scroll_area.takeWidget()
+        scroll_area.setWidget(self._gallery_container)
+        self._gallery_container.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        scroll_area.viewport().installEventFilter(self)
+        self._filter_tab = tab
+        self._gallery_scrollbar = scroll_area.verticalScrollBar()
+        self._gallery_scrollbar.valueChanged.connect(self._onGalleryScroll)
+        QTimer.singleShot(0, self._updateGallery)
+        tab.text_edit.hide()
+        tab.image_scroll.show()
+
+    def _enterArcGallery(self, tab):
+        if not self.zip_image_paths and self.archive_type == 'zip':
+            all_images, paths = isArchiveAllImages(tab.file_path)
+            if all_images:
+                self.zip_image_paths = paths
+        if not self.tar_image_paths and self.archive_type == 'tar':
+            self.tar_image_paths = listArchiveImages(tab.file_path)
+
+        image_names = self.zip_image_paths if self.archive_type == 'zip' else self.tar_image_paths
+        images_data = []
+        for img_name in image_names:
+            img_data = readArchive(tab.file_path, img_name)
+            if img_data is not None:
+                images_data.append((img_name, img_data))
+        if not images_data:
+            return
+        self._archive_images_data = images_data
+        self._archive_gallery = True
+        scroll_area = tab.image_scroll
+        avail_width = scroll_area.viewport().width() - 20
+        if avail_width <= 0:
+            avail_width = 800
+        self._gallery_view_enabled = True
+        self._gallery_base_width = avail_width
+        self._zoom_factor = 1.0
+        self._gallery_items = images_data
+        self._gallery_item_count = len(images_data)
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_name, img_data in images_data:
+            try:
+                ba = QByteArray(img_data)
+                buf = QBuffer(ba)
+                reader = QImageReader(buf)
+                size = reader.size()
+                buf.close()
+                if not size.isValid():
+                    size = QSize(800, 600)
+            except Exception:
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calcHeight(size))
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        container = QWidget()
+        container.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(container)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for i, (img_name, _) in enumerate(images_data):
+            label = QLabel()
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumHeight(self._gallery_image_heights[i])
+            label.mousePressEvent = lambda e, p=img_name: None
+            layout.addWidget(label)
+        container.setMinimumHeight(self._gallery_total_height)
+        self._gallery_container = container
+        self._gallery_layout = layout
+        self._archive_gallery_layout = layout
+        self._archive_gallery_container = container
+        self._archive_gallery_base_width = self._gallery_base_width
+        QTimer.singleShot(0, lambda: self._setupGalleryContainer(tab, container))
+        self._gallery_scrollbar = scroll_area.verticalScrollBar()
+        self._gallery_scrollbar.valueChanged.connect(self._onGalleryScroll)
+        QTimer.singleShot(0, self._updateGallery)
+        tab.text_edit.hide()
+        tab.image_scroll.show()
+
+    def _setupGalleryContainer(self, tab, container):
+        scroll_area = tab.image_scroll
+        scroll_area.takeWidget()
+        scroll_area.setWidget(container)
+        container.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+
+    def eventFilter(self, obj, event):
+        if event.type() == event.Type.Wheel:
+            modifiers = event.modifiers()
+            if modifiers & Qt.KeyboardModifier.ControlModifier:
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    self._zoom_factor += 0.1
+                elif delta < 0:
+                    self._zoom_factor -= 0.1
+                self._zoom_factor = max(0.1, min(10.0, self._zoom_factor))
+                tab = self._filter_tab
+                if tab:
+                    self._refreshGallery(tab)
+                    w = tab.window()
+                    if hasattr(w, 'statusBar'):
+                        w.statusBar().showMessage(tr("当前缩放") + f" {int(self._zoom_factor * 100)}%", 1500)
+                event.accept()
+                return True
+        return False
+
+    def _refreshGallery(self, tab):
+        if not self._gallery_view_enabled:
+            return
+        if self._archive_gallery:
+            self._refreshArchive(tab)
+        elif self._gallery_container:
+            self._refreshFolder(tab)
+
+    def _refreshArchive(self, tab):
+        if not self._archive_gallery or not self._archive_gallery_container:
+            return
+        layout = self._archive_gallery_layout
+        if not layout:
+            return
+        base_width = self._gallery_base_width
+        if base_width <= 0:
+            base_width = 800
+        for idx in list(self._gallery_loaded):
+            self._unloadGallery(idx)
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_name, img_data in self._archive_images_data:
+            try:
+                ba = QByteArray(img_data)
+                buf = QBuffer(ba)
+                reader = QImageReader(buf)
+                size = reader.size()
+                buf.close()
+                if not size.isValid():
+                    size = QSize(800, 600)
+            except Exception:
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calcHeight(size))
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if widget and i < len(self._gallery_image_heights):
+                widget.setMinimumHeight(self._gallery_image_heights[i])
+        self._archive_gallery_container.setMinimumHeight(self._gallery_total_height)
+        self._updateGallery()
+
+    def _refreshFolder(self, tab):
+        file_path = tab.file_path
+        if not file_path or not os.path.exists(file_path):
+            return
+        folder = os.path.dirname(file_path)
+        if not folder:
+            return
+        image_files = self._getFolderImages(folder)
+        if not image_files:
+            return
+        base_width = self._gallery_base_width
+        if base_width <= 0:
+            base_width = 800
+        for idx in list(self._gallery_loaded):
+            self._unloadGallery(idx)
+        self._gallery_current_center = -1
+        self._gallery_image_heights = []
+        for img_path in image_files:
+            reader = QImageReader(img_path)
+            size = reader.size()
+            if not size.isValid():
+                size = QSize(800, 600)
+            self._gallery_image_heights.append(self._calcHeight(size))
+        self._gallery_label_tops = []
+        cum_y = 0
+        for h in self._gallery_image_heights:
+            self._gallery_label_tops.append(cum_y)
+            cum_y += h
+        self._gallery_total_height = cum_y
+        for i in range(self._gallery_layout.count()):
+            widget = self._gallery_layout.itemAt(i).widget()
+            if widget and i < len(self._gallery_image_heights):
+                widget.setMinimumHeight(self._gallery_image_heights[i])
+        self._gallery_container.setMinimumHeight(self._gallery_total_height)
+        self._updateGallery()
+
+    def _exitGalleryView(self, tab):
+        self._gallery_view_enabled = False
+        self._archive_gallery = False
+        if self._gallery_scrollbar:
+            try:
+                self._gallery_scrollbar.valueChanged.disconnect(self._onGalleryScroll)
+            except (TypeError, RuntimeError):
+                pass
+            self._gallery_scrollbar = None
+        self._gallery_items = []
+        self._gallery_item_count = 0
+        self._gallery_loaded.clear()
+        self._gallery_current_center = -1
+        self._gallery_image_heights.clear()
+        self._gallery_label_tops.clear()
+        self._gallery_total_height = 0
+        self._gallery_scroll_value = 0
+        if self._gallery_layout:
+            while self._gallery_layout.count() > 0:
+                item = self._gallery_layout.takeAt(0)
+                if item and item.widget():
+                    item.widget().deleteLater()
+        if self._gallery_container:
+            scroll_area = tab.image_scroll
+            scroll_area.takeWidget()
+            scroll_area.setCursor(Qt.CursorShape.ArrowCursor)
+            self._gallery_container.deleteLater()
+            self._gallery_container = None
+            self._gallery_layout = None
+            self._archive_gallery_container = None
+            self._archive_gallery_layout = None
+        self._archive_images_data = []
+
+    def _calcHeight(self, img_size):
+        if img_size.width() <= 0:
+            return 100
+        base_width = self._gallery_base_width
+        scale = base_width * self._zoom_factor / img_size.width()
+        return max(1, int(img_size.height() * scale))
+
+    def _loadGallery(self, idx):
+        try:
+            label = self._gallery_layout.itemAt(idx).widget()
+            if not label:
+                return
+            item = self._gallery_items[idx]
+            if isinstance(item, str):
+                image = QImage(item)
             else:
-                self.header.hide()
-            
-            self.config.set("Edit.folder", folder_path)
-            self.config.save()
-            
-            self.parent.statusBar().showMessage(tr("已加载文件夹") + f": {os.path.abspath(folder_path)}", 3000)
-        
-        if self.main_window:
-            self.setSizes(self.main_window.width())
+                image = QImage.fromData(item[1])
+            if image.isNull():
+                return
+            pixmap = QPixmap.fromImage(image)
+            base_width = self._gallery_base_width
+            width = int(base_width * self._zoom_factor)
+            if pixmap.width() > width:
+                scaled = pixmap.scaled(
+                    width,
+                    int(pixmap.height() * width / pixmap.width()),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+            else:
+                scaled = pixmap
+            label.setPixmap(scaled)
+            self._gallery_loaded.add(idx)
+        except Exception:
+            logger.exception(f"懒加载图片失败 index={idx}")
+
+    def _unloadGallery(self, idx):
+        try:
+            label = self._gallery_layout.itemAt(idx).widget()
+            if label:
+                label.clear()
+            self._gallery_loaded.discard(idx)
+        except Exception:
+            logger.exception(f"卸载图片失败 index={idx}")
+
+    def _updateGallery(self):
+        if not self._gallery_view_enabled or self._gallery_item_count == 0:
+            return
+        scrollbar = self._gallery_scrollbar
+        if not scrollbar:
+            return
+        scroll_value = scrollbar.value()
+        viewport_height = scrollbar.parent().height() if scrollbar.parent() else 600
+        center_y = scroll_value + viewport_height // 2
+        tops = self._gallery_label_tops
+        lo, hi = 0, len(tops)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if tops[mid] <= center_y:
+                lo = mid + 1
+            else:
+                hi = mid
+        center_idx = max(0, lo - 1)
+        if center_idx == self._gallery_current_center and self._gallery_loaded:
+            return
+        self._gallery_current_center = center_idx
+        window_start = max(0, center_idx - self._gallery_window_size)
+        window_end = min(self._gallery_item_count - 1, center_idx + self._gallery_window_size)
+        for idx in list(self._gallery_loaded):
+            if idx < window_start or idx > window_end:
+                self._unloadGallery(idx)
+        for idx in range(window_start, window_end + 1):
+            if idx not in self._gallery_loaded:
+                self._loadGallery(idx)
+
+    def _onGalleryScroll(self, value):
+        self._gallery_scroll_value = value
+        self._updateGallery()
+
+    def _getFolderImages(self, folder):
+        try:
+            image_files = []
+            for f in os.listdir(folder):
+                fpath = os.path.join(folder, f)
+                if os.path.isfile(fpath) and fileType(fpath, "IMAGE"):
+                    image_files.append(fpath)
+            return sorted(image_files, key=lambda x: sortKey(x))
+        except Exception:
+            logger.exception("获取文件夹图片失败")
+            return []
+
+    def close(self, tab):
+        if self._filter_tab:
+            tab.image_scroll.viewport().removeEventFilter(self)
+            self._filter_tab = None
+        if self._gallery_view_enabled:
+            self._exitGalleryView(tab)
+        self.archive_type = None
+        self.zip_image_paths = []
+        self.tar_image_paths = []
+        self.archive_current_image = None
+        self.is_viewing_archive_image = False
+
+    def activate(self, tab):
+        pass
+
+    def deactivate(self, tab):
+        pass
+
+
+class PdfMode:
+    def __init__(self):
+        self.pdf_widget = None
+        self.pdf_document = None
+        self.pdf_pixmaps = []
+
+    def open(self, tab, file_path=None, content=None):
+        target = file_path or tab.file_path
+        if not target:
+            return
+
+        from PySide6.QtPdf import QPdfDocument
+        from PySide6.QtPdfWidgets import QPdfView
+
+        class _PdfViewer(QPdfView):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self._zoom_factor = 1.0
+                self.setPageMode(QPdfView.PageMode.MultiPage)
+                self.setZoomMode(QPdfView.ZoomMode.FitInView)
+                self.setAutoFillBackground(True)
+                palette = self.palette()
+                palette.setColor(self.backgroundRole(), Qt.GlobalColor.white)
+                self.setPalette(palette)
+                self.setZoomMode(QPdfView.ZoomMode.Custom)
+
+            def wheelEvent(self, event):
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    delta = event.angleDelta().y()
+                    if delta > 0:
+                        self._zoom_factor *= 1.1
+                    else:
+                        self._zoom_factor /= 1.1
+                    self._zoom_factor = max(0.1, min(10.0, self._zoom_factor))
+                    self.setZoomFactor(self._zoom_factor)
+                    event.accept()
+                    return
+                super().wheelEvent(event)
+
+        pdf_document = QPdfDocument()
+        pdf_document.load(target)
+        if pdf_document.error() != QPdfDocument.Error.None_:
+            return
+
+        pdf_view = _PdfViewer()
+        pdf_view.setDocument(pdf_document)
+
+        tab.text_edit.hide()
+        tab.image_scroll.hide()
+
+        self.pdf_widget = pdf_view
+        self.pdf_document = pdf_document
+        tab.layout().addWidget(pdf_view)
+        tab.text_edit.setLineNumbersVisible(False)
+
+    def close(self, tab):
+        if self.pdf_widget:
+            self.pdf_widget.deleteLater()
+            self.pdf_widget = None
+        if self.pdf_document:
+            self.pdf_document.close()
+            self.pdf_document = None
+        self.pdf_pixmaps.clear()
+
+    def activate(self, tab):
+        pass
+
+    def deactivate(self, tab):
+        if self.pdf_widget:
+            self.pdf_widget.hide()
+
+
+ViewMode.register(ViewMode.TEXT, TextMode)
+ViewMode.register(ViewMode.MARKDOWN, MarkdownMode)
+ViewMode.register(ViewMode.HEX, HexMode)
+ViewMode.register(ViewMode.IMAGE, ImageMode)
+ViewMode.register(ViewMode.GALLERY, GalleryMode)
+ViewMode.register(ViewMode.PDF, PdfMode)
+
+
+
+def _listZipEntries(file_path) -> list:
+    """列出 zip 文件内部条目"""
+    try:
+        with zipfile.ZipFile(file_path, "r") as zf:
+            items = []
+            for info in zf.infolist():
+                item = {
+                    "name": info.filename,
+                    "is_dir": info.is_dir(),
+                    "size": info.file_size,
+                    "compressed_size": info.compress_size,
+                }
+                items.append(item)
+            return items
+    except Exception:
+        logger.exception("读取 ZIP 文件失败")
+        return None
+
+
+def _listTarEntries(file_path) -> list:
+    """列出 tar 文件内部条目"""
+    try:
+        with tarfile.open(file_path, 'r:*') as tf:
+            items = []
+            for member in tf.getmembers():
+                item = {
+                    "name": member.name,
+                    "is_dir": member.isdir(),
+                    "size": member.size,
+                    "type": member.type,
+                }
+                items.append(item)
+            return items
+    except Exception:
+        logger.exception("读取 TAR 文件失败")
+        return None
+
+
+def listArchive(file_path: str) -> list:
+    """列出压缩包内部的文件和文件夹"""
+    file_path_obj = Path(file_path)
+    if not file_path_obj.exists():
+        return None
+    if fileType(file_path, "ZIP"):
+        return _listZipEntries(file_path_obj)
+    elif fileType(file_path, "TAR"):
+        return _listTarEntries(file_path_obj)
+    return None
+
+
+def readArchive(file_path: str, member_name: str) -> bytes:
+    """读取压缩包内指定文件的内容"""
+    file_path_obj = Path(file_path)
+    if not file_path_obj.exists():
+        return None
+    try:
+        if fileType(file_path, "ZIP"):
+            with zipfile.ZipFile(file_path_obj, "r") as zf:
+                return zf.read(member_name)
+        elif fileType(file_path, "TAR"):
+            with tarfile.open(file_path_obj, 'r:*') as tf:
+                member = tf.getmember(member_name)
+                if member.isfile():
+                    f = tf.extractfile(member)
+                    return f.read()
+    except Exception:
+        logger.exception("读取压缩包内文件失败")
+    return None
+
+
+def listArchiveImages(file_path: str) -> list:
+    """列出压缩包中的所有图片路径（按文件名自然排序）"""
+    try:
+        if fileType(file_path, "ZIP"):
+            image_paths = []
+            with zipfile.ZipFile(file_path, "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    name = info.filename
+                    if fileType(name, "IMAGE"):
+                        image_paths.append(name)
+            return sorted(image_paths, key=sortKey)
+        elif fileType(file_path, "TAR"):
+            image_paths = []
+            with tarfile.open(file_path, 'r:*') as tf:
+                for member in tf.getmembers():
+                    if member.isfile() and fileType(member.name, "IMAGE"):
+                        image_paths.append(member.name)
+            return sorted(image_paths, key=sortKey)
+    except Exception:
+        logger.exception("列出压缩包图片失败")
+    return []
+
+
+def isArchiveAllImages(file_path: str) -> tuple:
+    """检查压缩包是否只包含图片，返回 (是否全是图片, 图片路径列表)"""
+    try:
+        image_paths = []
+        if fileType(file_path, "ZIP"):
+            with zipfile.ZipFile(file_path, "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    name = info.filename.lower()
+                    if not fileType(name, "IMAGE"):
+                        return False, []
+                    image_paths.append(info.filename)
+            return len(image_paths) > 0, sorted(image_paths, key=sortKey)
+        elif fileType(file_path, "TAR"):
+            with tarfile.open(file_path, 'r:*') as tf:
+                for member in tf.getmembers():
+                    if member.isfile() and fileType(member.name, "IMAGE"):
+                        image_paths.append(member.name)
+                    elif not member.isfile():
+                        continue
+                    else:
+                        return False, []
+            return len(image_paths) > 0, sorted(image_paths, key=sortKey)
+    except Exception:
+        logger.exception("检查压缩包图片失败")
+    return False, []
+
+
+def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, encoding: str = None):
+    """读取文件，带行数限制，支持跳过行数（用于翻页）
+    Args:
+        file_path: 文件路径
+        max_lines: 最多读取行数
+        start_line: 起始行号（0-based，跳过前 start_line 行）
+        encoding: 指定编码（不为 None 时跳过自动检测）
     
-    def _loadArchive(self, archive_path: str):
-        """加载压缩包内容"""
-        if self.archive_model is None:
-            self.archive_model = ArchiveItemModel(self.file_op)
-        
-        self.current_archive_path = archive_path
-        self.archive_model.loadArchive(archive_path)
-        
-        self.tree.setModel(self.archive_model)
-        
-        parent_path = os.path.dirname(archive_path)
-        if parent_path:
-            self.header.setText(f".. {os.path.basename(archive_path)}")
-            self.header.setToolTip(archive_path)
-            self.header.show()
+    Returns:
+            形式为 [str, int, int, int, str]
+            content: 本次读取的内容
+            total_lines: 文件总行数
+            loaded_lines: 实际读取的行数
+            is_truncated: 1=有下一页, 0=已读完, -1=出错
+            encoding: 实际使用的编码
+    """
+    try:
+        _path = Path(file_path)
+        if encoding:
+            encodings_to_try = [encoding]
         else:
-            self.header.hide()
-        
-        self.parent.statusBar().showMessage(tr("已加载压缩包") + f": {os.path.abspath(archive_path)}", 3000)
-    
-    def setSizes(self, available_width: int):
-        """设置面板尺寸"""
-        if not self.panel:
-            return
-        
-        self.splitter.handle(0).setEnabled(True)
-        
-        if available_width <= 0:
-            return
-        
-        self.tree.setColumnWidth(0, 220)
-        self.tree.setColumnWidth(1, 70)
-        folder_width = 320
-        
-        editor_width = available_width - folder_width
-        if editor_width < 400:
-            editor_width = 400
-            folder_width = available_width - editor_width
-        
-        self.splitter.setSizes([folder_width, editor_width])
-    
-    def close(self):
-        """关闭并删除文件夹视图"""
-        self.config.set("Edit.folder", "")
-        self.config.save()
-        
-        if self.panel is not None:
-            panel_index = self.splitter.indexOf(self.panel)
-            if panel_index < 0:
-                panel_index = 1
-            
-            self.panel.setParent(None)
-            self.panel.deleteLater()
-            self.panel = None
-            self.model = None
-            self.tree = None
-            self.header = None
-            self.folder_path = None
-            self.current_archive_path = None
-            
-            if self.placeholder is None:
-                placeholder = QWidget()
-                self.splitter.insertWidget(panel_index, placeholder)
-                self.placeholder = placeholder
-            self.placeholder.setFixedWidth(0)
-            self.placeholder.hide()
-            
-            if self.splitter.count() > 1:
-                self.splitter.handle(0).setEnabled(False)
-    
-    def isVisible(self) -> bool:
-        return self.panel is not None
-    
+            SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
+            encodings_to_try = ["utf-8"] + SUPPORTED_ENCODINGS
+        for enc in encodings_to_try:
+            try:
+                lines = []
+                total = 0
+                with open(_path, "r", encoding=enc, newline="") as f:
+                    for line in f:
+                        if total >= start_line and len(lines) < max_lines:
+                            lines.append(line.rstrip('\n').rstrip('\r'))
+                        total += 1
+                loaded = len(lines)
+                if total > start_line + loaded:
+                    truncated = 1
+                else:
+                    truncated = 0
+                return '\n'.join(lines), total, loaded, truncated, enc
+            except (UnicodeDecodeError, UnicodeError):
+                if encoding:
+                    with open(_path, "r", encoding=encoding, errors="replace", newline="") as f:
+                        lines = [line.rstrip('\n').rstrip('\r') for line in f]
+                    total = len(lines)
+                    return '\n'.join(lines), total, total, 0, encoding
+                continue
+        lines = []
+        total = 0
+        with open(_path, "r", encoding="utf-8", errors="replace", newline="") as f:
+            for line in f:
+                if total >= start_line and len(lines) < max_lines:
+                    lines.append(line.rstrip('\n').rstrip('\r'))
+                total += 1
+        loaded = len(lines)
+        truncated = 1 if total > start_line + loaded else 0
+        return '\n'.join(lines), total, loaded, truncated, "utf-8"
+    except Exception:
+        logger.exception("带限制读取文件失败")
+        return "", 0, 0, -1, ""
 
