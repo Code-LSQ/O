@@ -197,7 +197,7 @@ class FolderPanelManager:
                     editor.setFilePath(display_path)
             
             self.main_window.config.addRecentFile(self.current_archive_path)
-            self.main_window.statusBar().showMessage(tr("已打开") + f": {display_path}", 3000)
+            self.main_window.statusBar().showMessage(tr("已打开") + " " + display_path, 3000)
     
     def _showTreeMenu(self, pos):
         """显示文件夹树右键菜单"""

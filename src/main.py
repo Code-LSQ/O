@@ -496,8 +496,8 @@ class EditTool(QDialog):
 
         # 预设类型不能修改
         if tool_type == "预设":
-            self.type_combo.addItem("预设")
-            self.type_combo.setCurrentText("预设")
+            self.type_combo.addItem(tr("预设"))
+            self.type_combo.setCurrentText(tr("预设"))
             self.type_combo.setEnabled(False)
             self.type_combo.setStyleSheet("QComboBox::down-arrow { width: 0px; } QComboBox::drop-down { width: 0px; }")
             self.path_edit.setEnabled(False)
@@ -666,6 +666,17 @@ def _getGroups(tools: dict) -> list:
 def _getGroupTools(tools: dict, group: str) -> list:
     return tools.get(group, [])
 
+
+def _ensureGroup(tools: dict, config, current_group: str) -> str:
+    """当无任何分组时，自动创建 o 分组，返回当前分组名"""
+    if not tools:
+        tools["o"] = []
+        config.set("Launch.tools", tools)
+        config.set("Launch.active_group", "o")
+        config.save()
+        return "o"
+    return current_group
+
 def getIcon(tool, icon_size=32):
     icon_path = tool.get("icon", "")
     path = tool.get("path", "") or tool.get("url", "")
@@ -703,6 +714,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self.system_tray = SystemTray(self, self.app)
         Translator().setLanguage(self.config.get("language", "简体中文"))
         self._current_group = getConfig().get("Launch.active_group", "")
+        self._current_group = _ensureGroup(self._tools, getConfig(), self._current_group)
         self._fallback_size = (600, 400)
         self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
@@ -964,7 +976,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
         self.settings_btn = QPushButton(tr("设置"))
         self.settings_btn.setObjectName("settings_btn")
-        self.settings_btn.setFixedSize(70, 32)
+        self.settings_btn.setMinimumSize(70, 32)
         self.settings_btn.clicked.connect(self._configDialog)
         title_layout.addWidget(self.settings_btn)
         
@@ -1121,7 +1133,8 @@ class MainWindow(WindowMouse, QMainWindow):
             if self._current_group == group:
                 groups = _getGroups(self._tools)
                 self._current_group = groups[0] if groups else ""
-                getConfig().set("Launch.active_group", self._current_group)
+            
+            self._current_group = _ensureGroup(self._tools, getConfig(), self._current_group)
             
             self._saveTools()
             self.refreshGroup()
@@ -1244,7 +1257,7 @@ class MainWindow(WindowMouse, QMainWindow):
         padding = config.get("Launch.padding", 8)
         item_width = config.get("Launch.i_w", 100)
         item_height = config.get("Launch.i_h", 75)
-        available = self.width() - 2 * padding
+        available = self._tools_widget.width() - 2 * padding
 
         cols = max(1, available // (item_width + padding))
         cols = min(cols, len(tools))
@@ -1263,7 +1276,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
     def _createButton(self, tool: dict, index: int) -> DragToolButton:
         """创建工具按钮"""
-        name = tool.get("name", "未命名")
+        name = tool.get("name", tr("未命名"))
         path = tool.get("path", "") or tool.get("url", "")
         note = tool.get("note", "")
         
@@ -1434,7 +1447,7 @@ class MainWindow(WindowMouse, QMainWindow):
                     if sub_menu:
                         menu.addMenu(sub_menu)
                         continue
-                action = QAction(name, self)
+                action = QAction(tr(name), self)
                 action.triggered.connect(lambda checked, n=name, p=path: self._addPreset(n, p, ""))
                 menu.addAction(action)
         
@@ -1655,7 +1668,7 @@ class MainWindow(WindowMouse, QMainWindow):
             logger.info(f"启动工具: {tool.get('name', '')} ({tool_type})")
 
         except Exception as e:
-            messageBox(self, "错误", f"启动失败: {str(e)}", 1)
+            messageBox(self, tr("错误"), tr("启动失败") + f": {str(e)}", 1)
             logger.error(f"启动工具失败: {e}")
         finally:
             for k, v in saved_env.items():
@@ -1709,12 +1722,12 @@ class MainWindow(WindowMouse, QMainWindow):
                 
                 plugin_instance = self._getPlugin(plugin_name)
                 if not plugin_instance:
-                    messageBox(self, "警告", f"未找到插件: {plugin_name}", 1)
+                    messageBox(self, tr("警告"), tr("未找到插件") + f": {plugin_name}", 1)
                     return
                 
                 menu_or_action = plugin_instance.getAction()
                 if not menu_or_action:
-                    messageBox(self, "警告", f"插件 {plugin_name} 没有菜单或动作", 1)
+                    messageBox(self, tr("警告"), plugin_name + " " + tr("没有菜单或动作"), 1)
                     return
                 
                 # 有指定动作文本，在 QMenu 中查找对应 QAction
@@ -1723,7 +1736,7 @@ class MainWindow(WindowMouse, QMainWindow):
                         if action.text() == action_text:
                             action.trigger()
                             return
-                    messageBox(self, "警告", f"未找到插件动作: {action_text}", 1)
+                    messageBox(self, tr("警告"), tr("未找到插件动作") + f": {action_text}", 1)
                     return
                 
                 # QAction 直接触发
@@ -1732,11 +1745,11 @@ class MainWindow(WindowMouse, QMainWindow):
                     return
                 
             except Exception as e:
-                messageBox(self, "错误", f"执行插件动作失败: {str(e)}", 1)
+                messageBox(self, tr("错误"), tr("执行插件动作失败") + f": {str(e)}", 1)
                 logger.error(f"执行插件动作失败: {e}")
             return
         
-        messageBox(self, "警告", f"未知的预设功能: {path}", 1)
+        messageBox(self, tr("警告"), tr("未知的预设功能") + f": {path}", 1)
 
     def _runService(self, tool: dict, path: str, cwd: str, args: str, service_str: str, process_str: str):
         """启动带有附属服务/进程管理的 exe 程序"""
@@ -1897,11 +1910,9 @@ class MainWindow(WindowMouse, QMainWindow):
     def addFromDrop(self, path: str):
         """从拖拽路径添加工具"""
         
-        path = os.path.normpath(path)
-        ext = os.path.splitext(path)[1].lower()
-        
-        base = os.path.basename(path.rstrip("\\/"))
-        name = os.path.splitext(base)[0] if os.path.isfile(path) else base
+        p = Path(path)
+        ext = p.suffix.lower()
+        name = p.stem if p.is_file() else p.name
         
         type_map = {
             ".py": "Python",

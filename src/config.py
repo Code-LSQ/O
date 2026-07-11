@@ -367,13 +367,13 @@ class SettingsDialog(QDialog):
         self.launcher_on_top_check = QCheckBox(tr("置顶显示"))
         self.launcher_on_top_check.setChecked(launcher_config.get("on_top", False))
 
-        self.launcher_hide = QCheckBox("运行后隐藏")
+        self.launcher_hide = QCheckBox(tr("运行后隐藏"))
         self.launcher_hide.setChecked(launcher_config.get("run_hide", False))
 
-        self.launcher_hover_switch_check = QCheckBox("悬停切换分组")
+        self.launcher_hover_switch_check = QCheckBox(tr("悬停切换分组"))
         self.launcher_hover_switch_check.setChecked(launcher_config.get("hover_switch", False))
 
-        self.launcher_double_ctrl_check = QCheckBox("连按 Ctrl 响应")
+        self.launcher_double_ctrl_check = QCheckBox(tr("连按 Ctrl 响应"))
         self.launcher_double_ctrl_check.setChecked(launcher_config.get("double_ctrl", False))
 
         launch_grid_widget = QWidget()
@@ -396,20 +396,20 @@ class SettingsDialog(QDialog):
         self.launcher_key_capture_filter = KeyCaptureFilter(self)
         self.launcher_key_capture_filter.key_captured.connect(self._onHotkeyCapture)
         self.launcher_hotkey_edit.installEventFilter(self.launcher_key_capture_filter)
-        layout.addRow("快捷键", self.launcher_hotkey_edit)
+        layout.addRow(tr("快捷键"), self.launcher_hotkey_edit)
 
         # 分组排列
         self.launcher_layout_combo = QComboBox()
-        self.launcher_layout_combo.addItems(["横向", "纵向"])
+        self.launcher_layout_combo.addItems([tr("横向"), tr("纵向")])
         current_layout = launcher_config.get("layout", "horizontal")
         self.launcher_layout_combo.setCurrentIndex(0 if current_layout == "horizontal" else 1)
-        layout.addRow("分组排列", self.launcher_layout_combo)
+        layout.addRow(tr("分组排列"), self.launcher_layout_combo)
 
         self.launcher_path_mode_combo = QComboBox()
-        self.launcher_path_mode_combo.addItems(["绝对路径", "相对路径"])
+        self.launcher_path_mode_combo.addItems([tr("绝对路径"), tr("相对路径")])
         current_path_mode = launcher_config.get("path_mode", "absolute")
         self.launcher_path_mode_combo.setCurrentIndex(0 if current_path_mode == "absolute" else 1)
-        layout.addRow("路径", self.launcher_path_mode_combo)
+        layout.addRow(tr("路径"), self.launcher_path_mode_combo)
 
         # 启动器外观
         self.g_w_spin = QSpinBox()
@@ -422,12 +422,12 @@ class SettingsDialog(QDialog):
         self.g_h_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
 
         g_layout = QHBoxLayout()
-        g_layout.addWidget(QLabel("宽"))
+        g_layout.addWidget(QLabel(tr("宽")))
         g_layout.addWidget(self.g_w_spin)
-        g_layout.addWidget(QLabel("高"))
+        g_layout.addWidget(QLabel(tr("高")))
         g_layout.addWidget(self.g_h_spin)
         g_layout.addStretch()
-        layout.addRow("分组按钮", g_layout)
+        layout.addRow(tr("分组按钮"), g_layout)
 
         self.i_w_spin = QSpinBox()
         self.i_w_spin.setRange(40, 300)
@@ -439,12 +439,12 @@ class SettingsDialog(QDialog):
         self.i_h_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
 
         i_layout = QHBoxLayout()
-        i_layout.addWidget(QLabel("宽"))
+        i_layout.addWidget(QLabel(tr("宽")))
         i_layout.addWidget(self.i_w_spin)
-        i_layout.addWidget(QLabel("高"))
+        i_layout.addWidget(QLabel(tr("高")))
         i_layout.addWidget(self.i_h_spin)
         i_layout.addStretch()
-        layout.addRow("项目按钮", i_layout)
+        layout.addRow(tr("项目按钮"), i_layout)
 
         self.icon_spin = QSpinBox()
         self.icon_spin.setRange(16, 128)
@@ -455,19 +455,19 @@ class SettingsDialog(QDialog):
         self.padding_spin.setValue(launcher_config.get("padding", 8))
         self.padding_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         ip_layout = QHBoxLayout()
-        ip_layout.addWidget(QLabel("图标大小"))
+        ip_layout.addWidget(QLabel(tr("图标大小")))
         ip_layout.addWidget(self.icon_spin)
-        ip_layout.addWidget(QLabel("边距"))
+        ip_layout.addWidget(QLabel(tr("边距")))
         ip_layout.addWidget(self.padding_spin)
         ip_layout.addStretch()
         layout.addRow(ip_layout)
 
         # Python 环境
-        self.python_path_edit, self.python_browse_btn = filePathWidget(self, layout, "Python", "Python", "Python (*.exe);;所有文件 (*)")
+        self.python_path_edit, self.python_browse_btn = filePathWidget(self, layout, "Python", "Python", "Python (*.exe);;" + tr("所有文件") + " (*)")
         self.python_path_edit.setText(self.config.get("Launch.Runtime.Python", ""))
 
         # Java 环境
-        self.java_path_edit, self.java_browse_btn = filePathWidget(self, layout, "Java", "Java", "Java (*.exe);;所有文件 (*)")
+        self.java_path_edit, self.java_browse_btn = filePathWidget(self, layout, "Java", "Java", "Java (*.exe);;" + tr("所有文件") + " (*)")
         self.java_path_edit.setText(self.config.get("Launch.Runtime.Java", ""))
 
         # 环境变量
@@ -477,7 +477,7 @@ class SettingsDialog(QDialog):
         Temp_Path = self.config.get("Launch.Runtime.Temp_Path", [])
         self.temp_paths_edit.setPlainText("\n".join(Temp_Path))
         self.temp_paths_edit.setMinimumHeight(80)
-        layout.addRow("环境变量", self.temp_paths_edit)
+        layout.addRow(tr("环境变量"), self.temp_paths_edit)
 
         self._launcher_config = launcher_config
         return tab
@@ -499,14 +499,14 @@ class SettingsDialog(QDialog):
         self.auto_wrap = QCheckBox(tr("自动换行"))
         self.auto_wrap.setChecked(self.config.get("Edit.wrap", False))
 
-        self.auto_indent = QCheckBox("自动缩进")
+        self.auto_indent = QCheckBox(tr("自动缩进"))
         self.auto_indent.setChecked(self.config.get("Edit.indent", True))
 
         self.line_spacing_spin = QSpinBox()
         self.line_spacing_spin.setRange(0, 100)
         self.line_spacing_spin.setValue(self.config.get("Edit.line_spacing", 0))
         self.line_spacing_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.line_spacing_spin.setToolTip("0=禁用")
+        self.line_spacing_spin.setToolTip("0=" + tr("禁用"))
         layout.addRow(tr("行距"), self.line_spacing_spin)
 
         editor_grid_widget = QWidget()
@@ -523,16 +523,16 @@ class SettingsDialog(QDialog):
 
         # 自动保存
         auto_save_layout = QHBoxLayout()
-        self.auto_save_check = QCheckBox("启用")
+        self.auto_save_check = QCheckBox(tr("启用"))
         self.auto_save_check.setChecked(self.config.get("Edit.auto_save", False))
         auto_save_layout.addWidget(self.auto_save_check)
         self.auto_save_interval = QSpinBox()
         self.auto_save_interval.setRange(10, 600)
-        self.auto_save_interval.setSuffix(" 秒")
+        self.auto_save_interval.setSuffix(" " + tr("秒"))
         self.auto_save_interval.setValue(self.config.get("Edit.auto_save_interval", 60))
         self.auto_save_interval.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         auto_save_layout.addWidget(self.auto_save_interval)
-        layout.addRow("自动保存", auto_save_layout)
+        layout.addRow(tr("自动保存"), auto_save_layout)
 
         # 搜索引擎管理
         self._initEngines(layout)
@@ -578,12 +578,12 @@ class SettingsDialog(QDialog):
 
             name_edit = QLineEdit()
             name_edit.setText(name)
-            name_edit.setPlaceholderText("搜索引擎名称")
-            form_layout.addRow("名称", name_edit)
+            name_edit.setPlaceholderText(tr("搜索引擎名称"))
+            form_layout.addRow(tr("名称"), name_edit)
 
             url_edit = QLineEdit()
             url_edit.setText(url)
-            url_edit.setPlaceholderText("URL，使用 {query} 作为搜索关键词占位符")
+            url_edit.setPlaceholderText("URL " + tr("使用 {query} 作为搜索关键词占位符"))
             form_layout.addRow("URL", url_edit)
 
             d_layout.addLayout(form_layout)
@@ -593,13 +593,13 @@ class SettingsDialog(QDialog):
                 u = url_edit.text().strip()
                 if n and u:
                     if "{query}" not in u:
-                        messageBox(self, "警告", "URL必须包含 {query} 占位符", 1)
+                        messageBox(self, tr("警告"), "URL " + tr("必须包含 {query} 占位符"), 1)
                         continue
                     return n, u
             return None, None
 
     def _addEngine(self):
-        name, url = self._engineDialog("添加搜索引擎")
+        name, url = self._engineDialog(tr("添加搜索引擎"))
         if name and url:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, url)
@@ -608,9 +608,9 @@ class SettingsDialog(QDialog):
     def _editEngine(self):
         current_item = self.search_engines_list.currentItem()
         if not current_item:
-            messageBox(self, "警告", "请先选择一个要编辑的搜索引擎", 1)
+            messageBox(self, tr("警告"), tr("请先选择一个要编辑的搜索引擎"), 1)
             return
-        name, url = self._engineDialog("编辑搜索引擎", current_item.text(), current_item.data(Qt.ItemDataRole.UserRole))
+        name, url = self._engineDialog(tr("编辑搜索引擎"), current_item.text(), current_item.data(Qt.ItemDataRole.UserRole))
         if name and url:
             current_item.setText(name)
             current_item.setData(Qt.ItemDataRole.UserRole, url)
@@ -628,7 +628,7 @@ class SettingsDialog(QDialog):
         
         self.shortcuts_table = QTableWidget()
         self.shortcuts_table.setColumnCount(2)
-        self.shortcuts_table.setHorizontalHeaderLabels(["操作", "快捷键"])
+        self.shortcuts_table.setHorizontalHeaderLabels([tr("操作"), tr("快捷键")])
         self.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.shortcuts_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.shortcuts_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectItems)
@@ -660,7 +660,7 @@ class SettingsDialog(QDialog):
         self.shortcuts_table.cellDoubleClicked.connect(self._onCellDblClick)
         self.shortcuts_table.viewport().installEventFilter(self)
         
-        reset_btn = QPushButton("重置为默认值")
+        reset_btn = QPushButton(tr("重置为默认值"))
         reset_btn.clicked.connect(self._setDefaults)
         layout.addWidget(reset_btn)
         

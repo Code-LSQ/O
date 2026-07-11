@@ -680,7 +680,7 @@ class FileSelect(QDialog):
         self.resize(500, 400)
         self.setAcceptDrops(True)
 
-        self.label_path = QLabel("文件夹路径（每行一个，支持拖放）")
+        self.label_path = QLabel(tr("文件夹路径（每行一个，支持拖放）"))
         self.path_edit = QTextEdit()
         self.path_edit.setStyleSheet("background: #eeeeee")
         self.label_exclude = QLabel(r"""排除规则（每行一项，支持通配符）
@@ -1001,7 +1001,7 @@ def fileTree(directory: Path, prefix: str = "") -> list:
     try:
         items = list(directory.iterdir())
     except PermissionError:
-        lines.append(f"{prefix}[无法读取目录]")
+        lines.append(f"{prefix}[" + tr("无法读取目录") + "]")
         return lines
 
     dirs = sorted([item for item in items if item.is_dir()])

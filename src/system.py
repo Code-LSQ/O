@@ -304,32 +304,33 @@ elif sys.platform == "linux":
 
     def moveTrash(path):
         try:
-            path = os.path.abspath(path)
-            trash_dir = os.path.expanduser("~/.local/share/Trash")
-            files_dir = os.path.join(trash_dir, "files")
-            info_dir = os.path.join(trash_dir, "info")
-            os.makedirs(files_dir, exist_ok=True)
-            os.makedirs(info_dir, exist_ok=True)
-            basename = os.path.basename(path)
-            dest = os.path.join(files_dir, basename)
-            info_path = os.path.join(info_dir, basename + ".trashinfo")
-            if os.path.exists(dest) or os.path.exists(info_path):
-                name, ext = os.path.splitext(basename)
+            p = Path(path).resolve()
+            trash_dir = Path.home() / ".local/share/Trash"
+            files_dir = trash_dir / "files"
+            info_dir = trash_dir / "info"
+            files_dir.mkdir(parents=True, exist_ok=True)
+            info_dir.mkdir(parents=True, exist_ok=True)
+            basename = p.name
+            dest = files_dir / basename
+            info_path = info_dir / f"{basename}.trashinfo"
+            if dest.exists() or info_path.exists():
+                stem = p.stem
+                ext = p.suffix
                 counter = 1
                 while True:
-                    new_name = f"{name}.{counter}{ext}"
-                    dest = os.path.join(files_dir, new_name)
-                    info_path = os.path.join(info_dir, new_name + ".trashinfo")
-                    if not os.path.exists(dest) and not os.path.exists(info_path):
-                        logger.info(f"回收站中已存在 {basename}，重命名为 {os.path.basename(dest)}")
+                    new_name = f"{stem}.{counter}{ext}"
+                    dest = files_dir / new_name
+                    info_path = info_dir / f"{new_name}.trashinfo"
+                    if not dest.exists() and not info_path.exists():
+                        logger.info(f"回收站中已存在 {basename}，重命名为 {dest.name}")
                         break
                     counter += 1
-            shutil.move(path, dest)
+            shutil.move(p, dest)
             with open(info_path, "w", encoding="utf-8") as f:
                 f.write("[Trash Info]\n")
-                f.write(f"Path={path}\n")
+                f.write(f"Path={p}\n")
                 f.write(f"DeletionDate={datetime.now().isoformat()}\n")
-            logger.info(f"{path} 成功移动到回收站")
+            logger.info(f"{p} 成功移动到回收站")
             return True
         except Exception:
             logger.exception(f"{path} 移动到回收站失败")
