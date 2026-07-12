@@ -109,11 +109,17 @@ class ViewMode:
         tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
         tab.is_markdown = (mode == cls.MARKDOWN)
         if mode in (cls.TEXT, cls.MARKDOWN) and not tab._original_content and tab.file_path:
-            content, total_lines, loaded_lines, truncated, encoding = \
-                readFileLimit(tab.file_path, max_lines=50000, start_line=0)
-            tab.encoding = encoding
-            if truncated:
-                tab.setTruncated(total_lines, loaded_lines, tab.file_path, encoding)
+            archive_type = getattr(tab, '_archive_type', None)
+            if archive_type:
+                items = listArchive(tab.file_path)
+                content = "\n".join(item["name"] for item in items) if items else ""
+                tab.encoding = "UTF-8"
+            else:
+                content, total_lines, loaded_lines, truncated, encoding = \
+                    readFileLimit(tab.file_path, max_lines=50000, start_line=0)
+                tab.encoding = encoding
+                if truncated:
+                    tab.setTruncated(total_lines, loaded_lines, tab.file_path, encoding)
             new_handler.open(tab, content=content)
         else:
             new_handler.open(tab, tab.file_path, None)
@@ -344,7 +350,10 @@ class GalleryMode(QObject):
         self._gallery_layout = None
         self._gallery_base_width = 800
         self._archive_gallery = False
-        self._archive_images_data = []
+        self._archive_image_names = []
+        self._archive_image_cache = {}
+        self._archive_image_sizes = []
+        self._archive_path = ""
         self._archive_gallery_layout = None
         self._archive_gallery_container = None
         self._archive_gallery_base_width = 800
@@ -439,22 +448,36 @@ class GalleryMode(QObject):
         tab.image_scroll.show()
 
     def _enterArcGallery(self, tab):
-        if not self.zip_image_paths and self.archive_type == 'zip':
-            all_images, paths = isArchiveAllImages(tab.file_path)
-            if all_images:
-                self.zip_image_paths = paths
-        if not self.tar_image_paths and self.archive_type == 'tar':
+        if self.archive_type == "zip" and not self.zip_image_paths:
+            self.zip_image_paths = listArchiveImages(tab.file_path)
+        if self.archive_type == "tar" and not self.tar_image_paths:
             self.tar_image_paths = listArchiveImages(tab.file_path)
 
-        image_names = self.zip_image_paths if self.archive_type == 'zip' else self.tar_image_paths
-        images_data = []
+        image_names = self.zip_image_paths if self.archive_type == "zip" else self.tar_image_paths
+        if not image_names:
+            return
+        self._archive_path = tab.file_path
+        self._archive_image_names = image_names
+        self._archive_image_cache = {}
+        self._archive_image_sizes = []
         for img_name in image_names:
             img_data = readArchive(tab.file_path, img_name)
             if img_data is not None:
-                images_data.append((img_name, img_data))
-        if not images_data:
+                idx = len(self._archive_image_sizes)
+                self._archive_image_cache[idx] = img_data
+                try:
+                    ba = QByteArray(img_data)
+                    buf = QBuffer(ba)
+                    reader = QImageReader(buf)
+                    size = reader.size()
+                    buf.close()
+                    if not size.isValid():
+                        size = QSize(800, 600)
+                except Exception:
+                    size = QSize(800, 600)
+                self._archive_image_sizes.append(size)
+        if not self._archive_image_sizes:
             return
-        self._archive_images_data = images_data
         self._archive_gallery = True
         scroll_area = tab.image_scroll
         avail_width = scroll_area.viewport().width() - 20
@@ -463,22 +486,12 @@ class GalleryMode(QObject):
         self._gallery_view_enabled = True
         self._gallery_base_width = avail_width
         self._zoom_factor = 1.0
-        self._gallery_items = images_data
-        self._gallery_item_count = len(images_data)
+        self._gallery_items = image_names
+        self._gallery_item_count = len(image_names)
         self._gallery_loaded.clear()
         self._gallery_current_center = -1
         self._gallery_image_heights = []
-        for img_name, img_data in images_data:
-            try:
-                ba = QByteArray(img_data)
-                buf = QBuffer(ba)
-                reader = QImageReader(buf)
-                size = reader.size()
-                buf.close()
-                if not size.isValid():
-                    size = QSize(800, 600)
-            except Exception:
-                size = QSize(800, 600)
+        for size in self._archive_image_sizes:
             self._gallery_image_heights.append(self._calcHeight(size))
         self._gallery_label_tops = []
         cum_y = 0
@@ -492,7 +505,7 @@ class GalleryMode(QObject):
         layout.setSpacing(0)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        for i, (img_name, _) in enumerate(images_data):
+        for i, img_name in enumerate(image_names):
             label = QLabel()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setMinimumHeight(self._gallery_image_heights[i])
@@ -558,17 +571,7 @@ class GalleryMode(QObject):
             self._unloadGallery(idx)
         self._gallery_current_center = -1
         self._gallery_image_heights = []
-        for img_name, img_data in self._archive_images_data:
-            try:
-                ba = QByteArray(img_data)
-                buf = QBuffer(ba)
-                reader = QImageReader(buf)
-                size = reader.size()
-                buf.close()
-                if not size.isValid():
-                    size = QSize(800, 600)
-            except Exception:
-                size = QSize(800, 600)
+        for size in self._archive_image_sizes:
             self._gallery_image_heights.append(self._calcHeight(size))
         self._gallery_label_tops = []
         cum_y = 0
@@ -650,7 +653,10 @@ class GalleryMode(QObject):
             self._gallery_layout = None
             self._archive_gallery_container = None
             self._archive_gallery_layout = None
-        self._archive_images_data = []
+        self._archive_image_names = []
+        self._archive_image_cache = {}
+        self._archive_image_sizes = []
+        self._archive_path = ""
 
     def _calcHeight(self, img_size):
         if img_size.width() <= 0:
@@ -665,7 +671,15 @@ class GalleryMode(QObject):
             if not label:
                 return
             item = self._gallery_items[idx]
-            if isinstance(item, str):
+            if self._archive_gallery:
+                img_data = self._archive_image_cache.get(idx)
+                if img_data is None:
+                    img_data = readArchive(self._archive_path, item)
+                    if img_data is None:
+                        return
+                    self._archive_image_cache[idx] = img_data
+                image = QImage.fromData(img_data)
+            elif isinstance(item, str):
                 image = QImage(item)
             else:
                 image = QImage.fromData(item[1])
@@ -723,6 +737,8 @@ class GalleryMode(QObject):
         for idx in list(self._gallery_loaded):
             if idx < window_start or idx > window_end:
                 self._unloadGallery(idx)
+                if self._archive_gallery:
+                    self._archive_image_cache.pop(idx, None)
         for idx in range(window_start, window_end + 1):
             if idx not in self._gallery_loaded:
                 self._loadGallery(idx)
@@ -849,13 +865,11 @@ def _listZipEntries(file_path) -> list:
         with zipfile.ZipFile(file_path, "r") as zf:
             items = []
             for info in zf.infolist():
-                item = {
+                items.append({
                     "name": info.filename,
                     "is_dir": info.is_dir(),
                     "size": info.file_size,
-                    "compressed_size": info.compress_size,
-                }
-                items.append(item)
+                })
             return items
     except Exception:
         logger.exception("读取 ZIP 文件失败")
@@ -868,13 +882,11 @@ def _listTarEntries(file_path) -> list:
         with tarfile.open(file_path, 'r:*') as tf:
             items = []
             for member in tf.getmembers():
-                item = {
+                items.append({
                     "name": member.name,
                     "is_dir": member.isdir(),
                     "size": member.size,
-                    "type": member.type,
-                }
-                items.append(item)
+                })
             return items
     except Exception:
         logger.exception("读取 TAR 文件失败")
@@ -937,34 +949,6 @@ def listArchiveImages(file_path: str) -> list:
         logger.exception("列出压缩包图片失败")
     return []
 
-
-def isArchiveAllImages(file_path: str) -> tuple:
-    """检查压缩包是否只包含图片，返回 (是否全是图片, 图片路径列表)"""
-    try:
-        image_paths = []
-        if fileType(file_path, "ZIP"):
-            with zipfile.ZipFile(file_path, "r") as zf:
-                for info in zf.infolist():
-                    if info.is_dir():
-                        continue
-                    name = info.filename.lower()
-                    if not fileType(name, "IMAGE"):
-                        return False, []
-                    image_paths.append(info.filename)
-            return len(image_paths) > 0, sorted(image_paths, key=sortKey)
-        elif fileType(file_path, "TAR"):
-            with tarfile.open(file_path, 'r:*') as tf:
-                for member in tf.getmembers():
-                    if member.isfile() and fileType(member.name, "IMAGE"):
-                        image_paths.append(member.name)
-                    elif not member.isfile():
-                        continue
-                    else:
-                        return False, []
-            return len(image_paths) > 0, sorted(image_paths, key=sortKey)
-    except Exception:
-        logger.exception("检查压缩包图片失败")
-    return False, []
 
 
 def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, encoding: str = None):

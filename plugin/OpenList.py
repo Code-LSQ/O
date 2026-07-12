@@ -202,8 +202,8 @@ class OpenListPlugin(PluginBase):
     description = "文件同步"
     file = [temp_dir]
 
-    def __init__(self, main_window):
-        super().__init__(main_window)
+    def __init__(self, main=None, editor=None):
+        super().__init__(main=main, editor=editor)
         self.api_url = ""
         self.token = ""
         self.client = None
@@ -235,18 +235,18 @@ class OpenListPlugin(PluginBase):
             return
 
     def getAction(self):
-        action = QAction(self.description, self.main_window)
+        action = QAction(self.description, self.main)
         action.triggered.connect(self.showSettings)
         return action
 
     def showSettings(self):
         self.initialize()
-        dialog = QDialog(self.main_window)
+        dialog = QDialog(self.main)
         dialog.setWindowTitle("OpenList")
         dialog.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.Dialog)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         layout = QVBoxLayout(dialog)
-        widget = OpenListWidget(self.main_window, self)
+        widget = OpenListWidget(self.main, self)
         layout.addWidget(widget)
         dialog.setMinimumSize(600, 500)
         dialog.finished.connect(lambda: (widget._saveSettings(), widget._cleanupTimer()))
@@ -1511,9 +1511,9 @@ class OpenListWidget(QWidget):
     # 信号
     log_signal = Signal(str)
 
-    def __init__(self, main_window, plugin: OpenListPlugin):
+    def __init__(self, main, plugin: OpenListPlugin):
         super().__init__()
-        self.main_window = main_window
+        self.main = main
         self.plugin = plugin
         self.sync_worker = None
         self._initUI()

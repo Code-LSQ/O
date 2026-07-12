@@ -2,13 +2,12 @@ import os
 import copy
 import json
 import tempfile
-from pathlib import Path
 from typing import Any, Dict
 
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import root, config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
+from src.util import config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
 from src.core.input import eventToKey, KeyCaptureFilter
 from src.system import setAutoStart
 
@@ -89,13 +88,7 @@ DEFAULT_CONFIG = {
 class ConfigManager(Singleton):
     _initialized = False
 
-    def _init(self, config_path: Path = None):
-        if config_path is None:
-            self.config_path = config_file
-        elif Path(config_path).is_absolute():
-            self.config_path = Path(os.path.normpath(config_path)).resolve()
-        else:
-            self.config_path = root / config_path
+    def _init(self):
         self.config: Dict[str, Any] = {}
         self._load()
 
@@ -110,13 +103,13 @@ class ConfigManager(Singleton):
 
     def _load(self):
         """加载配置文件"""
-        if self.config_path.exists():
+        if config_file.exists():
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
+                with open(config_file, "r", encoding="utf-8") as f:
                     loaded_config = json.load(f)
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
                 self.config = self._deepUpdate(self.config, loaded_config)
-                logger.info(f"配置文件加载成功: {self.config_path}")
+                logger.info(f"配置文件加载成功: {config_file}")
             except json.JSONDecodeError:
                 logger.exception("配置文件格式错误")
                 self._backupReset()
@@ -129,14 +122,14 @@ class ConfigManager(Singleton):
             self.config = copy.deepcopy(DEFAULT_CONFIG)
             self.config["language"] = systemLanguage()
             self.save()
-            logger.info(f"配置文件不存在，已创建默认配置: {self.config_path}")
+            logger.info(f"配置文件不存在，已创建默认配置: {config_file}")
 
     def _backupReset(self):
         """备份损坏的配置文件并重置为默认配置"""
-        backup_path = self.config_path.with_suffix('.json.bak')
+        backup_path = config_file.with_suffix('.json.bak')
         try:
-            if self.config_path.exists():
-                self.config_path.rename(backup_path)
+            if config_file.exists():
+                config_file.rename(backup_path)
         except Exception:
             logger.exception("备份配置文件失败")
         self.config = copy.deepcopy(DEFAULT_CONFIG)
@@ -147,13 +140,13 @@ class ConfigManager(Singleton):
         """原子写入配置文件"""
         tmp = None
         try:
-            fd, tmp = tempfile.mkstemp(suffix='.tmp', prefix='config_', dir=self.config_path.parent)
+            fd, tmp = tempfile.mkstemp(suffix='.tmp', prefix='config_', dir=config_file.parent)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(fd)
-            os.replace(tmp, str(self.config_path))
-            logger.info(f"配置文件已保存: {self.config_path}")
+            os.replace(tmp, str(config_file))
+            logger.info(f"配置文件已保存: {config_file}")
         except Exception:
             logger.exception("配置文件保存失败")
             if tmp and os.path.exists(tmp):
@@ -215,9 +208,9 @@ class ConfigManager(Singleton):
         return file_path in self.get("Edit.favorites", [])
 
 
-def getConfig(config_path: str = "data/config.json") -> ConfigManager:
+def getConfig() -> ConfigManager:
     """获取配置管理器单例"""
-    return ConfigManager(config_path)
+    return ConfigManager()
 
 class SettingsDialog(QDialog):
     """设置对话框"""

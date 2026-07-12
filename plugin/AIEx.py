@@ -38,9 +38,9 @@ class AIExtendPlugin(PluginBase):
     description = "AI 扩展"
     file = [AI_dir]
 
-    def __init__(self, main_window):
-        super().__init__(main_window)
-        self._launcher = main_window
+    def __init__(self, main=None, editor=None):
+        super().__init__(main=main, editor=editor)
+        self._launcher = main
         self.dock = None
         self._toggle_action = None
         self._panel = None
@@ -97,7 +97,7 @@ class AIExtendPlugin(PluginBase):
         return None
 
     def getAction(self):
-        menu = QMenu(self.description, self.main_window)
+        menu = QMenu(self.description, self.main)
 
         menu.addAction("AI 设置", self._showSettingsDialog)
         menu.addAction("OCR", self.showOcrDialog)
@@ -156,7 +156,7 @@ class AIExtendPlugin(PluginBase):
             self.settings["dialog"] = geo
             self.saveConfig()
         dialog = AIDialog(messages, prompt_name, stream=stream,
-                          dialog=geometry, main_window=self._launcher,
+                          dialog=geometry, launcher=self._launcher, editor=self.editor,
                           onGeometrySave=onGeometrySave,
                           config=self.settings)
         if self._launcher:
@@ -182,7 +182,7 @@ class AIExtendPlugin(PluginBase):
 
         if names:
             for name in names:
-                act = QAction(name, self.main_window)
+                act = QAction(name, self.main)
                 act.triggered.connect(lambda checked, n=name: self.runAiPrompt(n))
                 menu.addAction(act)
 
@@ -472,7 +472,7 @@ class AIExtendPlugin(PluginBase):
         if not api_url:
             messageBox(parent, tr("警告"), tr("请先设置") + " API URL", 1)
             return
-        is_ollama = isinstance(getAdapterUrl(api_url, self.main_window.config, api_key=api_key), OllamaAdapter)
+        is_ollama = isinstance(getAdapterUrl(api_url, self.main.config, api_key=api_key), OllamaAdapter)
         if not is_ollama and not api_key:
             messageBox(parent, tr("警告"), tr("请先设置") + " API Key", 1)
             return
@@ -482,7 +482,7 @@ class AIExtendPlugin(PluginBase):
         self._settings_refresh_btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            adapter = getAdapterEndpoint(endpoint_name, self.main_window.config,
+            adapter = getAdapterEndpoint(endpoint_name, self.main.config,
                                            api_key=api_key, api_url=api_url)
             models = adapter.getModels()
             current_model = self._settings_model_combo.currentText()
@@ -589,13 +589,13 @@ class AIExtendPlugin(PluginBase):
                         status.setText("API URL " + tr("未设置"))
                         status.setStyleSheet("color: red")
                         continue
-                    is_ollama = isinstance(getAdapterUrl(api_url, self.main_window.config, api_key=profile.get("api_key", "")), OllamaAdapter)
+                    is_ollama = isinstance(getAdapterUrl(api_url, self.main.config, api_key=profile.get("api_key", "")), OllamaAdapter)
                     if not is_ollama and not profile.get("api_key"):
                         status.setText("API Key " + tr("未设置"))
                         status.setStyleSheet("color: red")
                         continue
                     endpoint_name = profile.get("endpoint", "")
-                    adapter = getAdapterEndpoint(endpoint_name, self.main_window.config,
+                    adapter = getAdapterEndpoint(endpoint_name, self.main.config,
                                                    api_key=profile.get("api_key", ""),
                                                    api_url=api_url)
                     test_model = profile.get("model", "")
@@ -1168,7 +1168,7 @@ class AIExtendPlugin(PluginBase):
                     break
             else:
                 endpoint_name = "自定义"
-            adapter = getAdapterEndpoint(endpoint_name, self.main_window.config,
+            adapter = getAdapterEndpoint(endpoint_name, self.main.config,
                                            api_key=profile.get("api_key", ""),
                                            api_url=profile.get("api_url", ""))
             models = adapter.getModels()
@@ -1354,7 +1354,7 @@ class AIExtendPlugin(PluginBase):
         self._standalone_window = QFrame(None, Qt.Window | Qt.WindowStaysOnTopHint)
         self._standalone_window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self._standalone_window.destroyed.connect(self._onStandaloneDestroyed)
-        self._standalone_window.setStyleSheet(self.main_window.styleSheet())
+        self._standalone_window.setStyleSheet(self.main.styleSheet())
         layout = QVBoxLayout(self._standalone_window)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._panel)
@@ -1605,7 +1605,7 @@ class AIExtendPlugin(PluginBase):
             self.input_edit.setPlainText(value)
 
     def _onUploadFileClicked(self):
-        file_path = getFilePath(self.main_window, "选择文件")
+        file_path = getFilePath(self.main, "选择文件")
         if not file_path:
             return
         client = getAIClient(config=self.settings)
@@ -1705,7 +1705,7 @@ class AIExtendPlugin(PluginBase):
             if self.stream_thread and self.stream_thread.isRunning():
                 self.stream_thread.requestInterruption()
                 self.stream_thread.wait(2000)
-            self.main_window.removeDockWidget(self.dock)
+            self.editor.removeDockWidget(self.dock)
             self.dock.deleteLater()
             self.dock = None
             self._panel = None
@@ -1761,9 +1761,10 @@ class AIThread(QThread):
 class AIDialog(QDialog):
     """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
 
-    def __init__(self, messages, prompt_name, stream=True, dialog="", main_window=None, onGeometrySave=None, config=None):
+    def __init__(self, messages, prompt_name, stream=True, dialog="", launcher=None, editor=None, onGeometrySave=None, config=None):
         super().__init__()
-        self._main_window = main_window
+        self._launcher = launcher
+        self.editor = editor
         self._onGeometrySave = onGeometrySave
         self.setWindowTitle("AI " + tr("回复"))
         self.setMinimumSize(300, 200)
@@ -1852,23 +1853,23 @@ class AIDialog(QDialog):
         text = self.text_edit.toPlainText()
         if not text:
             return
-        if self._main_window:
-            editor = self._main_window.getEditor()
-            if editor:
-                editor.text_edit.textCursor().insertText(text)
+        if self.editor:
+            editor_widget = self.editor.getEditor()
+            if editor_widget:
+                editor_widget.text_edit.textCursor().insertText(text)
         self.close()
 
     def _apply(self):
         text = self.text_edit.toPlainText()
         if not text:
             return
-        if self._main_window:
-            self._main_window.activateWindow()
-            self._main_window.raise_()
-            editor = self._main_window.getEditor()
-            if editor:
-                editor.text_edit.setFocus()
-                editor.text_edit.textCursor().insertText(text)
+        if self.editor:
+            self.editor.activateWindow()
+            self.editor.raise_()
+            editor_widget = self.editor.getEditor()
+            if editor_widget:
+                editor_widget.text_edit.setFocus()
+                editor_widget.text_edit.textCursor().insertText(text)
         self.close()
 
 class AutoHeightTextBrowser(QTextBrowser):
@@ -2147,9 +2148,8 @@ class OCRDialog(QDialog):
 
     def _openFileWithApp(self, file_path: str):
         try:
-            main_window = self.parent()
-            if main_window and hasattr(main_window, "_openEditor"):
-                main_window._openEditor(file_path)
+            if self._launcher and hasattr(self._launcher, "_openEditor"):
+                self._launcher._openEditor(file_path)
             else:
                 os.startfile(file_path)
         except Exception:

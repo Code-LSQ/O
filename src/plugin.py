@@ -60,9 +60,10 @@ class PluginBase(ABC):
     author: str = ""
     file: list = []
 
-    def __init__(self, main_window=None):
+    def __init__(self, main=None, editor=None):
         self.name = self.__module__.rsplit(".", 1)[-1]
-        self.main_window = main_window
+        self.main = main
+        self.editor = editor
         self.enabled = False
         self.settings = {}
         self._initialized = False
@@ -100,20 +101,20 @@ class PluginBase(ABC):
             super().loadConfig()
             self.settings.setdefault("key", "default")
         """
-        if self.main_window and hasattr(self.main_window, 'config'):
-            saved = self.main_window.config.get("Plugin", {}).get(self.name, {})
+        if self.main and hasattr(self.main, 'config'):
+            saved = self.main.config.get("Plugin", {}).get(self.name, {})
             if saved:
                 self.settings.update(saved)
     
     def saveConfig(self) -> dict:
-        if self.main_window and hasattr(self.main_window, 'config'):
-            plugin_config = self.main_window.config.get("Plugin", {})
+        if self.main and hasattr(self.main, 'config'):
+            plugin_config = self.main.config.get("Plugin", {})
             existing = plugin_config.get(self.name, {})
             enabled = existing.get("enabled", True)
             existing.update(self.settings)
             existing["enabled"] = enabled
             plugin_config[self.name] = existing
-            self.main_window.config.save()
+            self.main.config.save()
         return self.settings
     
     def getSelect(self, callback):
@@ -135,8 +136,9 @@ class PluginManager(Singleton):
 
     使用单例模式，通过 getPluginManager() 获取实例。"""
     
-    def _init(self, main_window=None):
-        self.main_window = main_window
+    def _init(self, main=None, editor=None):
+        self.main = main
+        self.editor = editor
         self.plugins: Dict[str, PluginBase] = {}
         self._scan_cache: Dict[str, tuple] = {}
         self.enabled_plugins: Dict[str, bool] = {}
@@ -237,8 +239,8 @@ class PluginManager(Singleton):
         
         return False
     
-    def reloadPlugins(self) -> None:
-        """重新加载所有插件"""
+    def reloadPlugins(self) -> list:
+        """重新加载所有插件，返回失败的插件名列表"""
         enabled = list(self.plugins.keys())
         
         for name in enabled:
@@ -247,8 +249,13 @@ class PluginManager(Singleton):
         self._scan_cache.clear()
         self.scanPlugins()
         
+        failed = []
         for name in enabled:
-            self.enablePlugin(name)
+            if not self.enablePlugin(name):
+                failed.append(name)
+        if failed:
+            logger.warning(f"重新加载插件失败: {failed}")
+        return failed
     
     def enablePlugin(self, plugin_name: str) -> bool:
         """启用插件（首次启用时懒加载模块）"""
@@ -265,7 +272,7 @@ class PluginManager(Singleton):
                 return False
         
         try:
-            plugin = obj(self.main_window)
+            plugin = obj(main=self.main, editor=self.editor)
             
             plugin.loadConfig()
             plugin.enabled = True
@@ -376,19 +383,21 @@ class PluginManager(Singleton):
 
         return errors
 
-    def setMainWindow(self, main_window):
-        """设置主窗口实例"""
-        self.main_window = main_window
+    def setMain(self, main):
+        """设置 Launcher 窗口实例"""
+        self.main = main
         for plugin in self.plugins.values():
-            plugin.main_window = main_window
+            plugin.main = main
+    
+    def setEditor(self, editor):
+        """设置 Editor 窗口实例"""
+        self.editor = editor
+        for plugin in self.plugins.values():
+            plugin.editor = editor
 
 
-def pluginActionMenu(plugin_manager, main_window=None):
+def pluginActionMenu(plugin_manager):
     """遍历所有已启用插件，yield (display_name, getAction(), plugin_instance)。
-
-    Args:
-        plugin_manager: PluginManager 实例
-        main_window: 可选，设置到 plugin.main_window
 
     Yields:
         (description, action_or_menu, plugin) 三元组"""
@@ -399,27 +408,26 @@ def pluginActionMenu(plugin_manager, main_window=None):
         plugin = plugin_manager.plugins.get(plugin_name)
         if not plugin:
             continue
-        if main_window is not None:
-            plugin.main_window = main_window
         action = plugin.getAction()
         if action is not None:
             yield plugin.description, action, plugin
 
 
-def getPluginManager(main_window=None) -> PluginManager:
+def getPluginManager(main=None, editor=None) -> PluginManager:
     """获取插件管理器单例，是插件系统的主要入口点。
     
     Args:
-        main_window: 主窗口实例（可选，首次调用时设置）
+        main: Launcher 窗口实例（可选，首次调用时设置）
+        editor: Editor 窗口实例（可选）
     
     Returns:
         PluginManager 单例实例
     """
     if PluginManager._instance is None:
-        PluginManager(main_window)
-    elif main_window is not None:
-        PluginManager._instance.main_window = main_window
-        if PluginManager._instance.plugins:
-            for plugin in PluginManager._instance.plugins.values():
-                plugin.main_window = main_window
+        PluginManager(main=main, editor=editor)
+    else:
+        if main is not None:
+            PluginManager._instance.setMain(main)
+        if editor is not None:
+            PluginManager._instance.setEditor(editor)
     return PluginManager._instance

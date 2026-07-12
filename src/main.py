@@ -805,7 +805,7 @@ class MainWindow(WindowMouse, QMainWindow):
             self._editor_window = EditorWindow(self.app, file_path, main_window=self)
             self.applyTheme(self._editor_window)
             self._editor_window.destroyed.connect(lambda: setattr(self, '_editor_window', None))
-            getPluginManager().setMainWindow(self._editor_window)
+            getPluginManager().setEditor(self._editor_window)
         elif file_path:
             self._editor_window.openFilePath(file_path)
         self._editor_window.show()
@@ -836,7 +836,7 @@ class MainWindow(WindowMouse, QMainWindow):
     def _initPlugins(self):
         """初始化插件系统"""
         try:
-            pm = getPluginManager(self)
+            pm = getPluginManager(main=self)
             pm.initConfig(getConfig())
         except Exception:
             logger.exception("插件初始化失败")
@@ -1457,8 +1457,8 @@ class MainWindow(WindowMouse, QMainWindow):
         """获取可用的插件项"""
         items = []
         try:
-            pm = getPluginManager(self)
-            for description, menu_item, plugin in pluginActionMenu(pm, self):
+            pm = getPluginManager()
+            for description, menu_item, plugin in pluginActionMenu(pm):
                 if isinstance(menu_item, QMenu):
                     items.append((description, f"plugin_menu:{description}", description))
                 elif isinstance(menu_item, QAction) and menu_item.text():
@@ -1471,9 +1471,8 @@ class MainWindow(WindowMouse, QMainWindow):
     def _getPlugin(self, plugin_name: str):
         """按显示名称获取插件实例"""
         try:
-            pm = getPluginManager(self)
-            pm.setMainWindow(self)
-            for _, _, plugin in pluginActionMenu(pm, self):
+            pm = getPluginManager()
+            for _, _, plugin in pluginActionMenu(pm):
                 if plugin.description == plugin_name or getattr(plugin, 'name', '') == plugin_name:
                     return plugin
         except Exception:

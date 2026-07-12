@@ -476,9 +476,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor._archive_current_image = None
         editor._is_viewing_archive_image = False
         editor._archive_type = None
-        gallery = editor.getHandler(ViewMode.GALLERY)
-        if gallery._gallery_view_enabled:
-            gallery._exitGalleryView(editor)
+        editor.getHandler(ViewMode.GALLERY).close(editor)
         editor.deleteLater()
         
         self._toc_panel.hidePanel()

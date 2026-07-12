@@ -32,17 +32,17 @@ class HttpsPlugin(PluginBase):
     version = "1.0.0"
     description = "局域网通信"
 
-    def __init__(self, main_window):
-        super().__init__(main_window)
+    def __init__(self, main=None, editor=None):
+        super().__init__(main=main, editor=editor)
         self.http_tool = None
 
     def initialize(self):
         if not super().initialize():
             return
-        self.http_tool = HTTPTool(main_window=self.main_window, settings=self.settings, plugin=self)
+        self.http_tool = HTTPTool(main=self.main, settings=self.settings, plugin=self)
 
     def getAction(self):
-        action = QAction(self.description, self.main_window)
+        action = QAction(self.description, self.main)
         action.triggered.connect(self.showDialog)
         return action
 
@@ -57,8 +57,8 @@ class HttpsPlugin(PluginBase):
         self.http_tool.stopServer()
 
 class HTTPTool:
-    def __init__(self, main_window=None, settings=None, plugin=None):
-        self.main_window = main_window
+    def __init__(self, main=None, settings=None, plugin=None):
+        self.main = main
         self.plugin = plugin
         self.settings = settings if settings else {
             "port": 8000,
@@ -74,7 +74,7 @@ class HTTPTool:
         self._server_shutdown = threading.Event()
 
     def showDialog(self):
-        dialog = HTTPDialog(self.main_window, self)
+        dialog = HTTPDialog(self.main, self)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.setModal(False)
         dialog.show()

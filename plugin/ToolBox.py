@@ -29,8 +29,8 @@ class ToolBox(PluginBase):
     description = "工具箱"
     file = [cache_file, copy_file]
 
-    def __init__(self, main_window):
-        super().__init__(main_window)
+    def __init__(self, main=None, editor=None):
+        super().__init__(main=main, editor=editor)
         self.settings = {
             "copy.target_file": "data/copy.txt",
             "search.paths": [],
@@ -54,12 +54,12 @@ class ToolBox(PluginBase):
     def initialize(self):
         if not super().initialize():
             return
-        self._scroll_timer = _AutoScrollTimer(self.main_window)
+        self._scroll_timer = _AutoScrollTimer(self.main)
         self._copy_mgr = _AutoCopyManager()
-        self._copy_mgr.initMonitor(self.main_window)
-        self._search_mgr = _AutoSearchManager(self.main_window)
-        self._search_mgr.initMonitor(self.main_window)
-        self._click_mgr = _AutoClickManager(self.main_window)
+        self._copy_mgr.initMonitor(self.main)
+        self._search_mgr = _AutoSearchManager(self.editor)
+        self._search_mgr.initMonitor(self.editor)
+        self._click_mgr = _AutoClickManager(self.main)
 
     def cleanup(self):
         if self._scroll_timer:
@@ -72,7 +72,7 @@ class ToolBox(PluginBase):
             self._click_mgr.setEnabled(False)
 
     def getAction(self):
-        menu = QMenu(self.description, self.main_window)
+        menu = QMenu(self.description, self.main)
 
         menu.addAction("工具箱设置", self._showSettings)
 
@@ -137,7 +137,7 @@ class ToolBox(PluginBase):
             logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
 
     def _batchRename(self):
-        dialog = BatchRenameDialog(self.main_window)
+        dialog = BatchRenameDialog(self.main)
         dialog.exec()
 
     def _findDuplicates(self):
@@ -185,29 +185,21 @@ class ToolBox(PluginBase):
 
     def _quickPaste(self):
         text = GlobalHotkeyListener._placeholders.get("Select", "")
-        if not text:
+        if not text or not self.editor:
             return
-        mw = self.main_window
-        activate = getattr(mw, 'activateWindow', None)
-        raise_fn = getattr(mw, 'raise_', None)
-        get_ed = getattr(mw, 'getEditor', None)
-        if not get_ed:
+        self.editor.activateWindow()
+        self.editor.raise_()
+        editor_widget = self.editor.getEditor()
+        if not editor_widget:
             return
-        if activate:
-            activate()
-        if raise_fn:
-            raise_fn()
-        editor = get_ed()
-        if not editor:
-            return
-        editor.text_edit.setFocus()
-        cursor = editor.text_edit.textCursor()
+        editor_widget.text_edit.setFocus()
+        cursor = editor_widget.text_edit.textCursor()
         cursor.insertText(text)
 
     def _quickText(self):
         self.initialize()
         items = self.settings.get("quick_text.list", [])
-        dialog = QuickTextDialog(items, self.main_window)
+        dialog = QuickTextDialog(items, self.main)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             text = dialog.selected_text
             if text:
@@ -226,12 +218,12 @@ class ToolBox(PluginBase):
 
     def _openSearch(self):
         config = getConfig()
-        dialog = SearchDialog(config.get("Launch.tools", {}), self.main_window)
+        dialog = SearchDialog(config.get("Launch.tools", {}), self.main)
         dialog.exec()
 
     def _showSettings(self):
         self.initialize()
-        dialog = ToolBoxSettings(self.settings, self.main_window)
+        dialog = ToolBoxSettings(self.settings, self.main)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             old_speed = self.settings.get("scroll.speed", 50)
             self.settings.update(dialog.getSetting())
@@ -242,13 +234,10 @@ class ToolBox(PluginBase):
             self.saveConfig()
 
     def _ensureEditor(self):
-        mw = self.main_window
-        if hasattr(mw, 'getEditor'):
-            return mw
-        if hasattr(mw, '_editor_window') and mw._editor_window:
-            return mw._editor_window
-        if hasattr(mw, '_openEditor'):
-            return mw._openEditor()
+        if self.editor:
+            return self.editor
+        if self.main and hasattr(self.main, '_openEditor'):
+            return self.main._openEditor()
         return None
 
 class SearchDialog(QDialog):
@@ -895,10 +884,10 @@ class DuplicateFinder(QThread):
 
 
 class DuplicatePanelManager:
-    def __init__(self, parent, splitter, placeholder, main_window, folder_panel_manager=None):
+    def __init__(self, parent, splitter, placeholder, editor, folder_panel_manager=None):
         self.parent = parent
         self.splitter = splitter
-        self.main_window = main_window
+        self.editor = editor
         self.folder_panel_manager = folder_panel_manager
         self.panel = None
         self.tree = None

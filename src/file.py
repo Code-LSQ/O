@@ -149,7 +149,7 @@ class FileControl:
             return
 
         # 插件 fileHandlers 优先级最高
-        for can_handle, open_file in getPluginManager(self.main).fileHandlers:
+        for can_handle, open_file in getPluginManager().fileHandlers:
             if can_handle(file_path):
                 open_file(file_path, self.main)
                 self.main.config.addRecentFile(file_path)
@@ -529,7 +529,7 @@ class ArchiveItemModel(QAbstractItemModel):
         for item in items:
             name = item["name"]
             is_dir = item["is_dir"]
-            size = item.get("size", 0)
+            size = item["size"]
             
             if name.endswith("/") and not is_dir:
                 is_dir = True
@@ -659,18 +659,13 @@ class FolderPanelManager:
         self.tree.setModel(self.model)
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(False)
-        self.tree.setAcceptDrops(True)
-        self.tree.setDragDropMode(QTreeView.DragDropMode.DragDrop)
-        self.tree.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.tree.setItemsExpandable(True)
+        self.tree.setDragEnabled(True)
         self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
 
         self.tree.doubleClicked.connect(self._onTreeDblClick)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._showTreeMenu)
-        self.tree.dragEnterEvent = self._treeDragEnter
-        self.tree.dragMoveEvent = self._treeDragMove
-        self.tree.dropEvent = self._treeDrop
 
         layout.addWidget(self.tree)
 
@@ -696,24 +691,6 @@ class FolderPanelManager:
                 self.parent.openFilePath(file_path)
             except Exception as e:
                 messageBox(self.parent, tr("打开失败"), tr("无法打开文件") + f": {e}", 1)
-
-    def _treeDragEnter(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        QTreeView.dragEnterEvent(self.tree, event)
-
-    def _treeDragMove(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        QTreeView.dragMoveEvent(self.tree, event)
-
-    def _treeDrop(self, event):
-        if self.current_archive_path:
-            event.ignore()
-            return
-        event.ignore()
 
     def _dblClickArc(self, index):
         """压缩包内文件双击事件"""

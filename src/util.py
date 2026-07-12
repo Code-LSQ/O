@@ -280,7 +280,7 @@ def getDevice(app: QApplication, logic=False):
         if not logic:
             width = int(width * scale)
             height = int(height * scale)
-        logger.info(f"屏幕分辨率 {width}×{height}，刷新率 {hz}，缩放 {scale}，像素密度 {dpi}")
+        logger.info(f"屏幕信息 - 分辨率 {width}×{height}，刷新率 {hz}，缩放 {scale}，像素密度 {dpi}")
         return width, height, hz, scale, dpi
     except Exception:
         logger.exception("获取屏幕信息失败")

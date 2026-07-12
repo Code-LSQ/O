@@ -20,8 +20,8 @@ class ResolutionPlugin(PluginBase):
     version = "1.0.0"
     description = "修改分辨率"
 
-    def __init__(self, main_window):
-        super().__init__(main_window)
+    def __init__(self, main=None, editor=None):
+        super().__init__(main=main, editor=editor)
         self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]
         self._original_devmode = None
 
@@ -42,7 +42,7 @@ class ResolutionPlugin(PluginBase):
     def getAction(self):
         menu = QMenu()
 
-        settings_action = QAction("设置", self.main_window)
+        settings_action = QAction("设置", self.main)
         settings_action.triggered.connect(self._showSettings)
         menu.addAction(settings_action)
         menu.addSeparator()
@@ -52,7 +52,7 @@ class ResolutionPlugin(PluginBase):
             if parsed is None:
                 continue
             w, h = parsed
-            action = QAction(res_str, self.main_window)
+            action = QAction(res_str, self.main)
             action.triggered.connect(lambda checked, w=w, h=h: self._switchResolution(w, h))
             menu.addAction(action)
 
@@ -60,7 +60,7 @@ class ResolutionPlugin(PluginBase):
 
     def _showSettings(self):
         self.initialize()
-        dialog = ResolutionSettingsDialog(self.main_window, self.resolutions)
+        dialog = ResolutionSettingsDialog(self.main, self.resolutions)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.resolutions = dialog.resolutions
             self._saveSettings()
@@ -70,24 +70,24 @@ class ResolutionPlugin(PluginBase):
         self.initialize()
         ok, err = testResolution(w, h)
         if not ok:
-            messageBox(self.main_window, "不支持", f"分辨率 {w}×{h} 不可用：{err}", 1)
+            messageBox(self.main, "不支持", f"分辨率 {w}×{h} 不可用：{err}", 1)
             return
 
         try:
             self._original_devmode = getDevmode()
         except RuntimeError as e:
-            messageBox(self.main_window, "错误", f"备份当前分辨率失败：{e}", 1)
+            messageBox(self.main, "错误", f"备份当前分辨率失败：{e}", 1)
             return
 
         if not applyResolution(w, h):
-            messageBox(self.main_window, "错误", f"应用分辨率 {w}×{h} 失败", 1)
+            messageBox(self.main, "错误", f"应用分辨率 {w}×{h} 失败", 1)
             return
 
         self._confirmResolution(w, h)
 
     def _confirmResolution(self, w, h):
         msg = f"分辨率已临时更改为 {w}×{h}\n是否保留此分辨率？"
-        if messageBox(self.main_window, "分辨率已更改", msg, 2):
+        if messageBox(self.main, "分辨率已更改", msg, 2):
             applyResolution(w, h, permanent=True)
             logger.info(f"分辨率已永久更改为 {w}×{h}")
         else:
