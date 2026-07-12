@@ -309,7 +309,7 @@ class AIExtendPlugin(PluginBase):
         param_row.addLayout(left)
         right = QHBoxLayout()
         right.addStretch()
-        right.addWidget(QLabel(tr("最大Token")))
+        right.addWidget(QLabel(tr("最大") + " Token"))
         self._settings_max_tokens_spin = QSpinBox()
         self._settings_max_tokens_spin.setRange(100, 10000)
         self._settings_max_tokens_spin.setFixedWidth(120)

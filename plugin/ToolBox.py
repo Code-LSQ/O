@@ -1523,6 +1523,9 @@ class QuickTextDialog(QDialog):
             elif event.key() == Qt.Key.Key_Down:
                 self._moveSelection(1)
                 return True
+            elif event.key() == Qt.Key.Key_Escape:
+                self.reject()
+                return True
         return super().eventFilter(obj, event)
 
     def _moveSelection(self, direction):

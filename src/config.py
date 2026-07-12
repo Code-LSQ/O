@@ -393,15 +393,19 @@ class SettingsDialog(QDialog):
 
         # 分组排列
         self.launcher_layout_combo = QComboBox()
-        self.launcher_layout_combo.addItems([tr("横向"), tr("纵向")])
+        self.launcher_layout_combo.addItem(tr("横向"), "horizontal")
+        self.launcher_layout_combo.addItem(tr("纵向"), "vertical")
         current_layout = launcher_config.get("layout", "horizontal")
-        self.launcher_layout_combo.setCurrentIndex(0 if current_layout == "horizontal" else 1)
+        idx = self.launcher_layout_combo.findData(current_layout)
+        self.launcher_layout_combo.setCurrentIndex(idx if idx >= 0 else 0)
         layout.addRow(tr("分组排列"), self.launcher_layout_combo)
 
         self.launcher_path_mode_combo = QComboBox()
-        self.launcher_path_mode_combo.addItems([tr("绝对路径"), tr("相对路径")])
+        self.launcher_path_mode_combo.addItem(tr("绝对路径"), "absolute")
+        self.launcher_path_mode_combo.addItem(tr("相对路径"), "relative")
         current_path_mode = launcher_config.get("path_mode", "absolute")
-        self.launcher_path_mode_combo.setCurrentIndex(0 if current_path_mode == "absolute" else 1)
+        idx = self.launcher_path_mode_combo.findData(current_path_mode)
+        self.launcher_path_mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
         layout.addRow(tr("路径"), self.launcher_path_mode_combo)
 
         # 启动器外观
@@ -808,16 +812,14 @@ class SettingsDialog(QDialog):
             hotkey_text = self.launcher_hotkey_edit.text().strip()
             launch["hotkey"] = hotkey_text
 
-            layout_text = self.launcher_layout_combo.currentText()
-            launch["layout"] = "horizontal" if layout_text == "横向" else "vertical"
+            launch["layout"] = self.launcher_layout_combo.currentData()
 
             launch["mouse_side"] = self.launcher_mouse_side_check.isChecked()
             launch["double_ctrl"] = self.launcher_double_ctrl_check.isChecked()
             launch["on_top"] = self.launcher_on_top_check.isChecked()
             launch["run_hide"] = self.launcher_hide.isChecked()
 
-            path_mode_text = self.launcher_path_mode_combo.currentText()
-            launch["path_mode"] = "absolute" if path_mode_text == "绝对路径" else "relative"
+            launch["path_mode"] = self.launcher_path_mode_combo.currentData()
 
             old_path_mode = launch.get("path_mode", "absolute")
             if old_path_mode != launch["path_mode"]:

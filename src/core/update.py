@@ -62,8 +62,8 @@ if not errorlevel 1 (
     goto wait
 )
 cd /d "%~dp0"
-for /f "delims=" %%i in ('dir /b /a-d 2^>nul ^| findstr /v /i "^data$"') do del /f /q "%%i" 2>nul
-for /f "delims=" %%i in ('dir /b /ad 2^>nul ^| findstr /v /i "^data$"') do rmdir /s /q "%%i" 2>nul
+for /f "delims=" %%i in ('dir /b /a-d 2^>nul') do if /i not "%%i"=="data" del /f /q "%%i" 2>nul
+for /f "delims=" %%i in ('dir /b /ad 2^>nul') do if /i not "%%i"=="data" rmdir /s /q "%%i" 2>nul
 xcopy /s /e /y "data\update\*" "." >nul
 rmdir /s /q "data\update" >nul 2>nul
 if exist "data\update.zip" del /f /q "data\update.zip" >nul 2>nul

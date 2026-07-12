@@ -162,12 +162,14 @@ class GlobalHotkeyListener(Singleton):
                 QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
         
         def keyboardWinFilter(msg, data):
-            if self._is_pasting:
-                return
             WM_KEYDOWN = 0x0100
             WM_KEYUP = 0x0101
             WM_SYSKEYDOWN = 0x0104
             WM_SYSKEYUP = 0x0105
+            if self._is_pasting:
+                if msg in (WM_KEYUP, WM_SYSKEYUP):
+                    self._vk_pressed.discard(data.vkCode)
+                return
             vk = data.vkCode
             if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
                 self._vk_pressed.add(vk)
@@ -312,6 +314,10 @@ class GlobalHotkeyListener(Singleton):
                                 'cmd': {'cmd_l', 'cmd_r', 'cmd'},
                                 'cmd_l': {'cmd_l', 'cmd_r', 'cmd'},
                                 'cmd_r': {'cmd_l', 'cmd_r', 'cmd'}}
+            normal_key_indices = []
+            for key in required_normal:
+                if key in self._modifier_press_order:
+                    normal_key_indices.append(self._modifier_press_order.index(key))
             for mod in required_modifiers:
                 normalized_mods = modifier_key_map.get(mod, {mod})
                 mod_index = -1
@@ -321,10 +327,6 @@ class GlobalHotkeyListener(Singleton):
                         break
                 if mod_index == -1:
                     return False
-                normal_key_indices = []
-                for key in required_normal:
-                    if key in self._modifier_press_order:
-                        normal_key_indices.append(self._modifier_press_order.index(key))
                 if normal_key_indices and min(normal_key_indices) < mod_index:
                     return False
         
