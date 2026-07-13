@@ -8,15 +8,15 @@ from typing import Dict, List, Optional
 from pynput import keyboard, mouse
 from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QFrame, QStyle, QAbstractSpinBox, QStyledItemDelegate
 from PySide6.QtCore import Qt, QSize, QTimer, QThread, Signal, QEvent
-from PySide6.QtGui import QAction, QTextCursor, QColor, QPalette
+from PySide6.QtGui import QAction, QTextCursor, QColor
 
+from src.plugin import PluginBase
 from src.main import getIcon
 from src.file import FileSelect
-from src.plugin import PluginBase
 from src.config import getConfig
 from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize
 from src.core.timer import TimerManager
-from src.core.input import GlobalHotkeyListener
+
 
 _MAX_SEARCH_FILE_SIZE = 10 * 1024 * 1024
 
@@ -41,7 +41,8 @@ class ToolBox(PluginBase):
             "duplicate.paths": [],
             "duplicate.exclude": ["*.pyc", "*/__pycache__/", "*/.git/"],
             "click.interval": 3,
-            "scroll.speed": 50
+            "scroll.speed": 50,
+            "paste.regex_text": r"^[ \t]*\n"
         }
         self._scroll_timer = None
         self._copy_mgr = None
@@ -80,7 +81,7 @@ class ToolBox(PluginBase):
         menu.addAction("快速文本", self._quickText)
         menu.addAction("批量重命名", self._batchRename)
         menu.addAction("查找重复文件", self._findDuplicates)
-        menu.addAction("快速粘贴", self._quickPaste)
+        menu.addAction("快速粘贴", lambda: self.getSelect(self._quickPaste))
 
         menu.addAction("自动滑动", self._toggleScroll)
         menu.addAction("自动复制", self._toggleCopy)
@@ -132,7 +133,6 @@ class ToolBox(PluginBase):
             logger.info("自动点击已停止")
         else:
             self._click_mgr.interval = self.settings.get("click.interval", 3)
-            self._click_mgr._digit_control = True
             self._click_mgr.setEnabled(True)
             logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
 
@@ -183,18 +183,29 @@ class ToolBox(PluginBase):
         mgr.setSizes(editor.width(), fw)
         self._duplicate_mgr = mgr
 
-    def _quickPaste(self):
-        text = GlobalHotkeyListener._placeholders.get("Select", "")
-        if not text or not self.editor:
+    def _quickPaste(self, text):
+        if not text:
             return
-        self.editor.activateWindow()
-        self.editor.raise_()
-        editor_widget = self.editor.getEditor()
+        regex_text = self.settings.get("paste.regex_text", "").strip()
+        if regex_text:
+            try:
+                text = re.sub(regex_text, '', text, flags=re.MULTILINE)
+            except re.error:
+                logger.warning(f"快速粘贴正则无效: {regex_text}")
+        QApplication.clipboard().setText(text)
+
+        editor = self._ensureEditor()
+        if not editor:
+            logger.error("快速粘贴: 无法获取编辑器窗口")
+            return
+
+        editor.activateWindow()
+        editor.raise_()
+        editor_widget = editor.getEditor()
         if not editor_widget:
-            return
+            editor_widget = editor.addTab()
         editor_widget.text_edit.setFocus()
-        cursor = editor_widget.text_edit.textCursor()
-        cursor.insertText(text)
+        editor_widget.text_edit.paste()
 
     def _quickText(self):
         self.initialize()
@@ -1109,6 +1120,14 @@ class ToolBoxSettings(QDialog):
         self.click_interval.setValue(click_interval)
         layout.addRow("自动点击间隔", self.click_interval)
 
+        paste_regex = self.settings.get("paste.regex_text", "")
+        display_text = (paste_regex
+            .replace('\n', '\\n')
+            .replace('\r', '\\r')
+            .replace('\t', '\\t'))
+        self.paste_regex_edit = QLineEdit(display_text)
+        layout.addRow("快速粘贴正则", self.paste_regex_edit)
+
         self._qt_list = QListWidget()
         self._qt_list.setMaximumHeight(120)
         self._qt_list.itemDoubleClicked.connect(self._qtEdit)
@@ -1231,6 +1250,11 @@ class ToolBoxSettings(QDialog):
             for i in range(self._qt_list.count())
         ]
         self.settings["click.interval"] = self.click_interval.value()
+        raw = self.paste_regex_edit.text().strip()
+        self.settings["paste.regex_text"] = (raw
+            .replace('\\n', '\n')
+            .replace('\\r', '\r')
+            .replace('\\t', '\t'))
         return self.settings
 
 
@@ -1397,6 +1421,8 @@ class _AutoSearchManager:
                 editor.text_edit.ensureCursorVisible()
 
 class _AutoClickManager:
+    _TICK_MS = 100
+
     def __init__(self, parent=None):
         self._tm = TimerManager()
         self.parent = parent
@@ -1404,57 +1430,54 @@ class _AutoClickManager:
         self._timer.timeout.connect(self._doClick)
         self.enabled = False
         self.interval = 3
-        self._paused = False
-        self._digit_control = True
-        self._active_interval = 3
+        self._elapsed = 0
         self._mouse_controller = mouse.Controller()
         self._keyboard_listener = None
 
     def setEnabled(self, enabled: bool):
         self.enabled = enabled
         if enabled:
-            self._paused = False
+            self._elapsed = 0
             self._startListener()
-            self._active_interval = self.interval
-            self._timer.start(int(self.interval * 1000))
+            self._timer.start(self._TICK_MS)
         else:
-            self._paused = False
             self._stopListener()
             self._timer.stop()
 
     def _doClick(self):
-        if self.interval != self._active_interval:
-            self._active_interval = self.interval
+        if not self.enabled:
+            self._stopListener()
             self._timer.stop()
-            self._timer.start(int(self.interval * 1000))
-        if not self._paused:
+            return
+        self._elapsed += self._TICK_MS
+        if self._elapsed >= self.interval * 1000:
+            self._elapsed = 0
             try:
                 self._mouse_controller.click(mouse.Button.left)
             except Exception:
                 logger.exception("模拟鼠标点击失败")
 
+    def _onKeyPress(self, key):
+        try:
+            if key == keyboard.Key.esc:
+                self.enabled = False
+            elif hasattr(key, 'char') and key.char and key.char.isdigit():
+                d = int(key.char)
+                if 1 <= d <= 9:
+                    self.interval = d
+        except Exception:
+            logger.exception("按键监听回调失败")
+
     def _startListener(self):
         self._stopListener()
-
-        def onPress(key):
-            try:
-                if key == keyboard.Key.esc:
-                    self._paused = True
-                elif hasattr(key, 'char') and key.char and key.char.isdigit():
-                    if self._digit_control:
-                        d = int(key.char)
-                        if 1 <= d <= 9:
-                            self.interval = d
-            except Exception:
-                logger.exception("按键监听回调失败")
-
-        self._keyboard_listener = keyboard.Listener(on_press=onPress)
+        self._keyboard_listener = keyboard.Listener(on_press=self._onKeyPress)
         self._keyboard_listener.daemon = True
         self._keyboard_listener.start()
 
     def _stopListener(self):
         if self._keyboard_listener:
             self._keyboard_listener.stop()
+            self._keyboard_listener.join()
             self._keyboard_listener = None
 
 

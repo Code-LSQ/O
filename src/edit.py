@@ -120,6 +120,19 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor_layout = QVBoxLayout(editor_widget)
         editor_layout.setContentsMargins(0, 0, 0, 0)
         
+        # 初始化状态栏（在 tab 创建之前，确保 _connectCursorPosition 访问时不崩溃）
+        self.setStatusBar(QStatusBar(self))
+        
+        self.cursor_pos_label = QLabel("")
+        self.cursor_pos_label.setMinimumWidth(120)
+        self.cursor_pos_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.cursor_pos_label.setStyleSheet("background: transparent;")
+        self.statusBar().addPermanentWidget(self.cursor_pos_label)
+
+        self.encoding_label = QLabel("UTF-8")
+        self.encoding_label.setStyleSheet("background: transparent;")
+        self.statusBar().addPermanentWidget(self.encoding_label)
+        
         # 根据配置决定是否显示标签页
         if self.config.get("Edit.multi_tab", True):
             # 标签页区域容器
@@ -189,19 +202,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         # 初始化文件夹面板管理器（在splitter创建之后）
         self._folder_panel_manager = FolderPanelManager(self, self.splitter, self.config, self._folder_placeholder, self)
         
-        # 初始化状态栏
-        self.setStatusBar(QStatusBar(self))
-        
-        self.cursor_pos_label = QLabel("")
-        self.cursor_pos_label.setMinimumWidth(120)
-        self.cursor_pos_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.cursor_pos_label.setStyleSheet("background: transparent;")
-        self.statusBar().addPermanentWidget(self.cursor_pos_label)
-
-        self.encoding_label = QLabel("UTF-8")
-        self.encoding_label.setStyleSheet("background: transparent;")
-        self.statusBar().addPermanentWidget(self.encoding_label)
-
         # 单标签页模式下直接创建编辑器
         if not self._use_tabs:
             self._initSingleEditor(editor_layout)
@@ -366,6 +366,9 @@ class EditorWindow(WindowMouse, QMainWindow):
         """连接编辑器光标信号到状态栏标签"""
         if not editor:
             return
+        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+        self.cursor_pos_label.setVisible(not is_special)
+
         def callback(line: int, col: int):
             if hasattr(self, 'cursor_pos_label'):
                 self.cursor_pos_label.setText(tr("行") + f" {line}, " + tr("列") + f" {col}")
@@ -380,17 +383,21 @@ class EditorWindow(WindowMouse, QMainWindow):
         """切换标签页时更新编码显示及光标位置"""
         if not hasattr(self, 'encoding_label'):
             return
+        if hasattr(self, '_last_tab_index') and self._last_tab_index >= 0 and self.tab_widget:
+            old = self.tab_widget.widget(self._last_tab_index)
+            if isinstance(old, EditorTab):
+                old.getHandler(old._current_mode).deactivate(old)
+        self._last_tab_index = index
         editor = self.getEditor()
         if editor:
-            from src.gui.view import ViewMode
             if editor._current_mode:
                 handler = editor.getHandler(editor._current_mode)
                 handler.activate(editor)
             self._connectCursorPosition(editor)
-            if editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
-                self.encoding_label.setVisible(False)
-            else:
-                self.encoding_label.setVisible(True)
+            is_special_mode = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+            self.encoding_label.setVisible(not is_special_mode)
+            self.cursor_pos_label.setVisible(not is_special_mode)
+            if not is_special_mode:
                 encoding = editor.encoding or "UTF-8"
                 self.encoding_label.setText(encodingName(encoding))
         else:
@@ -464,12 +471,13 @@ class EditorWindow(WindowMouse, QMainWindow):
                 return
 
         self.tab_widget.removeTab(index)
-        cur_handler = editor.getHandler(editor._current_mode)
-        cur_handler.deactivate(editor)
-        cur_handler.close(editor)
+        for mode, handler in list(editor.handlers.items()):
+            handler.deactivate(editor)
+            handler.close(editor)
         if hasattr(editor, '_markdown_cache'):
             editor._markdown_cache.clear()
         if hasattr(editor, 'highlighter') and editor.highlighter:
+            editor.highlighter.setDocument(None)
             editor.highlighter.deleteLater()
         editor._zip_image_paths = []
         editor._tar_image_paths = []
@@ -768,6 +776,10 @@ class EditorWindow(WindowMouse, QMainWindow):
         else:
             ViewMode.switchMode(editor, mode)
 
+        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+        self.cursor_pos_label.setVisible(not is_special)
+        self.encoding_label.setVisible(not is_special)
+
         self.statusBar().showMessage(tr("查看模式") + ": " + mode, 2000)
     
     def showSettings(self):
@@ -882,7 +894,6 @@ class EditorWindow(WindowMouse, QMainWindow):
                 self.config.set("Edit.open", [loaded_file])
                 self.config.save()
         else:
-            # 多标签页模式下加载所有文件
             for file_path in openFiles:
                 if Path(file_path).exists():
                     self.openFilePath(file_path)

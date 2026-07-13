@@ -664,8 +664,6 @@ class RuntimeManager:
                 os.environ[key] = val
                 self._managed_keys.add(key)
 
-        path_separator = ";" if sys.platform == "win32" else ":"
-
         path_list = []
         if self.Python:
             python_dir = os.path.dirname(self.Python)
@@ -685,7 +683,7 @@ class RuntimeManager:
                 path_list.append(p)
 
         # 注入 PATH：移除旧注入路径，再追加新路径（去重）
-        parts = os.environ.get("PATH", "").split(path_separator)
+        parts = os.environ.get("PATH", "").split(os.pathsep)
         if self._injected_paths:
             removed = {os.path.normpath(p).lower() for p in self._injected_paths}
             parts = [p for p in parts if p and os.path.normpath(p).lower() not in removed]
@@ -697,7 +695,7 @@ class RuntimeManager:
             self._injected_paths = path_list
         else:
             self._injected_paths = []
-        os.environ["PATH"] = path_separator.join(parts)
+        os.environ["PATH"] = os.pathsep.join(parts)
 
         logger.info(f"环境变量注入完成，PATH 长度: {len(os.environ.get('PATH', ''))}")
 

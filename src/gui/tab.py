@@ -35,7 +35,6 @@ class EditorTextEdit(QTextEdit):
         doc = self.document()
         doc.blockCountChanged.connect(self._onBlockChange)
         doc.contentsChanged.connect(self._onContentsChanged)
-        self.textChanged.connect(self._updateLineNum)
         self.cursorPositionChanged.connect(self._onCursorChanged)
 
         self._updateLineNumWidth(0)
@@ -55,8 +54,6 @@ class EditorTextEdit(QTextEdit):
         self._shortcut_actions = {}
         self._reloadShortcuts()
 
-
-
     def setZoomCallback(self, callback):
         self._zoom_callback = callback
     
@@ -68,13 +65,7 @@ class EditorTextEdit(QTextEdit):
             self.line_number_area.update()
 
     def _onContentsChanged(self):
-        """内容改变时更新行号区域"""
-        if self.line_numbers_visible:
-            self._updateLineNumWidth(0)
-            self.line_number_area.update()
-
-    def _updateLineNum(self):
-        """文本改变时更新行号区域"""
+        """内容改变时更新行号区域（仅边距，不触发行号重绘）"""
         if self.line_numbers_visible:
             self._updateLineNumWidth(0)
 
@@ -281,6 +272,19 @@ class EditorTextEdit(QTextEdit):
             event.accept()
             return
 
+        if not self._shortcut_actions:
+            main = self.window()
+            if main:
+                if hasattr(main, 'action_undo'):
+                    self._shortcut_actions[main.action_undo] = self.undo
+
+        for action, handler in self._shortcut_actions.items():
+            for sc in action.shortcuts():
+                if sc == event_seq:
+                    handler()
+                    event.accept()
+                    return
+
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
@@ -344,6 +348,12 @@ class EditorTextEdit(QTextEdit):
             s = saved.get(name, default_shortcuts.get(name, ""))
             if s:
                 self._shortcut_seqs[name] = QKeySequence(s)
+
+        self._shortcut_actions.clear()
+        main = self.window()
+        if main:
+            if hasattr(main, 'action_undo'):
+                self._shortcut_actions[main.action_undo] = self.undo
 
     def goToLine(self):
         text = inputDialog(self, tr("跳转到行"), tr("行号"), default="1")
@@ -482,7 +492,7 @@ class EditorTextEdit(QTextEdit):
             if char in self._BRACKET_PAIRS:
                 self._highlightBracket(pos, char)
                 return
-        self.highlightLine()
+        return
 
     def _highlightBracket(self, pos, char):
         rev = {')': '(', ']': '[', '}': '{'}
@@ -631,6 +641,16 @@ class EditorTextEdit(QTextEdit):
             cursor.removeSelectedText()
             self.setTextCursor(cursor)
 
+    def undo(self):
+        super().undo()
+        tab = self._parent_tab
+        if tab and tab.is_modified:
+            content = self.toPlainText()
+            if content == tab._original_content:
+                tab.is_modified = False
+                tab.file_changed.emit(False)
+                self.document().setModified(False)
+
     def _reloadFile(self):
         """重新加载当前文件（委托给父标签页的完整重载逻辑）"""
         if not hasattr(self, '_parent_tab') or not self._parent_tab:
@@ -689,13 +709,16 @@ class EditorTextEdit(QTextEdit):
             while max_num >= 10:
                 max_num //= 10
                 digits += 1
-            self._cached_line_number_width = 3 + self.fontMetrics().horizontalAdvance('9') * digits
+            w = self.fontMetrics().horizontalAdvance('9')
+            self._cached_line_number_width = 2 + w * (digits + 1)
             self._cached_block_count = current_block_count
         return self._cached_line_number_width
 
     def _updateLineNumWidth(self, _):
         """更新行号区域宽度"""
-        self.setViewportMargins(self._lineNumWidth(), 0, 0, 0)
+        w = self._lineNumWidth()
+        if self.viewportMargins().left() != w:
+            self.setViewportMargins(w, 0, 0, 0)
 
     def _updateLineNumArea(self, rect, dy):
         """更新行号区域"""
@@ -712,7 +735,7 @@ class EditorTextEdit(QTextEdit):
         """滚动内容时同步行号区域"""
         super().scrollContentsBy(dx, dy)
         if self.line_numbers_visible:
-            self.line_number_area.update()
+            self._updateLineNumArea(self.viewport().rect(), dy)
 
     def resizeEvent(self, event):
         """窗口大小改变事件"""
@@ -754,12 +777,12 @@ class EditorTextEdit(QTextEdit):
                 doc = editor.document()
                 if not doc or doc.blockCount() == 0:
                     return
-                block = doc.begin()
-                block_number = block.blockNumber()
                 text_color = editor.palette().color(QPalette.ColorRole.WindowText)
                 gray = qGray(text_color.rgb())
                 pen_color = QColor(gray, gray, gray, 150)
                 scroll_offset = editor.verticalScrollBar().value()
+                block = doc.begin()
+                block_number = block.blockNumber()
                 while block.isValid():
                     try:
                         block_geo = doc.documentLayout().blockBoundingRect(block)
@@ -804,7 +827,7 @@ class EditorTab(QWidget):
         self._markdown_cache = LRUCache(max_size=10)
         self.is_image = False
         self.setAcceptDrops(True)
-        self._pending_file_path = None
+
 
         self.handlers = {}
 
@@ -956,17 +979,12 @@ class EditorTab(QWidget):
         self.getHandler(ViewMode.PDF).pdf_pixmaps = value
 
     def _onTextChanged(self):
-        current_content = self.text_edit.toPlainText()
-        current_normalized = _LINE_ENDING_RE.sub('\n', current_content)
-        original_normalized = _LINE_ENDING_RE.sub('\n', self._original_content)
-        if current_normalized != original_normalized:
-            if not self.is_modified:
+        if self.is_modified:
+            return
+        if self.text_edit.document().isModified():
+            if self.text_edit.toPlainText() != self._original_content:
                 self.is_modified = True
                 self.file_changed.emit(True)
-        else:
-            if self.is_modified:
-                self.is_modified = False
-                self.file_changed.emit(False)
 
     def eventFilter(self, obj, event):
         if obj == self.text_edit and event.type() == QEvent.Type.MouseButtonDblClick and self._archive_type and self.file_path:
@@ -1033,8 +1051,7 @@ class EditorTab(QWidget):
         if self.highlighter:
             try:
                 self.highlighter.setDocument(None)
-                if not self.highlighter.signalsBlocked():
-                    self.highlighter.deleteLater()
+                self.highlighter.deleteLater()
             except RuntimeError:
                 pass
             self.highlighter = None

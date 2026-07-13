@@ -16,12 +16,14 @@ class BaseHighlighter(QSyntaxHighlighter):
     def addRule(self, pattern, format):
         if not pattern:
             return
-        self.highlighting_rules.append((pattern, format))
         try:
             expr = QRegularExpression(pattern)
-            self._compiled_patterns.append(expr if expr.isValid() else None)
+            if not expr.isValid():
+                return
+            self.highlighting_rules.append((pattern, format))
+            self._compiled_patterns.append(expr)
         except Exception:
-            self._compiled_patterns.append(None)
+            pass
 
     def highlightBlock(self, text: str):
         if not text:
@@ -30,14 +32,7 @@ class BaseHighlighter(QSyntaxHighlighter):
             return
         for i, (pattern, fmt) in enumerate(self.highlighting_rules):
             try:
-                if i < len(self._compiled_patterns) and self._compiled_patterns[i] is not None:
-                    expression = self._compiled_patterns[i]
-                else:
-                    if not pattern:
-                        continue
-                    expression = QRegularExpression(pattern)
-                    if not expression.isValid():
-                        continue
+                expression = self._compiled_patterns[i]
                 match_iterator = expression.globalMatch(text)
                 while match_iterator.hasNext():
                     match = match_iterator.next()

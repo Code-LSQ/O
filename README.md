@@ -204,7 +204,7 @@ https://github.com/OpenListTeam/OpenList/releases
 
 
 
-可能会实现的功能有
+可能会做的事有
 1. 改用 Nuitka 打包
 2. 图片质量比较、图片相似度比较
 3. UI 界面配色自定义

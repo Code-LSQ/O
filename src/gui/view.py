@@ -4,10 +4,9 @@ import zipfile
 import hashlib
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QObject
-from PySide6.QtGui import QPixmap, QImage, QImageReader, QAction
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMenu
-from PySide6.QtCore import QByteArray, QBuffer, QSize
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QTimer, QObject, QByteArray, QBuffer, QSize
+from PySide6.QtGui import QPixmap, QImage, QImageReader, QTextDocument
 
 from src.util import logger, EXTENSION, tr, fileType, sortKey, ENCODING_MAP
 from src.core.md import renderForView
@@ -69,7 +68,7 @@ class ViewMode:
             if any(path_lower.endswith(ext) for ext in EXTENSION[key]):
                 return cls.HEX
         for mode, keys in cls.EXT_KEYS.items():
-            if mode == cls.GALLERY:
+            if mode in (cls.GALLERY, cls.MARKDOWN):
                 continue
             for k in keys:
                 if any(path_lower.endswith(ext) for ext in EXTENSION[k]):
@@ -162,7 +161,8 @@ class MarkdownMode:
         tab.text_edit.setReadOnly(False)
 
     def close(self, tab):
-        pass
+        tab._markdown_cache.clear()
+        tab.text_edit.clear()
 
     def activate(self, tab):
         content_to_render = tab._original_content
@@ -191,7 +191,12 @@ class MarkdownMode:
             tab.text_edit.setReadOnly(False)
 
     def deactivate(self, tab):
-        pass
+        tab._markdown_cache.clear()
+        old_doc = tab.text_edit.document()
+        new_doc = QTextDocument(tab.text_edit)
+        tab.text_edit.setDocument(new_doc)
+        old_doc.deleteLater()
+        tab.setupHighlighter()
 
 
 class HexMode:

@@ -496,7 +496,7 @@ class EditTool(QDialog):
 
         # 预设类型不能修改
         if tool_type == "预设":
-            self.type_combo.addItem(tr("预设"))
+            self.type_combo.addItem(tr("预设"), userData="预设")
             self.type_combo.setCurrentText(tr("预设"))
             self.type_combo.setEnabled(False)
             self.type_combo.setStyleSheet("QComboBox::down-arrow { width: 0px; } QComboBox::drop-down { width: 0px; }")
