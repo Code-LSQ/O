@@ -202,8 +202,8 @@ class OpenListPlugin(PluginBase):
     description = "文件同步"
     file = [temp_dir]
 
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
+    def __init__(self, main=None):
+        super().__init__(main=main)
         self.api_url = ""
         self.token = ""
         self.client = None

@@ -51,9 +51,6 @@ class LinkPlugin(PluginBase):
     version = "1.0.0"
     description = "符号链接管理"
     
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
-
     def loadConfig(self):
         super().loadConfig()
         self.settings.setdefault("links", [])

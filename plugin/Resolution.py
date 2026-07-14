@@ -20,8 +20,8 @@ class ResolutionPlugin(PluginBase):
     version = "1.0.0"
     description = "修改分辨率"
 
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
+    def __init__(self, main=None):
+        super().__init__(main=main)
         self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]
         self._original_devmode = None
 

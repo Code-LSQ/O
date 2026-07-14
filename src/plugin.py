@@ -60,10 +60,9 @@ class PluginBase(ABC):
     author: str = ""
     file: list = []
 
-    def __init__(self, main=None, editor=None):
+    def __init__(self, main=None):
         self.name = self.__module__.rsplit(".", 1)[-1]
         self.main = main
-        self.editor = editor
         self.enabled = False
         self.settings = {}
         self._initialized = False
@@ -136,9 +135,8 @@ class PluginManager(Singleton):
 
     使用单例模式，通过 getPluginManager() 获取实例。"""
     
-    def _init(self, main=None, editor=None):
+    def _init(self, main=None):
         self.main = main
-        self.editor = editor
         self.plugins: Dict[str, PluginBase] = {}
         self._scan_cache: Dict[str, tuple] = {}
         self.enabled_plugins: Dict[str, bool] = {}
@@ -272,7 +270,7 @@ class PluginManager(Singleton):
                 return False
         
         try:
-            plugin = obj(main=self.main, editor=self.editor)
+            plugin = obj(main=self.main)
             
             plugin.loadConfig()
             plugin.enabled = True
@@ -383,19 +381,6 @@ class PluginManager(Singleton):
 
         return errors
 
-    def setMain(self, main):
-        """设置 Launcher 窗口实例"""
-        self.main = main
-        for plugin in self.plugins.values():
-            plugin.main = main
-    
-    def setEditor(self, editor):
-        """设置 Editor 窗口实例"""
-        self.editor = editor
-        for plugin in self.plugins.values():
-            plugin.editor = editor
-
-
 def pluginActionMenu(plugin_manager):
     """遍历所有已启用插件，yield (display_name, getAction(), plugin_instance)。
 
@@ -413,21 +398,15 @@ def pluginActionMenu(plugin_manager):
             yield plugin.description, action, plugin
 
 
-def getPluginManager(main=None, editor=None) -> PluginManager:
+def getPluginManager(main=None) -> PluginManager:
     """获取插件管理器单例，是插件系统的主要入口点。
     
     Args:
         main: Launcher 窗口实例（可选，首次调用时设置）
-        editor: Editor 窗口实例（可选）
     
     Returns:
         PluginManager 单例实例
     """
     if PluginManager._instance is None:
-        PluginManager(main=main, editor=editor)
-    else:
-        if main is not None:
-            PluginManager._instance.setMain(main)
-        if editor is not None:
-            PluginManager._instance.setEditor(editor)
+        PluginManager(main=main)
     return PluginManager._instance

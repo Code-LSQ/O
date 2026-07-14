@@ -192,10 +192,8 @@ class MarkdownMode:
 
     def deactivate(self, tab):
         tab._markdown_cache.clear()
-        old_doc = tab.text_edit.document()
         new_doc = QTextDocument(tab.text_edit)
         tab.text_edit.setDocument(new_doc)
-        old_doc.deleteLater()
         tab.setupHighlighter()
 
 

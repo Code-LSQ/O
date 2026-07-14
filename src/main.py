@@ -705,7 +705,7 @@ class MainWindow(WindowMouse, QMainWindow):
         super().__init__()
 
         self.app = app
-        self._editor_window = None
+        self.editor = None
         self.config = getConfig()
         self._tools = getConfig().get("Launch.tools", {})
         self._path_mode = getConfig().get("Launch.path_mode", "absolute")
@@ -801,17 +801,16 @@ class MainWindow(WindowMouse, QMainWindow):
         """打开/激活编辑器窗口"""
         from src.edit import EditorWindow
         # 按需导入降低内存占用
-        if self._editor_window is None:
-            self._editor_window = EditorWindow(self.app, file_path, main_window=self)
-            self.applyTheme(self._editor_window)
-            self._editor_window.destroyed.connect(lambda: setattr(self, '_editor_window', None))
-            getPluginManager().setEditor(self._editor_window)
+        if self.editor is None:
+            self.editor = EditorWindow(self.app, file_path, main_window=self)
+            self.applyTheme(self.editor)
+            self.editor.destroyed.connect(lambda: setattr(self, 'editor', None))
         elif file_path:
-            self._editor_window.openFilePath(file_path)
-        self._editor_window.show()
-        self._editor_window.raise_()
-        self._editor_window.activateWindow()
-        return self._editor_window
+            self.editor.openFilePath(file_path)
+        self.editor.show()
+        self.editor.raise_()
+        self.editor.activateWindow()
+        return self.editor
 
     def applyTheme(self, window=None):
         """应用主题到窗口"""
@@ -878,7 +877,7 @@ class MainWindow(WindowMouse, QMainWindow):
 
         if tool_type == "plugin_toggle":
             name = tool.get("name", "")
-            editor = self._editor_window
+            editor = self.editor
             if editor:
                 plugin = getPluginManager().plugins.get(name)
                 if plugin and plugin.getAction():
@@ -1598,9 +1597,9 @@ class MainWindow(WindowMouse, QMainWindow):
 
     def _restartApp(self):
         """重启程序，先检查编辑器未保存文件"""
-        if self._editor_window:
-            editors = list(self._editor_window._iterEditors())
-            if self._editor_window._checkUnsavedFiles(editors):
+        if self.editor:
+            editors = list(self.editor._iterEditors())
+            if self.editor._checkUnsavedFiles(editors):
                 return
         restartApplication(self)
 

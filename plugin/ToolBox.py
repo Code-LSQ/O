@@ -29,8 +29,8 @@ class ToolBox(PluginBase):
     description = "工具箱"
     file = [cache_file, copy_file]
 
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
+    def __init__(self, main=None):
+        super().__init__(main=main)
         self.settings = {
             "copy.target_file": "data/copy.txt",
             "search.paths": [],
@@ -58,8 +58,8 @@ class ToolBox(PluginBase):
         self._scroll_timer = _AutoScrollTimer(self.main)
         self._copy_mgr = _AutoCopyManager()
         self._copy_mgr.initMonitor(self.main)
-        self._search_mgr = _AutoSearchManager(self.editor)
-        self._search_mgr.initMonitor(self.editor)
+        self._search_mgr = _AutoSearchManager(self.main.editor)
+        self._search_mgr.initMonitor(self.main.editor)
         self._click_mgr = _AutoClickManager(self.main)
 
     def cleanup(self):
@@ -245,11 +245,11 @@ class ToolBox(PluginBase):
             self.saveConfig()
 
     def _ensureEditor(self):
-        if self.editor:
-            return self.editor
-        if self.main and hasattr(self.main, '_openEditor'):
-            return self.main._openEditor()
-        return None
+        if not self.main:
+            return None
+        if self.main.editor:
+            return self.main.editor
+        return self.main._openEditor()
 
 class SearchDialog(QDialog):
     def __init__(self, tools, parent=None):

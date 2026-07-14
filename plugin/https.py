@@ -32,10 +32,6 @@ class HttpsPlugin(PluginBase):
     version = "1.0.0"
     description = "局域网通信"
 
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
-        self.http_tool = None
-
     def initialize(self):
         if not super().initialize():
             return

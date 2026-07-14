@@ -38,9 +38,8 @@ class AIExtendPlugin(PluginBase):
     description = "AI 扩展"
     file = [AI_dir]
 
-    def __init__(self, main=None, editor=None):
-        super().__init__(main=main, editor=editor)
-        self._launcher = main
+    def __init__(self, main=None):
+        super().__init__(main=main)
         self.dock = None
         self._toggle_action = None
         self._panel = None
@@ -91,11 +90,6 @@ class AIExtendPlugin(PluginBase):
         self._loadHistory()
         self._ensureContent()
 
-    def _getEditorWindow(self):
-        if hasattr(self._launcher, '_editor_window') and self._launcher._editor_window:
-            return self._launcher._editor_window
-        return None
-
     def getAction(self):
         menu = QMenu(self.description, self.main)
 
@@ -127,7 +121,7 @@ class AIExtendPlugin(PluginBase):
         name = getattr(self, '_pending_ai_prompt', None)
         text = text.strip()
         if not text:
-            messageBox(self._launcher, tr("提示"), tr("请先选中文本后再执行此操作"), 1)
+            messageBox(self.main, tr("提示"), tr("请先选中文本后再执行此操作"), 1)
             return
 
         mime = QApplication.clipboard().mimeData()
@@ -156,11 +150,11 @@ class AIExtendPlugin(PluginBase):
             self.settings["dialog"] = geo
             self.saveConfig()
         dialog = AIDialog(messages, prompt_name, stream=stream,
-                          dialog=geometry, launcher=self._launcher, editor=self.editor,
+                          dialog=geometry, editor=self.main.editor,
                           onGeometrySave=onGeometrySave,
                           config=self.settings)
-        if self._launcher:
-            dialog.setStyleSheet(self._launcher.styleSheet())
+        if self.main:
+            dialog.setStyleSheet(self.main.styleSheet())
         if self._current_ai_dialog is not None:
             self._current_ai_dialog.close()
         self._current_ai_dialog = dialog
@@ -169,7 +163,7 @@ class AIExtendPlugin(PluginBase):
 
     def showOcrDialog(self):
         self.initialize()
-        dlg = OCRDialog(self._launcher, self)
+        dlg = OCRDialog(self.main, self)
         dlg.show()
 
     def _buildAiClient(self, profile_name=None):
@@ -190,7 +184,7 @@ class AIExtendPlugin(PluginBase):
 
     def _showSettingsDialog(self):
         """打开 AI 设置对话框"""
-        dlg = QDialog(self._launcher)
+        dlg = QDialog(self.main)
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.setWindowTitle("AI " + tr("设置"))
         dlg.setMinimumSize(500, 500)
@@ -750,7 +744,7 @@ class AIExtendPlugin(PluginBase):
         self.dock.hide()
 
     def _ensureDockInEditor(self):
-        editor = self._getEditorWindow()
+        editor = self.main.editor
         if not editor:
             return
         if self.dock is None:
@@ -1318,7 +1312,7 @@ class AIExtendPlugin(PluginBase):
 
     def _togglePanel(self):
         self.initialize()
-        editor = self._getEditorWindow()
+        editor = self.main.editor
         if editor:
             if self.dock and self.dock.isVisible():
                 self._destroyDock()
@@ -1705,7 +1699,7 @@ class AIExtendPlugin(PluginBase):
             if self.stream_thread and self.stream_thread.isRunning():
                 self.stream_thread.requestInterruption()
                 self.stream_thread.wait(2000)
-            self.editor.removeDockWidget(self.dock)
+            self.main.editor.removeDockWidget(self.dock)
             self.dock.deleteLater()
             self.dock = None
             self._panel = None
@@ -1761,10 +1755,9 @@ class AIThread(QThread):
 class AIDialog(QDialog):
     """AI回复对话框（支持流式和非流式，可编辑后粘贴）"""
 
-    def __init__(self, messages, prompt_name, stream=True, dialog="", launcher=None, editor=None, onGeometrySave=None, config=None):
+    def __init__(self, messages, prompt_name, stream=True, dialog="", editor=None, onGeometrySave=None, config=None):
         super().__init__()
-        self._launcher = launcher
-        self.editor = editor
+        self._editor = editor
         self._onGeometrySave = onGeometrySave
         self.setWindowTitle("AI " + tr("回复"))
         self.setMinimumSize(300, 200)
@@ -1853,8 +1846,8 @@ class AIDialog(QDialog):
         text = self.text_edit.toPlainText()
         if not text:
             return
-        if self.editor:
-            editor_widget = self.editor.getEditor()
+        if self._editor:
+            editor_widget = self._editor.getEditor()
             if editor_widget:
                 editor_widget.text_edit.textCursor().insertText(text)
         self.close()
@@ -1863,10 +1856,10 @@ class AIDialog(QDialog):
         text = self.text_edit.toPlainText()
         if not text:
             return
-        if self.editor:
-            self.editor.activateWindow()
-            self.editor.raise_()
-            editor_widget = self.editor.getEditor()
+        if self._editor:
+            self._editor.activateWindow()
+            self._editor.raise_()
+            editor_widget = self._editor.getEditor()
             if editor_widget:
                 editor_widget.text_edit.setFocus()
                 editor_widget.text_edit.textCursor().insertText(text)
@@ -2148,8 +2141,8 @@ class OCRDialog(QDialog):
 
     def _openFileWithApp(self, file_path: str):
         try:
-            if self._launcher and hasattr(self._launcher, "_openEditor"):
-                self._launcher._openEditor(file_path)
+            if self.main and hasattr(self.main, "_openEditor"):
+                self.main._openEditor(file_path)
             else:
                 os.startfile(file_path)
         except Exception:
