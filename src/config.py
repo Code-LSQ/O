@@ -575,12 +575,11 @@ class SettingsDialog(QDialog):
 
             name_edit = QLineEdit()
             name_edit.setText(name)
-            name_edit.setPlaceholderText(tr("搜索引擎名称"))
             form_layout.addRow(tr("名称"), name_edit)
 
             url_edit = QLineEdit()
             url_edit.setText(url)
-            url_edit.setPlaceholderText("URL " + tr("使用 {query} 作为搜索关键词占位符"))
+            url_edit.setToolTip(tr("使用 {query} 作为搜索关键词占位符"))
             form_layout.addRow("URL", url_edit)
 
             d_layout.addLayout(form_layout)

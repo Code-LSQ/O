@@ -53,7 +53,6 @@ class FindReplaceDialog(QDialog):
         # 查找
         find_layout = QFormLayout()
         self.find_edit = QLineEdit()
-        self.find_edit.setPlaceholderText(tr("输入查找内容"))
         find_layout.addRow(tr("查找"), self.find_edit)
 
         self.case_check = QCheckBox(tr("区分大小写"))
@@ -68,7 +67,7 @@ class FindReplaceDialog(QDialog):
         # 替换
         replace_layout = QFormLayout()
         self.replace_edit = QLineEdit()
-        self.replace_edit.setPlaceholderText(tr("输入替换内容（留空表示删除）"))
+        self.replace_edit.setToolTip(tr("留空表示删除"))
         replace_layout.addRow(tr("替换"), self.replace_edit)
         layout.addLayout(replace_layout)
 

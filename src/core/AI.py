@@ -7,8 +7,7 @@ from typing import Dict, List, Optional, Any, ClassVar
 
 import requests
 
-from src.util import logger, EXTENSION, imageBase64
-from src.file import fileTree
+from src.util import logger, EXTENSION, imageBase64, fileTree
 
 _session = requests.Session()
 

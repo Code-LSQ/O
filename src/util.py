@@ -1221,6 +1221,37 @@ def sortKey(path):
     return [int(p) if p.isdigit() else p for p in parts]
 
 
+# 文件树（支持保存为文件）
+def fileTree(directory: Path, prefix: str = "") -> list:
+    """递归生成树状结构的文本行列表
+    :param directory: 当前目录的 Path 对象
+    :param prefix: 当前层的前缀字符串（用于绘制树形线）
+    :return: 字符串列表，每一行是树的一行"""
+    lines = []
+    try:
+        items = list(directory.iterdir())
+    except PermissionError:
+        lines.append(f"{prefix}[" + tr("无法读取目录") + "]")
+        return lines
+
+    dirs = sorted([item for item in items if item.is_dir()])
+    files = sorted([item for item in items if item.is_file()])
+    all_items = dirs + files
+
+    for idx, item in enumerate(all_items):
+        is_last = (idx == len(all_items) - 1)
+        connector = "└── " if is_last else "├── "
+        extension = "    " if is_last else "│   "
+
+        lines.append(f"{prefix}{connector}{item.name}")
+
+        if item.is_dir():
+            sub_prefix = prefix + extension
+            lines.extend(fileTree(item, sub_prefix))
+
+    return lines
+
+
 # Windows 11 右键一级菜单
 # def register_context_menu():
 #     """注册一级菜单（需要 DLL + MSIX 在同目录）"""

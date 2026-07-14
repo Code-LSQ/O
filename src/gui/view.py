@@ -108,7 +108,7 @@ class ViewMode:
         tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
         tab.is_markdown = (mode == cls.MARKDOWN)
         if mode in (cls.TEXT, cls.MARKDOWN) and not tab._original_content and tab.file_path:
-            archive_type = getattr(tab, '_archive_type', None)
+            archive_type = tab._archive_type
             if archive_type:
                 items = listArchive(tab.file_path)
                 content = "\n".join(item["name"] for item in items) if items else ""
@@ -125,12 +125,58 @@ class ViewMode:
         new_handler.activate(tab)
         tab.markdown_mode_changed.emit(mode == cls.MARKDOWN)
 
+    @classmethod
+    def reloadFile(cls, tab):
+        old_cursor_pos = tab.text_edit.textCursor().position()
+        scrollbar = tab.text_edit.verticalScrollBar()
+        old_scroll_pos = scrollbar.value() if scrollbar else 0
+
+        old_handler = tab.getHandler(tab._current_mode)
+        old_handler.deactivate(tab)
+        old_handler.close(tab)
+
+        tab.text_edit.show()
+        tab.image_scroll.hide()
+
+        tab.view_mode = cls.TEXT
+        tab._current_mode = cls.TEXT
+        tab.is_markdown = False
+        tab._markdown_cache.clear()
+        gal = tab.getHandler(cls.GALLERY)
+        gal.zip_image_paths = []
+        gal.tar_image_paths = []
+        gal.archive_current_image = None
+        gal.is_viewing_archive_image = False
+        tab._archive_type = None
+
+        tab.setFilePath(tab.file_path)
+        cls.openFile(tab, tab.file_path)
+
+        new_handler = tab.getHandler(tab._current_mode)
+        new_handler.activate(tab)
+
+        try:
+            cursor = tab.text_edit.textCursor()
+            doc = tab.text_edit.document()
+            if doc and old_cursor_pos <= doc.characterCount():
+                cursor.setPosition(old_cursor_pos)
+                tab.text_edit.setTextCursor(cursor)
+        except Exception:
+            logger.exception("重载时恢复光标位置失败")
+
+        try:
+            if scrollbar:
+                scrollbar.setValue(min(old_scroll_pos, scrollbar.maximum()))
+        except Exception:
+            logger.exception("重载时恢复滚动条位置失败")
+
 
 class TextMode:
     def open(self, tab, file_path=None, content=None):
         tab.image_scroll.hide()
-        if tab._pdf_widget:
-            tab._pdf_widget.hide()
+        pdf_widget = tab.getHandler(ViewMode.PDF).pdf_widget
+        if pdf_widget:
+            pdf_widget.hide()
         tab.text_edit.show()
         tab._pagination_bar.setVisible(bool(getattr(tab, "_is_truncated", False)))
         if content is not None:
@@ -861,7 +907,6 @@ ViewMode.register(ViewMode.GALLERY, GalleryMode)
 ViewMode.register(ViewMode.PDF, PdfMode)
 
 
-
 def _listZipEntries(file_path) -> list:
     """列出 zip 文件内部条目"""
     try:
@@ -1012,4 +1057,3 @@ def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, e
     except Exception:
         logger.exception("带限制读取文件失败")
         return "", 0, 0, -1, ""
-

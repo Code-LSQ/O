@@ -822,6 +822,7 @@ class EditorTab(QWidget):
         self.view_mode = ViewMode.TEXT
         self._current_mode = ViewMode.TEXT
         self._original_content = ""
+        self._archive_type = None
         self.highlighter = None
         self.is_markdown = False
         self._markdown_cache = LRUCache(max_size=10)
@@ -913,70 +914,6 @@ class EditorTab(QWidget):
             cls = ViewMode._HANDLERS[mode]
             self.handlers[mode] = cls()
         return self.handlers[mode]
-
-    @property
-    def _archive_type(self):
-        return self.getHandler(ViewMode.GALLERY).archive_type
-
-    @_archive_type.setter
-    def _archive_type(self, value):
-        self.getHandler(ViewMode.GALLERY).archive_type = value
-
-    @property
-    def _zip_image_paths(self):
-        return self.getHandler(ViewMode.GALLERY).zip_image_paths
-
-    @_zip_image_paths.setter
-    def _zip_image_paths(self, value):
-        self.getHandler(ViewMode.GALLERY).zip_image_paths = value
-
-    @property
-    def _tar_image_paths(self):
-        return self.getHandler(ViewMode.GALLERY).tar_image_paths
-
-    @_tar_image_paths.setter
-    def _tar_image_paths(self, value):
-        self.getHandler(ViewMode.GALLERY).tar_image_paths = value
-
-    @property
-    def _archive_current_image(self):
-        return self.getHandler(ViewMode.GALLERY).archive_current_image
-
-    @_archive_current_image.setter
-    def _archive_current_image(self, value):
-        self.getHandler(ViewMode.GALLERY).archive_current_image = value
-
-    @property
-    def _is_viewing_archive_image(self):
-        return self.getHandler(ViewMode.GALLERY).is_viewing_archive_image
-
-    @_is_viewing_archive_image.setter
-    def _is_viewing_archive_image(self, value):
-        self.getHandler(ViewMode.GALLERY).is_viewing_archive_image = value
-
-    @property
-    def _pdf_widget(self):
-        return self.getHandler(ViewMode.PDF).pdf_widget
-
-    @_pdf_widget.setter
-    def _pdf_widget(self, value):
-        self.getHandler(ViewMode.PDF).pdf_widget = value
-
-    @property
-    def _pdf_document(self):
-        return self.getHandler(ViewMode.PDF).pdf_document
-
-    @_pdf_document.setter
-    def _pdf_document(self, value):
-        self.getHandler(ViewMode.PDF).pdf_document = value
-
-    @property
-    def _pdf_pixmaps(self):
-        return self.getHandler(ViewMode.PDF).pdf_pixmaps
-
-    @_pdf_pixmaps.setter
-    def _pdf_pixmaps(self, value):
-        self.getHandler(ViewMode.PDF).pdf_pixmaps = value
 
     def _onTextChanged(self):
         if self.is_modified:
@@ -1184,34 +1121,7 @@ class EditorTab(QWidget):
             if not messageBox(self, tr("未保存的修改"), tr("是否重新加载并丢弃修改")):
                 return False
 
-        old_cursor_pos = self.text_edit.textCursor().position()
-        scrollbar = self.text_edit.verticalScrollBar()
-        old_scroll_pos = scrollbar.value() if scrollbar else 0
-
-        # 关闭当前视图
-        old_handler = self.getHandler(self._current_mode)
-        old_handler.deactivate(self)
-        old_handler.close(self)
-
-        self.text_edit.show()
-        self.image_scroll.hide()
-
-        self.view_mode = ViewMode.TEXT
-        self._current_mode = ViewMode.TEXT
-        self.is_markdown = False
-        self._markdown_cache.clear()
-        self._zip_image_paths = []
-        self._tar_image_paths = []
-        self._archive_current_image = None
-        self._is_viewing_archive_image = False
-        self._archive_type = None
-
-        self.setFilePath(self.file_path)
-
-        # 使用 ViewMode 重新加载
-        ViewMode.openFile(self, self.file_path)
-        new_handler = self.getHandler(self._current_mode)
-        new_handler.activate(self)
+        ViewMode.reloadFile(self)
 
         self.is_modified = False
         self.file_changed.emit(False)
@@ -1219,21 +1129,6 @@ class EditorTab(QWidget):
         main_window = self.window()
         if hasattr(main_window, '_applyEditorSettings'):
             main_window._applyEditorSettings(self)
-
-        try:
-            cursor = self.text_edit.textCursor()
-            doc = self.text_edit.document()
-            if doc and old_cursor_pos <= doc.characterCount():
-                cursor.setPosition(old_cursor_pos)
-                self.text_edit.setTextCursor(cursor)
-        except Exception:
-            logger.exception("重载时恢复光标位置失败")
-
-        try:
-            if scrollbar:
-                scrollbar.setValue(min(old_scroll_pos, scrollbar.maximum()))
-        except Exception:
-            logger.exception("重载时恢复滚动条位置失败")
 
         return True
 

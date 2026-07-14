@@ -19,8 +19,8 @@ from PySide6.QtGui import QAction, QColor
 from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
-from src.file import fileTree, filterFiles
-from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr
+from src.file import filterFiles
+from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr, fileTree
 
 PluginLib = ["queue"]
 

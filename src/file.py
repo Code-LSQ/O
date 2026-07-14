@@ -182,7 +182,7 @@ class FileControl:
 
         file_path = editor.file_path
 
-        if editor._is_viewing_archive_image or not file_path:
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
             return self.saveFileAs()
 
         encoding = editor.encoding
@@ -236,7 +236,7 @@ class FileControl:
             return
 
         file_path = editor.file_path
-        if editor._is_viewing_archive_image or not file_path:
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
             self.main.statusBar().showMessage(tr("文件未保存，无法以指定编码打开"), 2000)
             return
 
@@ -265,7 +265,7 @@ class FileControl:
             return
 
         file_path = editor.file_path
-        if editor._is_viewing_archive_image or not file_path:
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
             self.main.statusBar().showMessage(tr("文件未保存，请先保存文件"), 2000)
             return
 
@@ -969,34 +969,3 @@ class FolderPanelManager:
 
     def isVisible(self) -> bool:
         return self.panel is not None
-
-
-# 文件树（支持保存为文件）
-def fileTree(directory: Path, prefix: str = "") -> list:
-    """递归生成树状结构的文本行列表
-    :param directory: 当前目录的 Path 对象
-    :param prefix: 当前层的前缀字符串（用于绘制树形线）
-    :return: 字符串列表，每一行是树的一行"""
-    lines = []
-    try:
-        items = list(directory.iterdir())
-    except PermissionError:
-        lines.append(f"{prefix}[" + tr("无法读取目录") + "]")
-        return lines
-
-    dirs = sorted([item for item in items if item.is_dir()])
-    files = sorted([item for item in items if item.is_file()])
-    all_items = dirs + files
-
-    for idx, item in enumerate(all_items):
-        is_last = (idx == len(all_items) - 1)
-        connector = "└── " if is_last else "├── "
-        extension = "    " if is_last else "│   "
-
-        lines.append(f"{prefix}{connector}{item.name}")
-
-        if item.is_dir():
-            sub_prefix = prefix + extension
-            lines.extend(fileTree(item, sub_prefix))
-
-    return lines

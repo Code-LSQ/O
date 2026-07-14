@@ -318,7 +318,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         """执行自动保存"""
         for i, editor in enumerate(self._iterEditors()):
             file_path = editor.file_path
-            if editor._is_viewing_archive_image or not file_path or not editor.is_modified:
+            if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path or not editor.is_modified:
                 continue
             
             try:
@@ -480,12 +480,13 @@ class EditorWindow(WindowMouse, QMainWindow):
         if hasattr(editor, 'highlighter') and editor.highlighter:
             editor.highlighter.setDocument(None)
             editor.highlighter.deleteLater()
-        editor._zip_image_paths = []
-        editor._tar_image_paths = []
-        editor._archive_current_image = None
-        editor._is_viewing_archive_image = False
+        gal = editor.getHandler(ViewMode.GALLERY)
+        gal.zip_image_paths = []
+        gal.tar_image_paths = []
+        gal.archive_current_image = None
+        gal.is_viewing_archive_image = False
         editor._archive_type = None
-        editor.getHandler(ViewMode.GALLERY).close(editor)
+        gal.close(editor)
         editor.deleteLater()
         
         self._toc_panel.hidePanel()
@@ -503,7 +504,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         menu = QMenu(self)
         
         editor = self.tab_widget.widget(index)
-        file_path = editor.file_path if editor and not editor._is_viewing_archive_image else None
+        file_path = editor.file_path if editor and not editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image else None
         
         rename_action = QAction(tr("重命名"), self)
         rename_action.triggered.connect(lambda checked, i=index: self._renameTabFile(i))
@@ -534,7 +535,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         if not editor:
             return
         file_path = editor.file_path
-        if editor._is_viewing_archive_image or not file_path:
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
             self.statusBar().showMessage(tr("未保存的文件无法重命名"), 2000)
             return
         
@@ -868,7 +869,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         openFiles = []
         for editor in self._iterEditors():
             file_path = editor.file_path
-            if not editor._is_viewing_archive_image and file_path:
+            if not editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image and file_path:
                 openFiles.append(file_path)
         
         self.config.set("Edit.open", openFiles)
