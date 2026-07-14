@@ -8,7 +8,8 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, logger, tr, encodingName, APP_NAME, setWindowsMenu, isMenuRegister, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile
+from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile
+from src.system import setMenu, isMenuRegister
 from src.file import FileControl, ArchiveItemModel, FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
@@ -33,9 +34,9 @@ class EditorWindow(WindowMouse, QMainWindow):
         self._initCoreAttributes()
         self.initUI()
         self.applyConfig()
-        if sys.platform == "win32" and self.config.get("context_menu", False) and not isMenuRegister():
+        if self.config.get("context_menu", False) and not isMenuRegister():
             logger.info("正在注册右键菜单")
-            setWindowsMenu(True)
+            setMenu(True)
         self._initFromConfig(file_path)
         self._initialization_complete = True
     

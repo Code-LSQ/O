@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.util import logger, getAppPath, APP_NAME, icon_dir, Interpret
+from src.util import APP_NAME, app_path, logger, icon_dir, Interpret
 
 if sys.platform == "win32":
     import winreg
@@ -45,10 +45,6 @@ if sys.platform == "win32":
                 winreg.KEY_SET_VALUE
             )
             if enabled:
-                app_path = getAppPath()
-                if not app_path:
-                    logger.error("开机自启失败：无法获取程序路径")
-                    return False
                 if Interpret:
                     app_path = f'"{sys.executable}" "{app_path}"'
                 else:
@@ -68,6 +64,78 @@ if sys.platform == "win32":
         finally:
             if key:
                 winreg.CloseKey(key)
+
+    def deleteRegistry(key_handle, sub_key):
+        try:
+            sub_handle = winreg.OpenKey(key_handle, sub_key, 0, winreg.KEY_ALL_ACCESS)
+        except FileNotFoundError:
+            return
+        try:
+            while True:
+                try:
+                    child = winreg.EnumKey(sub_handle, 0)
+                    deleteRegistry(sub_handle, child)
+                except OSError:
+                    break
+        finally:
+            winreg.CloseKey(sub_handle)
+        try:
+            winreg.DeleteKey(key_handle, sub_key)
+            logger.info(f"已删除注册表键: {sub_key}")
+        except OSError:
+            logger.exception(f"删除注册表键失败: {sub_key}")
+
+    def isMenuRegister() -> bool:
+        shell_keys = [
+            rf"Software\Classes\*\shell\{APP_NAME}",
+            rf"Software\Classes\Directory\shell\{APP_NAME}",
+        ]
+        for shell_key in shell_keys:
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_READ)
+                winreg.CloseKey(key)
+            except FileNotFoundError:
+                logger.info(f"右键菜单注册表键缺失: {shell_key}")
+                return False
+            except Exception:
+                return False
+        logger.info("右键菜单注册表键已存在，跳过写入")
+        return True
+
+    def setMenu(enabled: bool) -> bool:
+        shell_keys = [
+            rf"Software\Classes\*\shell\{APP_NAME}",
+            rf"Software\Classes\Directory\shell\{APP_NAME}",
+        ]
+        for shell_key in shell_keys:
+            try:
+                if enabled:
+                    key = winreg.CreateKeyEx(
+                        winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_SET_VALUE
+                    )
+                    try:
+                        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"使用 {APP_NAME} 打开")
+                        winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f'"{app_path}",0')
+                        cmd_key = winreg.CreateKeyEx(
+                            winreg.HKEY_CURRENT_USER, shell_key + r"\command", 0, winreg.KEY_SET_VALUE
+                        )
+                        try:
+                            if Interpret:
+                                cmd = f'"{sys.executable}" "{app_path}" "%1"'
+                            else:
+                                cmd = f'"{app_path}" "%1"'
+                            winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd)
+                        finally:
+                            winreg.CloseKey(cmd_key)
+                    finally:
+                        winreg.CloseKey(key)
+                else:
+                    deleteRegistry(winreg.HKEY_CURRENT_USER, shell_key)
+            except Exception:
+                logger.exception(f"设置右键菜单失败: {shell_key}")
+                return False
+        logger.info(f"右键菜单已{'注册' if enabled else '移除'}")
+        return True
 
     class GUID(Structure):
         _fields_ = [
@@ -262,10 +330,7 @@ elif sys.platform == "linux":
     def setAutoStart(enabled: bool) -> bool:
         autostart_dir = autoStartDir()
         desktop_file = autostart_dir / f"{APP_NAME}.desktop"
-        app_path = getAppPath()
-        if not app_path:
-            return False
-        
+
         if enabled:
             autostart_dir.mkdir(parents=True, exist_ok=True)
             desktop_content = f"""[Desktop Entry]
@@ -336,6 +401,9 @@ elif sys.platform == "linux":
             logger.exception(f"{path} 移动到回收站失败")
             return False
 
+        def setMenu(enabled: bool) -> bool:
+            return True
+
 
 elif sys.platform == "darwin":
 
@@ -345,10 +413,7 @@ elif sys.platform == "darwin":
 
     def setAutoStart(enabled: bool) -> bool:
         plist_path = Path.home() / "Library" / "LaunchAgents" / f"com.{APP_NAME.lower()}.plist"
-        app_path = getAppPath()
-        if not app_path:
-            return False
-        
+
         if enabled:
             plist_path.parent.mkdir(parents=True, exist_ok=True)
             plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -408,3 +473,6 @@ elif sys.platform == "darwin":
         except Exception:
             logger.exception(f"{path} 移动到回收站失败")
         return False
+
+    def setMenu(enabled: bool) -> bool:
+        return True

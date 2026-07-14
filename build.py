@@ -7,9 +7,8 @@ import PyInstaller.__main__
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.util import APP_NAME, VERSION, logo_ico, logo_png, logo_icn
+from src.util import APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
 
-root = Path(__file__).resolve().parent
 dist = root / ".." / "dist"
 work = root / ".." / "build"
 mainpy = str(root / "o.py")

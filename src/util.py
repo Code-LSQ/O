@@ -9,7 +9,6 @@ import logging
 import subprocess
 import threading
 if sys.platform == "win32":
-    import winreg
     from ctypes import windll
 from pathlib import Path
 from datetime import datetime
@@ -28,7 +27,15 @@ VERSION = "0.5.0"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
-root = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False) or "__compiled__" in globals():
+    Interpret = False
+    app_path = sys.executable
+    root = Path(sys.executable).parent
+else:
+    Interpret = True
+    app_path = os.path.abspath(sys.argv[0])
+    root = Path(__file__).resolve().parent.parent
+
 plugin_dir = root / "plugin"
 data_dir = root / "data"
 config_file = data_dir / "config.json"
@@ -53,11 +60,6 @@ logo_png = icon_dir / "Logo.png"
 logo_icn = icon_dir / "Logo.icns"
 
 backup_dir = data_dir / "backup"
-
-if getattr(sys, "frozen", False) or "__compiled__" in globals():
-    Interpret = False
-else:
-    Interpret = True
 
 
 arch = QSysInfo.currentCpuArchitecture()
@@ -371,13 +373,6 @@ def getTimestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
-def getAppPath():
-    # 开发时返回 o.py 文件路径，打包后返回二进制可执行文件路径
-    if Interpret:
-        return os.path.abspath(sys.argv[0]) if sys.argv else ""
-    return sys.executable
-
-
 def restartApplication(parent=None):
     if not messageBox(parent, tr("重启"), tr("确定重启应用？")):
         return
@@ -385,90 +380,6 @@ def restartApplication(parent=None):
         QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
     else:
         QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv[1:]))
-
-
-def deleteRegistry(key_handle, sub_key):
-    """递归删除注册表键及其所有子键"""
-    try:
-        sub_handle = winreg.OpenKey(key_handle, sub_key, 0, winreg.KEY_ALL_ACCESS)
-    except FileNotFoundError:
-        return
-    try:
-        while True:
-            try:
-                child = winreg.EnumKey(sub_handle, 0)
-                deleteRegistry(sub_handle, child)
-            except OSError:
-                break
-    finally:
-        winreg.CloseKey(sub_handle)
-    try:
-        winreg.DeleteKey(key_handle, sub_key)
-        logger.info(f"已删除注册表键: {sub_key}")
-    except OSError:
-        logger.exception(f"删除注册表键失败: {sub_key}")
-
-
-def isMenuRegister() -> bool:
-    if sys.platform != "win32":
-        return False
-    shell_keys = [
-        rf"Software\Classes\*\shell\{APP_NAME}",
-        rf"Software\Classes\Directory\shell\{APP_NAME}",
-    ]
-    for shell_key in shell_keys:
-        try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_READ)
-            winreg.CloseKey(key)
-        except FileNotFoundError:
-            logger.info(f"右键菜单注册表键缺失: {shell_key}")
-            return False
-        except Exception:
-            return False
-    logger.info("右键菜单注册表键已存在，跳过写入")
-    return True
-
-
-def setWindowsMenu(enabled: bool) -> bool:
-    app_path = getAppPath()
-    if not app_path:
-        return False
-
-    shell_keys = [
-        rf"Software\Classes\*\shell\{APP_NAME}",
-        rf"Software\Classes\Directory\shell\{APP_NAME}",
-    ]
-
-    for shell_key in shell_keys:
-        try:
-            if enabled:
-                key = winreg.CreateKeyEx(
-                    winreg.HKEY_CURRENT_USER, shell_key, 0, winreg.KEY_SET_VALUE
-                )
-                try:
-                    winreg.SetValueEx(key, "", 0, winreg.REG_SZ, f"使用 {APP_NAME} 打开")
-                    winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f'"{app_path}",0')
-                    cmd_key = winreg.CreateKeyEx(
-                        winreg.HKEY_CURRENT_USER, shell_key + r"\command", 0, winreg.KEY_SET_VALUE
-                    )
-                    try:
-                        if Interpret:
-                            cmd = f'"{sys.executable}" "{app_path}" "%1"'
-                        else:
-                            cmd = f'"{app_path}" "%1"'
-                        winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd)
-                    finally:
-                        winreg.CloseKey(cmd_key)
-                finally:
-                    winreg.CloseKey(key)
-            else:
-                deleteRegistry(winreg.HKEY_CURRENT_USER, shell_key)
-        except Exception:
-            logger.exception(f"设置右键菜单失败: {shell_key}")
-            return False
-
-    logger.info(f"右键菜单已{'注册' if enabled else '移除'}")
-    return True
 
 
 process = Process()

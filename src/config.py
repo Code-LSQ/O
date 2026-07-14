@@ -7,9 +7,9 @@ from typing import Any, Dict
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
 from PySide6.QtCore import Signal, Qt, QEvent, QSize
 
-from src.util import config_file, logger, Singleton, setWindowsMenu, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
+from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
 from src.core.input import eventToKey, KeyCaptureFilter
-from src.system import setAutoStart
+from src.system import setAutoStart, setMenu
 
 DEFAULT_CONFIG = {
     "theme": "Light",
@@ -805,7 +805,7 @@ class SettingsDialog(QDialog):
         old_context_menu = self.config.get("context_menu", False)
         new_context_menu = settings.get("context_menu", False)
         if old_context_menu != new_context_menu:
-            setWindowsMenu(new_context_menu)
+            setMenu(new_context_menu)
 
         if hasattr(self, '_launcher_config') and isinstance(self._launcher_config, dict):
             launch = dict(self.config.get("Launch", {}))
