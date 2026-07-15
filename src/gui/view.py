@@ -142,6 +142,7 @@ class ViewMode:
         tab._current_mode = cls.TEXT
         tab.is_markdown = False
         tab._markdown_cache.clear()
+        tab._page_buffer.clear()
         gal = tab.getHandler(cls.GALLERY)
         gal.zip_image_paths = []
         gal.tar_image_paths = []
@@ -377,6 +378,8 @@ class ImageMode(QObject):
         self._zoom_factor = 1.0
         if self._label:
             self._label.clear()
+            self._label.deleteLater()
+            self._label = None
 
     def activate(self, tab):
         pass

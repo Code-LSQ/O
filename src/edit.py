@@ -472,21 +472,25 @@ class EditorWindow(WindowMouse, QMainWindow):
                 return
 
         self.tab_widget.removeTab(index)
+
+        editor.text_edit.setZoomCallback(None)
+        editor.text_edit.removeEventFilter(editor)
+        editor.text_edit._parent_tab = None
+
         for mode, handler in list(editor.handlers.items()):
             handler.deactivate(editor)
             handler.close(editor)
-        if hasattr(editor, '_markdown_cache'):
-            editor._markdown_cache.clear()
-        if hasattr(editor, 'highlighter') and editor.highlighter:
+        editor.handlers.clear()
+
+        editor._markdown_cache.clear()
+        editor._page_buffer.clear()
+
+        if editor.highlighter:
             editor.highlighter.setDocument(None)
             editor.highlighter.deleteLater()
-        gal = editor.getHandler(ViewMode.GALLERY)
-        gal.zip_image_paths = []
-        gal.tar_image_paths = []
-        gal.archive_current_image = None
-        gal.is_viewing_archive_image = False
-        editor._archive_type = None
-        gal.close(editor)
+            editor.highlighter = None
+
+        editor.text_edit.setDocument(None)
         editor.deleteLater()
         
         self._toc_panel.hidePanel()
