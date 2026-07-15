@@ -19,7 +19,7 @@ import requests
 from psutil import Process, cpu_count, disk_usage
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QPushButton, QListWidget, QListWidgetItem, QMessageBox, QDialogButtonBox, QFileDialog, QLayout
 from PySide6.QtGui import QDropEvent, QDragEnterEvent
-from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo
+from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo, QThread
 
 AUTHOR = "Code-LSQ"
 APP_NAME = "O"
@@ -157,10 +157,53 @@ def service(services: list, action, timeout):
             logger.exception("执行命令错误")
 
 
-class ExceptSignal(QObject):
+class OSignal(QObject):
     catchException = Signal(str)
 
-ExceptSign = ExceptSignal()
+OSign = OSignal()
+
+
+def runAsync(fn, on_done=None, on_error=None, on_progress=None):
+    """在线程中执行 fn，结果在主线程回调
+
+    用法:
+        runAsync(getReleaseInfo, on_done=self._onCheckResult)
+        runAsync(
+            lambda report: download(url, path, report),
+            on_done=lambda ok: ...,
+            on_progress=lambda cur, total: bar.setValue(cur),
+        )
+    """
+
+    class _Worker(QObject):
+        done = Signal(object)
+        err = Signal(str)
+        progress = Signal(int, int)
+
+        def run(self):
+            try:
+                cb = self.progress.emit if on_progress else None
+                result = fn(cb) if on_progress else fn()
+                self.done.emit(result)
+            except Exception as e:
+                self.err.emit(str(e))
+
+    t = QThread()
+    w = _Worker()
+    w.moveToThread(t)
+    t.started.connect(w.run)
+    if on_done:
+        w.done.connect(on_done)
+    if on_error:
+        w.err.connect(on_error)
+    if on_progress:
+        w.progress.connect(on_progress)
+    w.done.connect(t.quit)
+    w.err.connect(t.quit)
+    w.done.connect(w.deleteLater)
+    w.err.connect(w.deleteLater)
+    t.finished.connect(t.deleteLater)
+    t.start()
 
 
 def dropFile(event: QDropEvent, file=None, folder=None):

@@ -1,12 +1,14 @@
 import os
+import re
 import tarfile
 import zipfile
 import hashlib
+import base64
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QTextBrowser
 from PySide6.QtCore import Qt, QTimer, QObject, QByteArray, QBuffer, QSize
-from PySide6.QtGui import QPixmap, QImage, QImageReader, QTextDocument
+from PySide6.QtGui import QPixmap, QImage, QImageReader, QTextCursor, QTextDocument
 
 from src.util import logger, EXTENSION, tr, fileType, sortKey, ENCODING_MAP
 from src.core.md import renderForView
@@ -209,6 +211,11 @@ class MarkdownMode:
 
     def close(self, tab):
         tab._markdown_cache.clear()
+        html_view = getattr(tab, '_html_view', None)
+        if html_view:
+            tab.layout().removeWidget(html_view)
+            html_view.deleteLater()
+            tab._html_view = None
         tab.text_edit.clear()
 
     def activate(self, tab):
@@ -231,17 +238,32 @@ class MarkdownMode:
             if success:
                 md_cache.set(cache_key, html)
         if html is not None:
-            tab.text_edit.setMarkdownHtml(html)
-            tab.text_edit.setReadOnly(True)
+            html_view = QTextBrowser()
+            html_view.setFont(tab.text_edit.font())
+            doc = html_view.document()
+            processed = addImageResource(doc, html)
+            doc.setHtml(processed)
+            # setHtml 后光标在末尾，手动移到开头避免自动滚到底部
+            cursor = html_view.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            html_view.setTextCursor(cursor)
+
+            tab.text_edit.hide()
+            tab.layout().insertWidget(0, html_view)
+            tab._html_view = html_view
         else:
             tab.text_edit.setPlainText(content_to_render)
             tab.text_edit.setReadOnly(False)
 
     def deactivate(self, tab):
         tab._markdown_cache.clear()
-        new_doc = QTextDocument(tab.text_edit)
-        tab.text_edit.setDocument(new_doc)
-        tab.setupHighlighter()
+        html_view = getattr(tab, '_html_view', None)
+        if html_view:
+            tab.layout().removeWidget(html_view)
+            html_view.deleteLater()
+            tab._html_view = None
+        tab.text_edit.show()
+        tab.text_edit.setReadOnly(False)
 
 
 class HexMode:
@@ -515,8 +537,6 @@ class GalleryMode(QObject):
         for img_name in image_names:
             img_data = readArchive(tab.file_path, img_name)
             if img_data is not None:
-                idx = len(self._archive_image_sizes)
-                self._archive_image_cache[idx] = img_data
                 try:
                     ba = QByteArray(img_data)
                     buf = QBuffer(ba)
@@ -1060,3 +1080,87 @@ def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, e
     except Exception:
         logger.exception("带限制读取文件失败")
         return "", 0, 0, -1, ""
+
+
+def _base64ToImage(b64_data, mime_type):
+    try:
+        data = base64.b64decode(b64_data)
+        byte_array = QByteArray(data)
+        image = QImage()
+        if image.loadFromData(byte_array):
+            return image
+        format_str = mime_type.replace('image/', '').upper()
+        if format_str == 'SVG+XML':
+            format_str = 'SVG'
+        if format_str and image.loadFromData(byte_array, format_str):
+            return image
+        logger.warning(f"QImage 加载失败，mime_type: {mime_type}, data_len: {len(data)}")
+        return QImage()
+    except Exception:
+        logger.exception("图片转换失败")
+        return QImage()
+
+
+def addImageResource(doc, html):
+    """处理HTML中的base64图片，添加为QTextDocument资源，返回替换后的HTML"""
+    max_pixels = 2000
+    max_b64_len = 16 * 1024 * 1024
+    qt_resource_type = getattr(QTextDocument.ResourceType, 'ImageResource', 3)
+    img_pattern = r'<img\s+([^>]*?)>'
+    result = []
+    last_end = 0
+
+    for m in re.finditer(img_pattern, html):
+        result.append(html[last_end:m.start()])
+        attrs = m.group(1)
+
+        src_match = re.search(r'src\s*=\s*(["\'])(data:image/[^;]+;base64,[^"\'>]+)\1', attrs)
+        if not src_match:
+            result.append(m.group(0))
+            last_end = m.end()
+            continue
+
+        src = src_match.group(2)
+        mime_match = re.match(r'data:(image/[^;]+);base64,', src)
+        mime_type = mime_match.group(1) if mime_match else 'image/png'
+        b64_data = src.split(',')[1]
+
+        if len(b64_data) > max_b64_len:
+            logger.warning(f"跳过超大base64图片({len(b64_data)} bytes)")
+            result.append(m.group(0))
+            last_end = m.end()
+            continue
+
+        resource_name = f"image:{hashlib.md5(src.encode()).hexdigest()}"
+
+        if doc.resource(qt_resource_type, resource_name):
+            new_attrs = re.sub(r'src\s*=\s*(["\'])[^"\']+\1', '', attrs).strip()
+            result.append(f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else ''))
+            last_end = m.end()
+            continue
+
+        try:
+            image = _base64ToImage(b64_data, mime_type)
+            if image.isNull():
+                result.append(m.group(0))
+                last_end = m.end()
+                continue
+            if image.width() > max_pixels or image.height() > max_pixels:
+                image = image.scaled(
+                    max_pixels, max_pixels,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+            doc.addResource(qt_resource_type, resource_name, QPixmap.fromImage(image))
+        except Exception:
+            result.append(m.group(0))
+            last_end = m.end()
+            continue
+
+        new_attrs = re.sub(r'src\s*=\s*(["\'])[^"\']+\1', '', attrs).strip()
+        result.append(f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else ''))
+        last_end = m.end()
+
+    result.append(html[last_end:])
+    return ''.join(result)
+

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # 兼容嵌入版 Python
 
 from src.main import MainWindow, setApp
-from src.util import APP_NAME, VERSION, ExceptSign, logger, getDevice
+from src.util import APP_NAME, VERSION, OSign, logger, getDevice
 
 
 def exceptionHook(exc_type, value, tb):
@@ -17,7 +17,7 @@ def exceptionHook(exc_type, value, tb):
     logger.error("未捕获异常", exc_info=exceptionInfo)
 
     try:
-        ExceptSign.catchException.emit(message)
+        OSign.catchException.emit(message)
     except Exception:
         logger.exception("发送程序异常信号失败")
 

@@ -1,9 +1,8 @@
 import os
 import re
-import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox, QMenu, QStatusBar, QLabel, QListWidget, QLineEdit, QSplitter, QListWidgetItem, QTextEdit
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox, QMenu, QStatusBar, QLabel, QListWidget, QSplitter, QListWidgetItem, QPlainTextEdit
 from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTextCursor
 from PySide6.QtCore import Qt, QTimer
 
@@ -285,7 +284,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         auto_indent = self.config.get("Edit.indent", True)
         
         def applyToEditor(ed):
-            ed.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth if auto_wrap else QTextEdit.LineWrapMode.NoWrap)
+            ed.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth if auto_wrap else QPlainTextEdit.LineWrapMode.NoWrap)
             ed.text_edit.setLineNumbersVisible(line_numbers)
             ed.setLineSpacing(line_spacing)
             ed.text_edit.setAutoIndent(auto_indent)

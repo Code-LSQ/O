@@ -1,25 +1,23 @@
 import os
 import re
-import base64
-import hashlib
 import webbrowser
 from urllib import parse
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QTextEdit, QMenu
-from PySide6.QtCore import Qt, Signal, QEvent, QRect, QByteArray
-from PySide6.QtGui import QTextCursor, QTextDocument, QPainter, QColor, QTextCharFormat, QAction, QKeySequence, QPixmap, QImage, QPalette, qGray
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QPlainTextEdit, QTextEdit, QMenu
+from PySide6.QtCore import Qt, Signal, QEvent, QRect
+from PySide6.QtGui import QTextCursor, QTextDocument, QPainter, QColor, QTextCharFormat, QAction, QKeySequence, QPalette, qGray
 
 from src.config import getConfig, DEFAULT_CONFIG
 from src.util import logger, EXTENSION, messageBox, urlToPath, tr, inputDialog
 from src.core.syntax import createHighlighter
 from src.core.timer import LRUCache
-from src.gui.view import ViewMode, listArchive, readFileLimit
+from src.gui.view import ViewMode, listArchive, readFileLimit, addImageResource
 
 
 _LINE_ENDING_RE = re.compile(r'\r\n|\r')
 
 
-class EditorTextEdit(QTextEdit):
+class EditorText(QPlainTextEdit):
     """带行号显示的文本编辑器"""
     cursor_position_changed = Signal(int, int)
 
@@ -134,10 +132,6 @@ class EditorTextEdit(QTextEdit):
         self.setFont(font)
         self._updateLineNumWidth(0)
 
-    def setHtml(self, text: str):
-        """重写setHtml以支持markdown渲染"""
-        super().setHtml(text)
-    
     def setMarkdownHtml(self, html: str):
         """设置markdown渲染的HTML内容"""
         if not html:
@@ -149,72 +143,14 @@ class EditorTextEdit(QTextEdit):
                 cursor.setPosition(0)
                 self.setTextCursor(cursor)
             
-            img_pattern = r'<img\s+([^>]*?)>'
-            _MAX_IMAGE_PIXELS = 2000
-            _MAX_BASE64_LEN = 3 * 1024 * 1024
-
-            def addImageResource(match):
-                attrs = match.group(1)
-                src_match = re.search(r'src\s*=\s*(["\'])(data:image/[^;]+;base64,[^"\'>]+)\1', attrs)
-                if not src_match:
-                    return match.group(0)
-                src = src_match.group(2)
-                mime_match = re.match(r'data:(image/[^;]+);base64,', src)
-                mime_type = mime_match.group(1) if mime_match else 'image/png'
-                b64_data = src.split(',')[1]
-
-                if len(b64_data) > _MAX_BASE64_LEN:
-                    logger.warning(f"跳过超大base64图片({len(b64_data)} bytes)")
-                    return match.group(0)
-
-                resource_name = f"image:{hashlib.md5(src.encode()).hexdigest()}"
-                qt_resource_type = getattr(QTextDocument.ResourceType, 'ImageResource', 3)
-
-                if doc.resource(qt_resource_type, resource_name):
-                    new_attrs = re.sub(r'src\s*=\s*(["\'])[^"\']+\1', '', attrs).strip()
-                    return f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else '')
-
-                try:
-                    image = self._base64ToImage(b64_data, mime_type)
-                    if image.isNull():
-                        return match.group(0)
-                    if image.width() > _MAX_IMAGE_PIXELS or image.height() > _MAX_IMAGE_PIXELS:
-                        image = image.scaled(
-                            _MAX_IMAGE_PIXELS, _MAX_IMAGE_PIXELS,
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation
-                        )
-                    doc.addResource(qt_resource_type, resource_name, QPixmap.fromImage(image))
-                except Exception:
-                    return match.group(0)
-                new_attrs = re.sub(r'src\s*=\s*(["\'])[^"\']+\1', '', attrs).strip()
-                return f'<img src="{resource_name}"' + (f' {new_attrs}' if new_attrs else '')
-
-            html = re.sub(img_pattern, addImageResource, html)
-            super().setHtml(html)
+            html = addImageResource(doc, html)
+            self.document().setHtml(html)
             
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         except Exception:
             logger.exception("设置Markdown HTML失败")
     
-    def _base64ToImage(self, base64_data: str, mime_type: str) -> QImage:
-        """将base64数据转换为QImage"""
-        try:
-            data = base64.b64decode(base64_data)
-            byte_array = QByteArray(data)
-            image = QImage()
-            if image.loadFromData(byte_array):
-                return image
-            format_str = mime_type.replace('image/', '').upper()
-            if format_str == 'SVG+XML':
-                format_str = 'SVG'
-            if format_str and image.loadFromData(byte_array, format_str):
-                return image
-            logger.warning(f"QImage 加载失败，mime_type: {mime_type}, data_len: {len(data)}")
-            return QImage()
-        except Exception:
-            logger.exception("图片转换失败")
-            return QImage()
+
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Tab:
@@ -780,18 +716,18 @@ class EditorTextEdit(QTextEdit):
                 text_color = editor.palette().color(QPalette.ColorRole.WindowText)
                 gray = qGray(text_color.rgb())
                 pen_color = QColor(gray, gray, gray, 150)
-                scroll_offset = editor.verticalScrollBar().value()
                 block = doc.begin()
                 block_number = block.blockNumber()
+                doc_cursor = QTextCursor(doc)
+                line_height = editor.fontMetrics().height()
                 while block.isValid():
                     try:
-                        block_geo = doc.documentLayout().blockBoundingRect(block)
-                        top = int(block_geo.top() - scroll_offset)
-                        bottom = top + int(block_geo.height())
-                        if bottom >= event.rect().top() and top <= event.rect().bottom() and block.isVisible():
+                        doc_cursor.setPosition(block.position())
+                        top = editor.cursorRect(doc_cursor).y()
+                        if top >= event.rect().top() - line_height and top <= event.rect().bottom() and block.isVisible():
                             painter.setPen(pen_color)
                             painter.drawText(0, top, self.width() - 2,
-                                            editor.fontMetrics().height(),
+                                            line_height,
                                             Qt.AlignmentFlag.AlignRight, str(block_number + 1))
                         if top > event.rect().bottom():
                             break
@@ -839,14 +775,15 @@ class EditorTab(QWidget):
         self._total_pages = 0
         self._total_lines = 0
         self._loaded_lines = 0
-        self._page_buffer = {}         # {page_num: modified_content}
+        self._page_buffer = {}  # {page_num: modified_content}, LRU限制10页
+        self._page_buffer_max = 10
         self._truncated_file_path = ""
         self._truncated_encoding = "utf-8"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.text_edit = EditorTextEdit()
+        self.text_edit = EditorText()
         self.text_edit.setPlaceholderText(tr("新建文件..."))
         self.text_edit.textChanged.connect(self._onTextChanged)
         self.text_edit._parent_tab = self
@@ -919,7 +856,7 @@ class EditorTab(QWidget):
         if self.is_modified:
             return
         if self.text_edit.document().isModified():
-            if self.text_edit.toPlainText() != self._original_content:
+            if self.text_edit.toPlainText().rstrip('\n') != self._original_content.rstrip('\n'):
                 self.is_modified = True
                 self.file_changed.emit(True)
 
@@ -1011,7 +948,7 @@ class EditorTab(QWidget):
         if self._is_truncated:
             self._original_content = self._assembleContent()
         else:
-            self._original_content = self.text_edit.toPlainText()
+            self._original_content = self.text_edit.toPlainText().rstrip('\n')
         self.is_modified = False
         self.text_edit.document().setModified(False)
 
@@ -1077,15 +1014,15 @@ class EditorTab(QWidget):
         except Exception:
             logger.exception("替换换行符失败")
 
-        if content == self._original_content and not self.is_modified:
+        if content.rstrip('\n') == self._original_content.rstrip('\n') and not self.is_modified:
             return
         
         self._markdown_cache.clear()
         self.is_modified = False
         self.clearTruncated(clear_buffer=False)
 
-        # setPlainText 会触发 textChanged 信号，导致 _onTextChanged 误判
-        # QPlainTextEdit 内部始终有至少一个段落，toPlainText() 返回的内容末尾会多出 \n，与 _original_content 比较不等，导致 is_modified 被错误设为 True
+        # QPlainTextEdit.toPlainText() 返回的内容末尾可能多出 \n（始终至少有1个段落），
+        # 在 setContent/markSaved/_onTextChanged 中用 rstrip('\n') 消除影响
         self.text_edit.blockSignals(True)
         try:
             doc = self.text_edit.document()
@@ -1101,7 +1038,7 @@ class EditorTab(QWidget):
             self.text_edit.setPlainText(content)
             # Qt 内部会对某些 Unicode 字符做规范化（如 \xa0 → 空格），
             # 从 toPlainText() 回读 _original_content 确保后续比较与 Qt 实际内容一致
-            self._original_content = self.text_edit.toPlainText()
+            self._original_content = self.text_edit.toPlainText().rstrip('\n')
             self.text_edit.document().setModified(False)
         except Exception:
             logger.exception("设置内容失败")
@@ -1148,6 +1085,16 @@ class EditorTab(QWidget):
         self._updatePages()
         self._pagination_bar.setVisible(True)
 
+    def _pageBufferSet(self, page: int, content: str):
+        if page in self._page_buffer:
+            del self._page_buffer[page]
+        elif len(self._page_buffer) >= self._page_buffer_max:
+            self._page_buffer.pop(next(iter(self._page_buffer)))
+        self._page_buffer[page] = content
+
+    def _pageBufferGet(self, page: int):
+        return self._page_buffer.get(page)
+
     def clearTruncated(self, clear_buffer: bool = True):
         self._is_truncated = False
         self._total_pages = 0
@@ -1184,11 +1131,10 @@ class EditorTab(QWidget):
         if page < 0 or page >= self._total_pages:
             return
         # 缓存当前页的编辑内容
-        self._page_buffer[self._current_page] = self.text_edit.toPlainText()
+        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
         # 读取目标页
-        if page in self._page_buffer:
-            content = self._page_buffer[page]
-        else:
+        content = self._pageBufferGet(page)
+        if content is None:
             content = self._readPage(page)
         # 切换显示
         self.text_edit.blockSignals(True)
@@ -1199,15 +1145,14 @@ class EditorTab(QWidget):
         self._updatePages()
 
     def loadAllContent(self):
-        self._page_buffer[self._current_page] = self.text_edit.toPlainText()
+        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
         # 逐页读取未缓存的页面
         all_parts = []
         for p in range(self._total_pages):
-            if p in self._page_buffer:
-                all_parts.append(self._page_buffer[p])
-            else:
+            content = self._pageBufferGet(p)
+            if content is None:
                 content = self._readPage(p)
-                all_parts.append(content)
+            all_parts.append(content)
         full = '\n'.join(all_parts) if all_parts else ''
         self._original_content = full
         self.text_edit.blockSignals(True)
@@ -1226,14 +1171,13 @@ class EditorTab(QWidget):
         if not self._is_truncated:
             return self.text_edit.toPlainText()
         # 保存当前页
-        self._page_buffer[self._current_page] = self.text_edit.toPlainText()
+        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
         all_parts = []
         for p in range(self._total_pages):
-            if p in self._page_buffer:
-                all_parts.append(self._page_buffer[p])
-            else:
+            content = self._pageBufferGet(p)
+            if content is None:
                 content = self._readPage(p)
-                all_parts.append(content)
+            all_parts.append(content)
         return '\n'.join(all_parts) if all_parts else ''
 
     def stripEmptyLines(self):

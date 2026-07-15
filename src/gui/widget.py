@@ -2,31 +2,10 @@
 import subprocess
 
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QTextEdit, QLabel, QPushButton, QProgressBar, QDialog, QApplication
-from PySide6.QtCore import Qt, Signal, QTimer, QObject, QThread
+from PySide6.QtCore import Qt, QTimer
 
-from src.util import logger, tr, messageBox, arch, root, VERSION, download, compareVersions
+from src.util import logger, tr, messageBox, arch, root, VERSION, download, compareVersions, runAsync
 from src.core.update import getReleaseInfo, extractUpdate, writeUpdateScript, cleanTemp, UPDATE_ZIP, UPDATE_DIR
-
-
-class _CheckWorker(QObject):
-    finished = Signal(object)
-
-    def run(self):
-        info = getReleaseInfo()
-        self.finished.emit(info)
-
-
-class _DownloadWorker(QObject):
-    progress = Signal(int, int)
-    finished = Signal(bool)
-
-    def __init__(self, url):
-        super().__init__()
-        self._url = url
-
-    def run(self):
-        success = download(self._url, UPDATE_ZIP, self.progress.emit)
-        self.finished.emit(success)
 
 
 class UpdateDialog(QDialog):
@@ -111,15 +90,7 @@ class UpdateDialog(QDialog):
         self._version_label.setText(tr("检查中..."))
         self._setCheckEnabled(False)
 
-        self._thread = QThread()
-        self._worker = _CheckWorker()
-        self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.finished.connect(self._onCheckResult)
-        self._worker.finished.connect(self._thread.quit)
-        self._worker.finished.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
-        self._thread.start()
+        runAsync(getReleaseInfo, on_done=self._onCheckResult)
 
     def _onCheckResult(self, info):
         self._checking = False
@@ -161,16 +132,12 @@ class UpdateDialog(QDialog):
         self._progress.setValue(0)
         self._progress.show()
 
-        self._dl_thread = QThread()
-        self._dl_worker = _DownloadWorker(self._download_url)
-        self._dl_worker.moveToThread(self._dl_thread)
-        self._dl_thread.started.connect(self._dl_worker.run)
-        self._dl_worker.progress.connect(self._onProgress)
-        self._dl_worker.finished.connect(self._onDownloadFinished)
-        self._dl_worker.finished.connect(self._dl_thread.quit)
-        self._dl_worker.finished.connect(self._dl_worker.deleteLater)
-        self._dl_thread.finished.connect(self._dl_thread.deleteLater)
-        self._dl_thread.start()
+        runAsync(
+            lambda report: download(self._download_url, UPDATE_ZIP, report),
+            on_done=self._onDownloadFinished,
+            on_error=lambda _: self._onDownloadFinished(False),
+            on_progress=self._onProgress,
+        )
 
     def _onProgress(self, current, total):
         if total > 0:
