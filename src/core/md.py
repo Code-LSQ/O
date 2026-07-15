@@ -7,7 +7,7 @@ from typing import Optional, Tuple, List, Dict
 
 import markdown
 
-from src.util import logger, Singleton
+from src.util import logger
 
 
 _MARKDOWN_EXTENSIONS = [
@@ -20,33 +20,12 @@ _MARKDOWN_EXTENSIONS = [
     'toc',
 ]
 
+_renderer = markdown.Markdown(extensions=_MARKDOWN_EXTENSIONS)
 
-class MarkdownRenderer(Singleton):
-    """Markdown渲染器类，替代全局函数，避免全局状态问题"""
 
-    def _init(self):
-        self._renderer = markdown.Markdown(extensions=_MARKDOWN_EXTENSIONS)
-
-    def reset(self):
-        self._renderer.reset()
-        return self
-    
-    def convert(self, content: str, file_path: str = None) -> Optional[str]:
-        self._renderer.reset()
-        
-        content = _processImagePaths(content, file_path)
-        content = _processHtmlImgTags(content, file_path)
-        content = _processRelativeLinks(content, file_path)
-        
-        html_body = self._renderer.convert(content)
-        if html_body is None:
-            return None
-        html_body = _enhanceHtml(html_body)
-        return self._buildFullHtml(html_body)
-    
-    def _buildFullHtml(self, html_body: str) -> str:
-        """将 Markdown 转换后的 HTML body 包装为完整 HTML 文档"""
-        return f"""<!DOCTYPE html>
+def _buildFullHtml(html_body: str) -> str:
+    """将 Markdown 转换后的 HTML body 包装为完整 HTML 文档"""
+    return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -320,8 +299,15 @@ def renderMarkdown(content: str, file_path: str = None) -> Optional[str]:
         file_path: 源文件路径（用于处理相对路径）
     """
     try:
-        renderer = MarkdownRenderer()
-        return renderer.convert(content, file_path)
+        _renderer.reset()
+        content = _processImagePaths(content, file_path)
+        content = _processHtmlImgTags(content, file_path)
+        content = _processRelativeLinks(content, file_path)
+        html_body = _renderer.convert(content)
+        if html_body is None:
+            return None
+        html_body = _enhanceHtml(html_body)
+        return _buildFullHtml(html_body)
     except Exception:
         logger.exception("Markdown渲染失败")
         return None

@@ -299,14 +299,14 @@ class MenuControl:
         btn, menu = self.createMenuButton(tr("文件") + "(&F)")
 
         self.main.action_new = self._addAction(menu, tr("新建") + "(&N)", lambda: (self.main.addTab(), self.main.statusBar().showMessage(tr("新建文件"), 3000)), QKeySequence.StandardKey.New)
-        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", lambda: self.main._file_controller.openFile(), QKeySequence.StandardKey.Open)
+        self.main.action_open = self._addAction(menu, tr("打开") + "(&O)", self.main.openFile, QKeySequence.StandardKey.Open)
         self.main.action_open_folder = self._addAction(menu, tr("打开文件夹") + "(&D)", self.main.openFolderDialog)
         self.main.action_folder_view = self._addAction(menu, tr("文件夹视图"), self.main.toggleFolderPanel)
 
         menu.addSeparator()
 
         self.main.action_save = self._addAction(menu, tr("保存") + "(&S)", self.main.saveFile, QKeySequence.StandardKey.Save)
-        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", lambda: self.main._file_controller.saveFileAs(), QKeySequence.StandardKey.SaveAs)
+        self.main.action_save_as = self._addAction(menu, tr("另存为") + "(&A)", self.main.saveFileAs, QKeySequence.StandardKey.SaveAs)
 
         menu.addSeparator()
 

@@ -2,18 +2,19 @@ import os
 import re
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox, QMenu, QStatusBar, QLabel, QListWidget, QSplitter, QListWidgetItem, QPlainTextEdit
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox, QMenu, QStatusBar, QLabel, QListWidget, QSplitter, QListWidgetItem, QPlainTextEdit, QFileDialog
 from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTextCursor
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile
+from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile, ENCODING_MAP
 from src.system import setMenu, isMenuRegister
-from src.file import FileControl, ArchiveItemModel, FolderPanelManager, createBackup
+from src.plugin import getPluginManager
+from src.file import ArchiveItemModel, FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
-from src.gui.view import ViewMode
+from src.gui.view import ViewMode, readFileLimit
 from src.gui.control import WindowMouse, WindowControl, MenuControl
 
 
@@ -43,7 +44,6 @@ class EditorWindow(WindowMouse, QMainWindow):
         """初始化核心属性"""
         self.find_replace_dialog = None
         self.auto_save_timer = None
-        self._file_controller = FileControl(self)
         self._fallback_size = (1000, 650)
         self._initialization_complete = False
         self.window_control = WindowControl(self)
@@ -641,14 +641,179 @@ class EditorWindow(WindowMouse, QMainWindow):
             self._updateFavoritesMenu()
             self.statusBar().showMessage(tr("已从收藏夹移除") + ": " + os.path.basename(file_path), 2000)
     
+    def openFile(self):
+        """打开文件对话框"""
+        file_path = getFilePath(self, tr("打开文件"), tr("所有文件") + " (*.*);;" + tr("文本文件") + " (*.txt *.md)")
+        if not file_path:
+            return
+        self.openFilePath(file_path)
+
     def openFilePath(self, file_path: str):
         """打开指定路径的文件"""
-        self._file_controller.openFilePath(os.path.normpath(file_path))
-    
+        file_path = os.path.normpath(file_path)
+        if not file_path:
+            return
+
+        if os.path.isdir(file_path):
+            self.loadFolder(file_path)
+            return
+
+        # 避免循环依赖
+        from src.gui.tab import EditorTab
+
+        if not self.config.get("Edit.multi_tab", False):
+            editor = self.getEditor()
+            self._doOpenFile(file_path)
+            return
+
+        if self.tab_widget:
+            for i in range(self.tab_widget.count()):
+                editor = self.tab_widget.widget(i)
+                if isinstance(editor, EditorTab) and editor.file_path == file_path:
+                    self.tab_widget.setCurrentIndex(i)
+                    self.statusBar().showMessage(tr("文件已在标签页中打开") + ": " + str(file_path), 3000)
+                    return
+
+        self._doOpenFile(file_path)
+
+    def _doOpenFile(self, file_path: str):
+        """实际打开文件的逻辑"""
+        if not file_path or not os.path.isfile(file_path):
+            messageBox(self, tr("打开失败"), tr("文件不存在或路径无效") + ": " + str(file_path), 1)
+            return
+
+        # 插件 fileHandlers 优先级最高
+        for can_handle, open_file in getPluginManager().fileHandlers:
+            if can_handle(file_path):
+                open_file(file_path, self)
+                self.config.addRecentFile(file_path)
+                return
+
+        if self._use_tabs:
+            editor = self.addTab(file_path)
+        else:
+            editor = self.single_editor
+            editor.setFilePath(file_path)
+
+        editor.file_path = file_path
+        editor.setupHighlighter()
+
+        ViewMode.openFile(editor, file_path)
+        if self._use_tabs:
+            self._onTabChanged(self.tab_widget.currentIndex())
+
+        self.encoding_label.setText(encodingName(editor.encoding) if editor.encoding else "")
+        self._toc_panel.hidePanel()
+        self.config.addRecentFile(file_path)
+        self.statusBar().showMessage(
+            tr("已打开") + ": " + os.path.abspath(file_path), 3000)
+
     def saveFile(self) -> bool:
-        """保存当前文件"""
-        return self._file_controller.saveFile()
-    
+        """保存当前文件（支持大文件翻页合并保存）"""
+        editor = self.getEditor()
+        if not editor:
+            return False
+
+        file_path = editor.file_path
+
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
+            return self.saveFileAs()
+
+        encoding = editor.encoding
+
+        backup_path = None
+        if file_path:
+            backup_path = createBackup(file_path, self.config)
+
+        try:
+            # 大文件翻页模式下：合并各页内容再写出
+            if editor._is_truncated:
+                with open(file_path, "w", encoding=encoding) as f:
+                    f.write(editor._assembleContent())
+            else:
+                with open(file_path, "w", encoding=encoding) as f:
+                    f.write(editor.text_edit.toPlainText())
+
+            editor.markSaved()
+            if self.tab_widget:
+                self.tab_widget.setTabText(self.tab_widget.currentIndex(), editor.getTitle())
+
+            if backup_path:
+                self.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + encoding + " " + tr("已备份"), 3000)
+            else:
+                self.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + encoding, 3000)
+            return True
+
+        except Exception as e:
+            messageBox(self, tr("保存失败"), tr("保存文件时发生错误") + ": " + str(e), 1)
+            return False
+
+    def saveFileAs(self) -> bool:
+        """另存为"""
+        editor = self.getEditor()
+        if not editor:
+            return False
+
+        file_path, _ = QFileDialog.getSaveFileName(self, tr("另存为"), "", tr("所有文件") + " (*.*);;" + tr("文本文件") + " (*.txt)")
+
+        if not file_path:
+            return False
+
+        editor.setFilePath(file_path)
+        return self.saveFile()
+
+    def openWithEnc(self, encoding: str):
+        """以指定编码打开当前文件"""
+        editor = self.getEditor()
+        if not editor:
+            self.statusBar().showMessage(tr("没有打开的文件"), 2000)
+            return
+
+        file_path = editor.file_path
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
+            self.statusBar().showMessage(tr("文件未保存，无法以指定编码打开"), 2000)
+            return
+
+        actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
+
+        try:
+            content, total_lines, loaded_lines, truncated, _ = \
+                readFileLimit(file_path, max_lines=50000, start_line=0, encoding=actual_encoding)
+            editor.setContent(content)
+            editor.encoding = actual_encoding
+            if truncated > 0 and hasattr(editor, 'setTruncated'):
+                editor.setTruncated(total_lines, loaded_lines, file_path, actual_encoding)
+            elif hasattr(editor, 'clearTruncated'):
+                editor.clearTruncated()
+            display = encodingName(actual_encoding)
+            self.encoding_label.setText(display)
+            self.statusBar().showMessage(tr("已重新打开") + ": " + file_path + " - " + display, 3000)
+        except Exception as e:
+            messageBox(self, tr("打开失败"), tr("编码读取文件失败") + " - " + encoding + ": " + str(e), 1)
+
+    def saveWithEnc(self, encoding: str):
+        """以指定编码保存当前文件"""
+        editor = self.getEditor()
+        if not editor:
+            self.statusBar().showMessage(tr("没有打开的文件"), 2000)
+            return
+
+        file_path = editor.file_path
+        if editor.getHandler(ViewMode.GALLERY).is_viewing_archive_image or not file_path:
+            self.statusBar().showMessage(tr("文件未保存，请先保存文件"), 2000)
+            return
+
+        actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
+
+        try:
+            with open(file_path, "w", encoding=actual_encoding) as f:
+                    f.write(editor.text_edit.toPlainText())
+            editor.encoding = actual_encoding
+            display = encodingName(actual_encoding)
+            self.encoding_label.setText(display)
+            self.statusBar().showMessage(tr("已保存") + ": " + file_path + " - " + display, 3000)
+        except Exception as e:
+            messageBox(self, tr("保存失败"), tr("编码保存文件失败") + " - " + encoding + ": " + str(e), 1)
 
     def undo(self):
         editor = self.getEditor()
@@ -754,14 +919,14 @@ class EditorWindow(WindowMouse, QMainWindow):
         if action and hasattr(action, 'data'):
             encoding = action.data()
             if encoding:
-                self._file_controller.openWithEnc(encoding)
-    
+                self.openWithEnc(encoding)
+
     def _encodingSave(self):
         action = self.sender()
         if action and hasattr(action, 'data'):
             encoding = action.data()
             if encoding:
-                self._file_controller.saveWithEnc(encoding)
+                self.saveWithEnc(encoding)
     
     def setViewMode(self, mode: str):
         """改变查看模式"""
