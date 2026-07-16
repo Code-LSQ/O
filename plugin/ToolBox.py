@@ -186,7 +186,10 @@ class ToolBox(PluginBase):
     def _quickPaste(self, text):
         if not text:
             return
-        regex_text = self.settings.get("paste.regex_text", "").strip()
+        text = re.sub(r'[\u2028\u2029\u0085\f\v]', '\n', text)
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+        # 统一换行符为 \n ，否则 ^\n 类正则无法处理 \r\n 或 U+2029 等变体
+        regex_text = self.settings.get("paste.regex_text", "")
         if regex_text:
             try:
                 text = re.sub(regex_text, '', text, flags=re.MULTILINE)

@@ -227,7 +227,7 @@ class MarkdownMode:
             try:
                 mtime = str(os.path.getmtime(tab.file_path))
             except OSError:
-                pass
+                logger.exception("获取文件修改时间失败")
         cache_key = hashlib.md5(
             (content_to_render + (tab.file_path or "") + mtime).encode()
         ).hexdigest()
@@ -701,7 +701,7 @@ class GalleryMode(QObject):
             try:
                 self._gallery_scrollbar.valueChanged.disconnect(self._onGalleryScroll)
             except (TypeError, RuntimeError):
-                pass
+                logger.exception("画廊滚动条信号断开失败")
             self._gallery_scrollbar = None
         self._gallery_items = []
         self._gallery_item_count = 0
@@ -1043,8 +1043,7 @@ def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, e
         if encoding:
             encodings_to_try = [encoding]
         else:
-            SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
-            encodings_to_try = ["utf-8"] + SUPPORTED_ENCODINGS
+            encodings_to_try = list(ENCODING_MAP.values())
         for enc in encodings_to_try:
             try:
                 lines = []

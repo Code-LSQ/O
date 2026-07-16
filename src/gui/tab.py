@@ -581,7 +581,7 @@ class EditorText(QPlainTextEdit):
         super().undo()
         tab = self._parent_tab
         if tab and tab.is_modified:
-            content = self.toPlainText()
+            content = self.toPlainText().rstrip('\n')
             if content == tab._original_content:
                 tab.is_modified = False
                 tab.file_changed.emit(False)
@@ -927,7 +927,7 @@ class EditorTab(QWidget):
                 self.highlighter.setDocument(None)
                 self.highlighter.deleteLater()
             except RuntimeError:
-                pass
+                logger.exception("高亮器清理异常")
             self.highlighter = None
         
         if not self.file_path:
@@ -1005,6 +1005,43 @@ class EditorTab(QWidget):
     def _onCursorPos(self, line: int, col: int):
         if self._cursor_position_callback:
             self._cursor_position_callback(line, col)
+
+    def saveCursorPosition(self, config):
+        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+            return
+        try:
+            cursor = self.text_edit.textCursor()
+            scrollbar = self.text_edit.verticalScrollBar()
+            positions = config.get("Edit.cursor_positions", {})
+            positions[self.file_path] = {
+                "pos": cursor.position(),
+                "scroll": scrollbar.value() if scrollbar else 0
+            }
+            config.set("Edit.cursor_positions", positions)
+        except Exception:
+            logger.exception("保存光标位置失败")
+
+    def restoreCursorPosition(self, config):
+        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+            return
+        try:
+            positions = config.get("Edit.cursor_positions", {})
+            data = positions.get(self.file_path)
+            if not data:
+                return
+            doc = self.text_edit.document()
+            scrollbar = self.text_edit.verticalScrollBar()
+            if scrollbar and "scroll" in data:
+                scrollbar.setValue(min(data["scroll"], scrollbar.maximum()))
+            cursor = self.text_edit.textCursor()
+            pos = data.get("pos", 0)
+            if pos <= doc.characterCount():
+                cursor.setPosition(pos)
+                self.text_edit.setTextCursor(cursor)
+                self.text_edit.ensureCursorVisible()
+            self.text_edit.setFocus()
+        except Exception:
+            logger.exception("恢复光标位置失败")
 
     def setContent(self, content: str, emit_changed: bool = True):
         if content is None:

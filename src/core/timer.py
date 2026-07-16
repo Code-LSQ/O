@@ -69,7 +69,7 @@ class WeakCallbackSet:
                 self._weak_refs.append(wr)
                 return True
         except TypeError:
-            pass
+            logger.exception("添加回调弱引用失败")
         return False
     
     def remove(self, callback: Callable):
@@ -81,7 +81,7 @@ class WeakCallbackSet:
                 self._weak_refs.pop(idx)
                 self._callbacks.pop(idx)
         except (ValueError, TypeError):
-            pass
+            logger.exception("移除回调失败")
     
     def _removeDead(self, ref):
         """移除已失效的弱引用"""
@@ -92,7 +92,7 @@ class WeakCallbackSet:
                 if idx < len(self._callbacks):
                     self._callbacks.pop(idx)
         except (ValueError, IndexError):
-            pass
+            logger.exception("移除失效弱引用失败")
     
     def __iter__(self):
         return iter(self._callbacks)

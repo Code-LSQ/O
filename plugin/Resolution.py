@@ -193,7 +193,7 @@ def parseResolution(text: str) -> Optional[Tuple[int, int]]:
         if w > 0 and h > 0:
             return w, h
     except (ValueError, IndexError):
-        pass
+        logger.exception("分辨率字符串解析失败")
     return None
 
 

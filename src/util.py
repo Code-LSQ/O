@@ -94,7 +94,7 @@ EXTENSION = {
     "AUDIO": {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"},
     "VIDEO": {".mp4", ".avi", ".mkv", ".mov", ".webm"},
     "EXECUTE": {".exe", ".dll", ".so", ".dylib", ".bin", ".msi", ".wasm", ".pyc", ".pyd", ".o", ".a", ".lib", ".obj", ".class"},
-    "DOCUMENT": {".pdf", ".docx", ".pptx", ".xlsx", ".epub", ".mobi", ".odt", ".ods", ".odp"},
+    "DOCUMENT": {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".epub", ".mobi", ".odt", ".ods", ".odp"},
     "FONT": {".ttf", ".otf", ".woff", ".woff2", ".ttc"},
     "DATABASE": {".db", ".sqlite", ".sqlite3", ".accdb"},
     "DISK": {".iso", ".dmg", ".vhd", ".img"},
@@ -893,7 +893,7 @@ def convertPath(path: str, mode: str) -> str:
         elif mode == "absolute" and not os.path.isabs(path):
             return os.path.normpath(os.path.join(str(root), path))
     except ValueError:
-        pass
+        logger.exception("路径模式转换失败")
     return path
 
 
@@ -960,7 +960,7 @@ class ClipboardMonitor(Singleton):
             if self._clipboard.receivers(self._clipboard.dataChanged) > 0:
                 self._clipboard.dataChanged.disconnect(self._onClipboardChanged)
         except (TypeError, RuntimeError):
-            pass
+            logger.exception("剪贴板信号断开失败")
 
     def _onClipboardChanged(self):
         if not self.enabled or not self._callbacks:

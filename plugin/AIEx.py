@@ -114,22 +114,28 @@ class AIExtendPlugin(PluginBase):
         self.initialize()
         self._ai_capturing = True
         self._pending_ai_prompt = name
-        self.getSelect(self.selectionCapture)
 
-    def selectionCapture(self, text):
+        saved_files = []
+        mime = QApplication.clipboard().mimeData()
+        if mime and mime.hasUrls():
+            for url in mime.urls():
+                path = urlToPath(url)
+                if path and (os.path.isfile(path) or os.path.isdir(path)):
+                    saved_files.append(path)
+            QApplication.clipboard().clear()
+
+        def onText(text):
+            self.selectionCapture(text, saved_files)
+
+        self.getSelect(onText)
+
+    def selectionCapture(self, text, file_paths=None):
         self._ai_capturing = False
         name = getattr(self, '_pending_ai_prompt', None)
         text = text.strip()
-        if not text:
-            messageBox(self.main, tr("提示"), tr("请先选中文本后再执行此操作"), 1)
-            return
 
-        mime = QApplication.clipboard().mimeData()
-        if mime.hasUrls():
-            for url in mime.urls():
-                path = urlToPath(url)
-                if not path:
-                    continue
+        if file_paths:
+            for path in file_paths:
                 if os.path.isfile(path):
                     messages = getAIClient(self.settings).buildFileMessage(path)
                     if messages:
@@ -140,6 +146,10 @@ class AIExtendPlugin(PluginBase):
                     if messages:
                         self._openAiDialog(messages, name)
                     return
+
+        if not text:
+            messageBox(self.main, tr("提示"), tr("请先选中文本后再执行此操作"), 1)
+            return
 
         self._openAiDialog([{"role": "user", "content": text}], name)
 

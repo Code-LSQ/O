@@ -91,7 +91,7 @@ class PluginBase(ABC):
             try:
                 fn()
             except Exception:
-                pass
+                logger.exception("清理钩子执行异常")
         self._cleanup_hooks.clear()
 
     def loadConfig(self):
@@ -118,9 +118,8 @@ class PluginBase(ABC):
     
     def getSelect(self, callback):
         """异步获取当前选中文本，完成后回调 callback(text)"""
-        from src.core.input import copySelection
-        copySelection()
-        QTimer.singleShot(300, lambda: callback(QApplication.clipboard().text() or ""))
+        from src.core.input import copyWait
+        copyWait(callback)
 
     def onFileOpen(self, file_path: str):
         """文件打开时的回调"""

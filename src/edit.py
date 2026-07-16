@@ -386,10 +386,12 @@ class EditorWindow(WindowMouse, QMainWindow):
         if hasattr(self, '_last_tab_index') and self._last_tab_index >= 0 and self.tab_widget:
             old = self.tab_widget.widget(self._last_tab_index)
             if isinstance(old, EditorTab):
+                old.saveCursorPosition(self.config)
                 old.getHandler(old._current_mode).deactivate(old)
         self._last_tab_index = index
         editor = self.getEditor()
         if editor:
+            editor.restoreCursorPosition(self.config)
             if editor._current_mode:
                 handler = editor.getHandler(editor._current_mode)
                 handler.activate(editor)
@@ -460,7 +462,9 @@ class EditorWindow(WindowMouse, QMainWindow):
         editor = self.tab_widget.widget(index)
         if not isinstance(editor, EditorTab):
             return
-        
+
+        editor.saveCursorPosition(self.config)
+
         if editor.is_modified:
             reply = messageBox(self, tr("保存确认"), tr("是否保存更改") + " \"" + editor.getTitle() + "\"?", 3)
 
@@ -693,14 +697,14 @@ class EditorWindow(WindowMouse, QMainWindow):
             editor = self.addTab(file_path)
         else:
             editor = self.single_editor
+            editor.saveCursorPosition(self.config)
             editor.setFilePath(file_path)
 
         editor.file_path = file_path
         editor.setupHighlighter()
 
         ViewMode.openFile(editor, file_path)
-        if self._use_tabs:
-            self._onTabChanged(self.tab_widget.currentIndex())
+        editor.restoreCursorPosition(self.config)
 
         self.encoding_label.setText(encodingName(editor.encoding) if editor.encoding else "")
         self._toc_panel.hidePanel()
@@ -999,6 +1003,7 @@ class EditorWindow(WindowMouse, QMainWindow):
             return
         
         self.config.updateWindowGeometry(self.geometry())
+        self._saveCursorPositions()
         self._saveOpenFiles()
         self.config.save()
         
@@ -1041,7 +1046,11 @@ class EditorWindow(WindowMouse, QMainWindow):
                 openFiles.append(file_path)
         
         self.config.set("Edit.open", openFiles)
-    
+
+    def _saveCursorPositions(self):
+        for editor in self._iterEditors():
+            editor.saveCursorPosition(self.config)
+
     def _loadOpenFiles(self):
         """加载上次未关闭的文件"""
         openFiles = self.config.get("Edit.open", [])

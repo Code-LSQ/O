@@ -9,15 +9,15 @@ if sys.platform == "win32":
 from pathlib import Path
 
 from psutil import Process, process_iter, NoSuchProcess, AccessDenied
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QLabel, QPushButton, QToolButton, QLineEdit, QComboBox, QMenu, QFormLayout, QFrame, QFileIconProvider, QCheckBox, QSystemTrayIcon, QPlainTextEdit
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QLabel, QPushButton, QToolButton, QLineEdit, QComboBox, QMenu, QFormLayout, QFrame, QCheckBox, QSystemTrayIcon, QPlainTextEdit
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
-from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QFileInfo, QTimer, QPoint, QMimeData
+from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
 from src.util import AUTHOR, APP_NAME, logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
-from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copySelection
+from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copyWait
 from src.core.timer import TimerManager
 from src.gui.control import WindowMouse, WindowControl, managePlugins
 
@@ -683,13 +683,9 @@ def getIcon(tool, icon_size=32):
     path = os.path.expandvars(path)
     icon = QIcon()
     if icon_path:
-        icon_check_path = convertPath(icon_path, "absolute")
-        if os.path.isfile(icon_check_path):
-            if Path(icon_check_path).suffix.lower() == ".exe":
-                provider = QFileIconProvider()
-                icon = provider.icon(QFileInfo(icon_check_path))
-            else:
-                icon = QIcon(icon_check_path)
+        icon_path = convertPath(icon_path, "absolute")
+        if os.path.isfile(icon_path):
+            icon = QIcon(icon_path)
     elif path:
         try:
             icon = getFileIcon(path, icon_size)
@@ -860,7 +856,11 @@ class MainWindow(WindowMouse, QMainWindow):
         for pname, pcfg in plugin_config.items():
             hotkey = pcfg.get("hotkey", "")
             if hotkey:
-                listener.registerHotkey(hotkey, {"type": "plugin_toggle", "name": pname})
+                tool = {"type": "plugin_toggle", "name": pname}
+                action_text = pcfg.get("hotkey_action", "")
+                if action_text:
+                    tool["action"] = action_text
+                listener.registerHotkey(hotkey, tool)
                 sc = QShortcut(QKeySequence(hotkey), self, context=Qt.ShortcutContext.ApplicationShortcut)
                 sc.activated.connect(lambda: None)
                 self._plugin_shortcuts.append(sc)
@@ -1996,27 +1996,14 @@ class MainWindow(WindowMouse, QMainWindow):
     
     def _runSelect(self, tool):
         """隐藏后捕获选中文本替换 {Select} 再执行工具"""
-        clipboard = QApplication.clipboard()
-        grabbed = False
 
-        def grab():
-            nonlocal grabbed
-            if grabbed:
-                return
-            grabbed = True
-            try:
-                clipboard.dataChanged.disconnect(grab)
-            except (TypeError, RuntimeError):
-                pass
-            text = clipboard.text() or ""
+        def onReady(text):
             GlobalHotkeyListener._placeholders["Select"] = text
             t = dict(tool)
             t["args"] = tool.get("args", "").replace("{Select}", text)
             self.runItem(t)
 
-        clipboard.dataChanged.connect(grab)
-        copySelection()
-        QTimer.singleShot(500, grab)
+        copyWait(onReady)
     
     def registerHotkeys(self):
         """注册所有工具快捷键"""

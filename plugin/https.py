@@ -339,7 +339,7 @@ class HTTPTool:
                             self.send_error(413)
                             return
                     except ValueError:
-                        pass
+                        logger.exception("Content-Length 解析失败")
 
                 content_disposition = self.headers.get('Content-Disposition', '')
                 filename = None
@@ -802,7 +802,7 @@ class HTTPDialog(QDialog):
             if 1 <= port <= 65535:
                 settings["port"] = port
         except ValueError:
-            pass
+            logger.exception("端口号解析失败")
         settings["shared_folder"] = self.folder_edit.text()
         settings["upload_folder"] = self.upload_folder_edit.text()
         settings["background_run"] = self.background_check.isChecked()

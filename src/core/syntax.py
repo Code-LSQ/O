@@ -22,7 +22,7 @@ class Highlighter(QSyntaxHighlighter):
             self.highlighting_rules.append((pattern, format))
             self._compiled_patterns.append(expr)
         except Exception:
-            pass
+            logger.exception("高亮规则创建失败")
 
     def highlightBlock(self, text: str):
         if not text:

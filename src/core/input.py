@@ -3,7 +3,8 @@ import threading
 import signal
 
 from pynput import keyboard, mouse
-from PySide6.QtCore import Qt, QMetaObject, QEvent, QObject, Signal
+from PySide6.QtCore import Qt, QMetaObject, QEvent, QObject, Signal, QTimer
+from PySide6.QtWidgets import QApplication
 
 from src.util import logger, Singleton
 
@@ -11,10 +12,11 @@ from src.util import logger, Singleton
 # 如果需要全局快捷键并抑制其传给系统和其他程序， Windows 使用 win32_event_filter ，macOS 使用 darwin_intercept 。 Linux 似乎暂时没有好办法。
 
 
-def copySelection():
+def _doCopy():
     old = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         GlobalHotkeyListener._is_pasting = True
+        time.sleep(0.1)
         kb = keyboard.Controller()
         kb.press(keyboard.Key.ctrl)
         kb.press('c')
@@ -23,6 +25,24 @@ def copySelection():
     finally:
         GlobalHotkeyListener._is_pasting = False
         signal.signal(signal.SIGINT, old)
+
+def _pollClipboard(old, callback, timeout_ms, interval_ms, elapsed):
+    current = QApplication.clipboard().text() or ""
+    if current != old:
+        callback(current)
+        return
+    if elapsed >= timeout_ms:
+        callback("")
+        return
+    QTimer.singleShot(interval_ms, lambda: _pollClipboard(
+        old, callback, timeout_ms, interval_ms, elapsed + interval_ms))
+
+def copyWait(callback, timeout_ms=3000, interval_ms=100):
+    """模拟 Ctrl+C 后轮询剪贴板直到内容变化或超时，通过 callback(text) 异步返回"""
+    old = QApplication.clipboard().text() or ""
+    _doCopy()
+    QTimer.singleShot(interval_ms, lambda: _pollClipboard(
+        old, callback, timeout_ms, interval_ms, interval_ms))
 
 
 class GlobalHotkeyListener(Singleton):
@@ -49,9 +69,9 @@ class GlobalHotkeyListener(Singleton):
         0x55: 'u', 0x56: 'v', 0x57: 'w', 0x58: 'x', 0x59: 'y', 0x5A: 'z',
         0x30: '0', 0x31: '1', 0x32: '2', 0x33: '3', 0x34: '4',
         0x35: '5', 0x36: '6', 0x37: '7', 0x38: '8', 0x39: '9',
-        0xA2: 'ctrl_l', 0xA3: 'ctrl_r',
+        0x10: 'shift_l', 0x11: 'ctrl_l', 0x12: 'alt_l',
+        0xA0: 'shift_l', 0xA1: 'shift_r',0xA2: 'ctrl_l', 0xA3: 'ctrl_r',
         0xA4: 'alt_l', 0xA5: 'alt_r',
-        0xA0: 'shift_l', 0xA1: 'shift_r',
         0x5B: 'cmd', 0x5C: 'cmd',
         0x70: 'f1', 0x71: 'f2', 0x72: 'f3', 0x73: 'f4',
         0x74: 'f5', 0x75: 'f6', 0x76: 'f7', 0x77: 'f8',
@@ -108,6 +128,8 @@ class GlobalHotkeyListener(Singleton):
         def onPress(key):
             nonlocal last_ctrl_press_time, ctrl_was_held
             try:
+                if self._is_pasting:
+                    return
                 key_name = self._getKeyName(key)
                 if not key_name:
                     return
@@ -142,6 +164,8 @@ class GlobalHotkeyListener(Singleton):
         def onRelease(key):
             nonlocal ctrl_was_held
             try:
+                if self._is_pasting:
+                    return
                 key_name = self._getKeyName(key)
                 if not key_name:
                     return

@@ -11,9 +11,8 @@ from PySide6.QtWidgets import QWidget, QDialog, QTextEdit, QVBoxLayout, QLabel, 
 from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QAction
 
-from src.util import logger, getTimestamp, EXTENSION, ENCODING_MAP, encodingName, dialogBox, messageBox, tr, openTerminal, showFile, formatFileSize, backup_dir, fileType
-from src.plugin import getPluginManager
-from src.gui.view import ViewMode, listArchive, readArchive, readFileLimit
+from src.util import logger, getTimestamp, EXTENSION, ENCODING_MAP, dialogBox, messageBox, tr, openTerminal, showFile, formatFileSize, backup_dir, fileType
+from src.gui.view import ViewMode, listArchive, readArchive
 
 
 SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
