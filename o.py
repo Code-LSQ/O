@@ -4,11 +4,11 @@ import traceback
 
 from PySide6.QtWidgets import QApplication
 
-# sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # 兼容嵌入版 Python
+sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
 
 from src.main import MainWindow, setApp
-from src.util import APP_NAME, VERSION, OSign, logger, getDevice
+from src.util import APP_NAME, VERSION, OSign, logger, getDevice, execPython
 
 
 def exceptionHook(exc_type, value, tb):
@@ -28,6 +28,10 @@ def exceptionHook(exc_type, value, tb):
 def main():
 
     sys.excepthook = exceptionHook
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "--exec":
+        sys.exit(execPython())
+
     logger.info(f"V{VERSION} 版本程序启动")
 
     # os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=freetype"   # 解决 Qt6 中文锯齿，已改为在 setApp 中使用 PreferNoHinting 策略解决

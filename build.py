@@ -1,7 +1,5 @@
 import os
 import sys
-import shutil
-from pathlib import Path
 
 import PyInstaller.__main__
 
@@ -51,16 +49,6 @@ def pluginLib():
                 break
 
     return deps
-
-
-def pycache(path: Path):
-    for pycache_dir in path.rglob("__pycache__"):
-        if pycache_dir.is_dir():
-            try:
-                print(f"删除 {pycache_dir}")
-                shutil.rmtree(pycache_dir)
-            except Exception as e:
-                print(f"删除 {pycache_dir} 失败: {e}")
 
 
 def main():
@@ -128,7 +116,6 @@ def main():
         args.append(f"--hidden-import={dep}")
 
     print(args)
-    pycache(root)
 
     return PyInstaller.__main__.run(args)
 

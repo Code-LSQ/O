@@ -1,7 +1,7 @@
 import os
 import sys
 import shutil
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 from PySide6.QtWidgets import QPushButton, QDialog, QLineEdit, QFormLayout, QVBoxLayout, QHBoxLayout, QListWidgetItem
 from PySide6.QtGui import QAction
@@ -133,14 +133,6 @@ class LinkManage(QDialog):
         else:
             messageBox(self, "错误", f"操作失败: {err_msg}", 1)
 
-    def refresh(self, pairs):
-        """刷新列表数据"""
-        self.pair_manage.pair_list.clear()
-        for pair in pairs:
-            item = QListWidgetItem(pair.get("name", ""))
-            item.setData(Qt.ItemDataRole.UserRole, pair.get("value", ""))
-            self.pair_manage.pair_list.addItem(item)
-
     def parseValue(self, value: str) -> Tuple[Optional[str], Optional[str]]:
         if not value:
             return None, None
@@ -188,7 +180,11 @@ class LinkManage(QDialog):
                 shutil.copytree(src, dst, symlinks=False)
             else:
                 shutil.copy2(src, dst)
-            if not checksum(src) == checksum(dst):
+            src_hash = checksum(src)
+            dst_hash = checksum(dst)
+            logger.info(f"跨盘复制校验: {src} -> {dst}")
+            if src_hash != dst_hash:
+                logger.warning(f"跨盘复制校验失败: {src} ({src_hash}) -> {dst} ({dst_hash})")
                 return False, "复制后校验失败，源文件未删除"
             if os.path.isdir(src):
                 shutil.rmtree(src)
@@ -222,6 +218,11 @@ class LinkManage(QDialog):
                 original_target = os.readlink(source_path)
                 if original_target and _isSystemPath(original_target):
                     return False, f"符号链接目标涉及系统目录，禁止操作: {original_target}"
+                # 损坏的符号链接且 target_path 不存在 → 提前报错，不删旧链接
+                if original_target and not os.path.exists(original_target) and not os.path.exists(target_path):
+                    return False, (
+                        f"符号链接已损坏且目标路径不存在: {target_path}"
+                    )
                 os.remove(source_path)
                 logger.info(f"已删除旧符号链接: {source_path} -> {original_target}")
             except Exception as e:

@@ -315,28 +315,36 @@ def openFile(path: str, cwd=None, args=None, operation="open"):
             raise RuntimeError(f"打开文件失败: {e}")
 
 def runPython(path: str, cwd, args, operation):
-    run_path = getConfig().get("Launch.Runtime.Python", "")
-    if not run_path:
-        raise RuntimeError("未配置 Python 路径")
-    if Path(path).suffix.lower() == '.py':
-        cmd = [run_path, path]
-        if args:
-            cmd.append(args)
-        subprocess.Popen(cmd, shell=True, cwd=cwd or None)
-    else:
+    if Path(path).suffix.lower() != ".py":
         raise TypeError("仅支持 .py 文件")
 
+    run_path = getConfig().get("Launch.Runtime.Python", "")
+    if not run_path:
+        if not Interpret:
+            cmd = [sys.executable, "--exec", path]
+            if args:
+                cmd.append(args)
+            subprocess.Popen(cmd, shell=True, cwd=cwd or None)
+            return
+        run_path = sys.executable
+
+    cmd = [run_path, path]
+    if args:
+        cmd.append(args)
+    subprocess.Popen(cmd, shell=True, cwd=cwd or None)
+
 def runJava(path: str, cwd, args, operation):
+    if Path(path).suffix.lower() != ".jar":
+        raise TypeError("仅支持 .jar 文件")
+
     run_path = getConfig().get("Launch.Runtime.Java", "")
     if not run_path:
         raise RuntimeError("未配置 Java 路径")
-    if Path(path).suffix.lower() == '.jar':
-        cmd = [run_path, '-jar', path]
-        if args:
-            cmd.append(args)
-        subprocess.Popen(cmd, shell=True, cwd=cwd or None)
-    else:
-        raise TypeError("仅支持 .jar 文件")
+
+    cmd = [run_path, '-jar', path]
+    if args:
+        cmd.append(args)
+    subprocess.Popen(cmd, shell=True, cwd=cwd or None)
 
 def openUrl(url, *args, **kwargs):
     webbrowser.open(url)

@@ -61,12 +61,33 @@ logo_icn = icon_dir / "Logo.icns"
 
 backup_dir = data_dir / "backup"
 
-
 arch = QSysInfo.currentCpuArchitecture()
 if arch in ("x86_64", "amd64"):
     arch = "x64"
 elif arch in ("arm64", "aarch64"):
     arch = "arm64"
+
+
+def execPython():
+    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码"""
+    if len(sys.argv) < 3:
+        logger.error("缺少脚本路径")
+        return 1
+    script_path = sys.argv[2]
+    extra_args = sys.argv[3:]
+    try:
+        sys.argv = [script_path] + extra_args
+        with open(script_path, "r", encoding="utf-8") as f:
+            source = f.read()
+        code = compile(source, script_path, "exec")
+        exec(code, {"__name__": "__main__", "__file__": script_path})
+        return 0
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+        return code
+    except Exception:
+        logger.exception(f"执行脚本失败: {script_path}")
+        return 1
 
 
 def compareVersions(v1: str, v2: str) -> int:
@@ -693,7 +714,7 @@ def fileHash(path: str, algorithm="md5") -> str:
         return ""
 
 def checksum(path: str, algorithm="md5", _visited=None) -> str:
-    """计算文件夹哈希值（哈希树）， _visited 用于检查是否形成环路（绑定挂载、循环硬链接目录等非符号链接导致的循环）"""
+    """计算文件夹哈希值（哈希树），调用时请用 info 级别的日志记录路径和计算哈希值的结果， _visited 用于检查是否形成环路（绑定挂载、循环硬链接目录等非符号链接导致的循环）"""
 
     if os.path.isfile(path):
         return fileHash(path, algorithm=algorithm)
