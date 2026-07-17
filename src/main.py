@@ -1428,7 +1428,6 @@ class MainWindow(WindowMouse, QMainWindow):
             (tr("重载插件"), "reloadPlugins"),
             (tr("检查更新"), "checkUpdate"),
             (tr("打开日志"), "openLog"),
-            (tr("打开配置"), "openConfig"),
             (tr("重启程序"), "restartApp"),
             (tr("退出"), "quitApp"),
         ]:
@@ -1707,7 +1706,6 @@ class MainWindow(WindowMouse, QMainWindow):
             "pluginManager": lambda: managePlugins(self),
             "reloadPlugins": lambda: getPluginManager().initConfig(getConfig()),
             "openLog": lambda: self._openEditor(str(log_file)),
-            "openConfig": lambda: self._openEditor(str(config_file)),
             "checkUpdate": lambda: self._checkUpdate(),
         }
         action = func_act.get(path)

@@ -14,7 +14,7 @@ from src.plugin import PluginBase
 from src.main import getIcon
 from src.file import FileSelect
 from src.config import getConfig
-from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize
+from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget
 from src.core.timer import TimerManager
 
 
@@ -211,6 +211,8 @@ class ToolBox(PluginBase):
         editor_widget.text_edit.paste()
 
     def _quickText(self):
+        if activateWidget(QuickTextDialog):
+            return
         self.initialize()
         items = self.settings.get("quick_text.list", [])
         dialog = QuickTextDialog(items, self.main)
@@ -231,6 +233,8 @@ class ToolBox(PluginBase):
             logger.exception("全局粘贴失败")
 
     def _openSearch(self):
+        if activateWidget(SearchDialog):
+            return
         config = getConfig()
         dialog = SearchDialog(config.get("Launch.tools", {}), self.main)
         dialog.exec()
@@ -1539,17 +1543,22 @@ class QuickTextDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         self.activateWindow()
+        logger.info(f"QuickTextDialog.showEvent: 窗口可见={self.isVisible()}, "
+                     f"激活={self.isActiveWindow()}, 焦点控件={self.focusWidget()}")
         self.search_edit.setFocus()
+        logger.info(f"QuickTextDialog.showEvent: 设焦后焦点控件={self.focusWidget()}")
 
     def eventFilter(self, obj, event):
         if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Up:
+            key = event.key()
+            if key == Qt.Key.Key_Up:
                 self._moveSelection(-1)
                 return True
-            elif event.key() == Qt.Key.Key_Down:
+            elif key == Qt.Key.Key_Down:
                 self._moveSelection(1)
                 return True
-            elif event.key() == Qt.Key.Key_Escape:
+            elif key == Qt.Key.Key_Escape:
+                logger.info("QuickTextDialog.eventFilter: 捕获 Escape -> reject()")
                 self.reject()
                 return True
         return super().eventFilter(obj, event)

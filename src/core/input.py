@@ -60,6 +60,8 @@ class GlobalHotkeyListener(Singleton):
     _hotkey_triggered = False
     _is_pasting = False
     _placeholders = {"Select": ""}
+    _last_tool_hotkey_time = 0
+    _min_hotkey_interval = 0.3
 
     _VK_TO_NAME = {
         0x41: 'a', 0x42: 'b', 0x43: 'c', 0x44: 'd', 0x45: 'e',
@@ -85,6 +87,7 @@ class GlobalHotkeyListener(Singleton):
 
     def _init(self):
         self._lock = threading.Lock()
+        self._last_tool_hotkey_time = 0
     
     @staticmethod
     def _getKeyName(key):
@@ -204,6 +207,11 @@ class GlobalHotkeyListener(Singleton):
                 for hotkey_str, tool in self._tool_hotkeys.items():
                     hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
                     if hotkey_keys and self._checkHotkey(pressed_names, hotkey_keys):
+                        current_time = time.time()
+                        if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
+                            self._keyboard_listener.suppress_event()
+                            return
+                        self._last_tool_hotkey_time = current_time
                         self._pending_tool = tool
                         self._pending_hotkey = hotkey_str
                         QMetaObject.invokeMethod(main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
@@ -370,6 +378,10 @@ class GlobalHotkeyListener(Singleton):
         for hotkey_str, tool in self._tool_hotkeys.items():
             hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
             if hotkey_keys and self._checkHotkey(pressed_keys, hotkey_keys):
+                current_time = time.time()
+                if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
+                    return
+                self._last_tool_hotkey_time = current_time
                 logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
                 self._pending_tool = tool
                 self._pending_hotkey = hotkey_str

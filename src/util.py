@@ -85,9 +85,6 @@ def execPython():
             sys.stdin = open("CONIN$", "r")
             sys.stdout = open("CONOUT$", "w")
             sys.stderr = open("CONOUT$", "w")
-        for h in logger.handlers:
-            if isinstance(h, logging.StreamHandler) and h.stream is None:
-                h.stream = sys.stderr
     try:
         sys.argv = [script_path] + extra_args
         sys.path.insert(0, os.path.dirname(os.path.abspath(script_path)))
@@ -1133,6 +1130,16 @@ def messageBox(parent, title, text, num: int = 2):
         msg_box.button(QMessageBox.StandardButton.Cancel).setText(tr("取消"))
 
     return msg_box.exec()
+
+
+def activateWidget(cls):
+    """防重复，已有对话框实例时显示而不创建，避免嵌套 exec()，返回 True ，否则 False"""
+    for widget in QApplication.topLevelWidgets():
+        if isinstance(widget, cls) and widget.isVisible():
+            widget.raise_()
+            widget.activateWindow()
+            return True
+    return False
 
 
 class ManagePair(QDialog):
