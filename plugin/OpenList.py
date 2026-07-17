@@ -1892,15 +1892,11 @@ class OpenListWidget(QWidget):
             messageBox(self, "警告", "请先选择 OpenList 路径", 1)
             return
         try:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
             work_dir = os.path.dirname(openlist_path)
-            cmd_name = os.path.basename(openlist_path)
             subprocess.Popen(
-                ["cmd", "/c", "start", cmd_name, "server"],
+                [openlist_path, "server"],
                 cwd=work_dir,
-                startupinfo=startupinfo
+                creationflags=subprocess.CREATE_NEW_CONSOLE
             )
             self._log("正在启动 OpenList...")
         except Exception as e:
@@ -1909,13 +1905,10 @@ class OpenListWidget(QWidget):
     def stopOpenList(self):
         """停止OpenList"""
         try:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
             cmd_name = os.path.basename(self.plugin.openlist_path)
             subprocess.Popen(
                 ["taskkill", "/f", "/im", cmd_name],
-                startupinfo=startupinfo
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             self._log("正在停止 OpenList...")
         except Exception as e:

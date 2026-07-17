@@ -29,7 +29,7 @@ def main():
 
     sys.excepthook = exceptionHook
 
-    if len(sys.argv) >= 2 and sys.argv[1] == "--exec":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--exec":
         sys.exit(execPython())
 
     logger.info(f"V{VERSION} 版本程序启动")

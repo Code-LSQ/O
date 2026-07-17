@@ -324,14 +324,14 @@ def runPython(path: str, cwd, args, operation):
             cmd = [sys.executable, "--exec", path]
             if args:
                 cmd.append(args)
-            subprocess.Popen(cmd, shell=True, cwd=cwd or None)
+            subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
             return
         run_path = sys.executable
 
     cmd = [run_path, path]
     if args:
         cmd.append(args)
-    subprocess.Popen(cmd, shell=True, cwd=cwd or None)
+    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 def runJava(path: str, cwd, args, operation):
     if Path(path).suffix.lower() != ".jar":
@@ -344,12 +344,12 @@ def runJava(path: str, cwd, args, operation):
     cmd = [run_path, '-jar', path]
     if args:
         cmd.append(args)
-    subprocess.Popen(cmd, shell=True, cwd=cwd or None)
+    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 def openUrl(url, *args, **kwargs):
     webbrowser.open(url)
 
-# 类型映射，对于 .py，.jar，.ps1，设置 shell=True 是为了方便在关闭 cmd 窗口时结束脚本或程序，否则不好结束
+# 类型映射，对于 .py，.jar ，设置 CREATE_NEW_CONSOLE 是为了方便在关闭终端窗口时结束脚本或程序，否则不好结束
 TYPES = {
     "文件": openFile,
     "Python": runPython,

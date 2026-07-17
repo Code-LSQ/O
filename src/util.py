@@ -70,24 +70,46 @@ elif arch in ("arm64", "aarch64"):
 
 def execPython():
     """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码"""
-    if len(sys.argv) < 3:
-        logger.error("缺少脚本路径")
-        return 1
     script_path = sys.argv[2]
     extra_args = sys.argv[3:]
+    logger.info(f"以 --exec 模式执行脚本: {script_path}")
+    logger.info(f"额外参数: {extra_args}")
+
+    if sys.stdin is None and sys.platform == "win32":
+        try:
+            sys.stdin = open("CONIN$", "r")
+            sys.stdout = open("CONOUT$", "w")
+            sys.stderr = open("CONOUT$", "w")
+        except OSError:
+            windll.kernel32.AllocConsole()
+            sys.stdin = open("CONIN$", "r")
+            sys.stdout = open("CONOUT$", "w")
+            sys.stderr = open("CONOUT$", "w")
+        for h in logger.handlers:
+            if isinstance(h, logging.StreamHandler) and h.stream is None:
+                h.stream = sys.stderr
     try:
         sys.argv = [script_path] + extra_args
+        sys.path.insert(0, os.path.dirname(os.path.abspath(script_path)))
         with open(script_path, "r", encoding="utf-8") as f:
             source = f.read()
         code = compile(source, script_path, "exec")
-        exec(code, {"__name__": "__main__", "__file__": script_path})
+        exec(code, {
+            "__name__": "__main__",
+            "__file__": script_path,
+            "__builtins__": __builtins__,
+        })
         return 0
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else 1
+        logger.info(f"脚本通过 sys.exit({code}) 退出: {script_path}")
         return code
     except Exception:
         logger.exception(f"执行脚本失败: {script_path}")
         return 1
+    finally:
+        if sys.stdin is not None:
+            os.system("pause")
 
 
 def compareVersions(v1: str, v2: str) -> int:

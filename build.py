@@ -3,6 +3,7 @@ import sys
 
 import PyInstaller.__main__
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.util import APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
