@@ -108,7 +108,6 @@ getAction()，控制插件返回的按钮
 如果有需要额外导入的 Python 库依赖，在 .py 文件中用 PluginLib 列表标明。
 
 
-
 配置保存
 
 插件配置存储在主配置文件 /data/config.json 的 Plugin.plugin_name 下：
@@ -125,7 +124,7 @@ save_plugin_config() 会重新构建 Plugin 字典：先取 enabled_plugins 中�
 Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _save_config() 中请勿直接对整个字典赋值，以免覆盖 enabled 字段。应该使用 update.() 或使用一个单独的子字段保存配置。
 
 
-#### 开发新插件
+开发新插件
 
 1. 在 plugin/ 下新建 .py 文件
 2. 定义类继承 PluginBase，设置 description 属性
@@ -171,10 +170,6 @@ mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
 测试具体行为，检测所有保存的符号链接路径，源路径是否存在，是符号链接还是文件、文件夹，目标路径是否存在，是符号链接还是文件、文件夹
 
 
-#### OpenCC
-
-此插件用于简体中文和繁体中文的互相转换。
-需要额外安装 OpenCC 库，如果删除此插件并移除构建脚本内的 '--hidden-import=opencc', 可以使程序大小减少 5M。如果你要这么做，建议自己重新构建一遍。
 
 #### OpenList
 
@@ -202,6 +197,7 @@ https://github.com/OpenListTeam/OpenList/releases
 
 0. 在不增加新依赖的情况下尽可能扩展功能
 1. 清理代码
+2. 优化我丑陋的 UI
 
 
 

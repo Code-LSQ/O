@@ -7,7 +7,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, UsageMonitor, showFile, ENCODING_MAP
+from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, showFile, ENCODING_MAP
 from src.system import setMenu, isMenuRegister
 from src.plugin import getPluginManager
 from src.file import ArchiveItemModel, FolderPanelManager, createBackup
@@ -15,14 +15,14 @@ from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
 from src.gui.view import ViewMode, readFileLimit
-from src.gui.control import WindowMouse, WindowControl, MenuControl
+from src.gui.control import WindowControl, MenuControl
 
 
-class EditorWindow(WindowMouse, QMainWindow):
+class EditorWindow(WindowControl, QMainWindow):
     """编辑器窗口"""
 
     def __init__(self, app: QApplication=None, file_path=None, main_window=None):
-        super().__init__()
+        super().__init__(fallback_size=(1000, 650))
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -44,9 +44,7 @@ class EditorWindow(WindowMouse, QMainWindow):
         """初始化核心属性"""
         self.find_replace_dialog = None
         self.auto_save_timer = None
-        self._fallback_size = (1000, 650)
         self._initialization_complete = False
-        self.window_control = WindowControl(self)
         self.action_minimize = QAction(self)
         self.action_minimize.triggered.connect(self.showMinimized)
         self.addAction(self.action_minimize)
@@ -75,10 +73,10 @@ class EditorWindow(WindowMouse, QMainWindow):
                 self._usage_monitor.resume(getattr(self, '_usage_timer_was_active', False))
         super().changeEvent(event)
     
-    def _onToolbarDoubleClick(self, event):
+    def onToolbarDblClick(self, event):
         """工具栏双击事件 - 最大化/还原窗口"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self._toggleMax()
+            self.toggleMax()
     
     def initUI(self):
         """初始化用户界面"""
@@ -91,18 +89,14 @@ class EditorWindow(WindowMouse, QMainWindow):
         
         self._menu_controller = MenuControl(self)
         self._toolbar = self._menu_controller.createToolbar()
-        self._toolbar.mouseDoubleClickEvent = self._onToolbarDoubleClick
+        self._toolbar.mouseDoubleClickEvent = self.onToolbarDblClick
         
         # CPU / 内存 显示标签
-        self.cpu_label = QLabel(self)
-        self.cpu_label.setObjectName("cpu_label")
+        self.createMonitor()
 
         self._menu_controller.buildMenuBar(self._toolbar)
         
         layout.addWidget(self._toolbar)
-        
-        self._usage_monitor = UsageMonitor(self, self.cpu_label, self.config)
-        self._usage_monitor.sync()
 
         # 水平布局用于放置文件夹面板和编辑器
         content_layout = QHBoxLayout()

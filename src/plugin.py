@@ -18,9 +18,6 @@ from abc import ABC
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
-
 from src.util import plugin_dir, logger, Singleton
 
 

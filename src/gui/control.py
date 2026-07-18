@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy
 from PySide6.QtGui import QKeySequence, QAction, QIcon, QMouseEvent
 from PySide6.QtCore import Qt, Signal, QPoint
 
-from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger
+from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger, UsageMonitor
 from src.plugin import getPluginManager
 from src.config import DEFAULT_CONFIG, getConfig
 from src.gui.view import ViewMode
@@ -15,13 +15,14 @@ def getMaxIcon(theme="Light"):
     maxed_icon = QIcon(str(icon_dir / f"maxed{suffix}.svg"))
     return max_icon, maxed_icon
 
-class WindowMouse:
-    """窗口拖拽和调整大小"""
+class WindowControl:
+    """窗口拖拽、调整大小和窗口按钮控制"""
 
     isDragging = Signal(bool)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fallback_size=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self._fallback_size = fallback_size
         self.setMouseTracking(True)
         self._resize_edge = None
         self._dragging = False
@@ -141,66 +142,66 @@ class WindowMouse:
             self._dragging = False
             self.isDragging.emit(False)
 
-    def _toggleMax(self):
+    def toggleMax(self):
         if self._is_maximized:
             self._is_maximized = False
             if self._pre_maximize_geometry:
                 self.setGeometry(self._pre_maximize_geometry)
-            elif hasattr(self, "_fallback_size"):
+            elif self._fallback_size is not None:
                 self.resize(*self._fallback_size)
-            self.window_control.updateMaxBtn(False)
+            self.updateMaxBtn(False)
         else:
             self._pre_maximize_geometry = self.geometry()
             self._is_maximized = True
             screen = self.screen()
             if screen:
                 self.setGeometry(screen.availableGeometry())
-            self.window_control.updateMaxBtn(True)
-
-class WindowControl:
-    def __init__(self, main_window):
-        self.main = main_window
-        self._current_theme = "Light"
+            self.updateMaxBtn(True)
 
     def createWindowButton(self, container):
-        theme = self.main.config.get("theme", "Light")
-        self._current_theme = theme
+        theme = getConfig().get("theme", "Light")
         max_icon, maxed_icon = getMaxIcon(theme)
         
-        self.main.min_btn = QPushButton("—")
-        self.main.min_btn.setObjectName("min_btn")
-        self.main.min_btn.setFixedSize(40, 32)
-        self.main.min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.main.min_btn.clicked.connect(self.main.showMinimized)
+        self.min_btn = QPushButton("—")
+        self.min_btn.setObjectName("min_btn")
+        self.min_btn.setFixedSize(40, 32)
+        self.min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.min_btn.clicked.connect(self.showMinimized)
 
-        self.main.max_btn = QPushButton()
-        self.main.max_btn.setObjectName("max_btn")
-        self.main.max_btn.setIcon(max_icon)
-        self.main.max_btn.setFixedSize(40, 32)
-        self.main.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.main.max_btn.clicked.connect(self.main._toggleMax)
+        self.max_btn = QPushButton()
+        self.max_btn.setObjectName("max_btn")
+        self.max_btn.setIcon(max_icon)
+        self.max_btn.setFixedSize(40, 32)
+        self.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.max_btn.clicked.connect(self.toggleMax)
 
-        self.main.close_btn = QPushButton("×")
-        self.main.close_btn.setObjectName("close_btn")
-        self.main.close_btn.setFixedSize(40, 32)
-        self.main.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.main.close_btn.clicked.connect(self.main.close)
+        self.close_btn = QPushButton("×")
+        self.close_btn.setObjectName("close_btn")
+        self.close_btn.setFixedSize(40, 32)
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.clicked.connect(self.close)
 
-        container.addWidget(self.main.min_btn)
-        container.addWidget(self.main.max_btn)
-        container.addWidget(self.main.close_btn)
+        container.addWidget(self.min_btn)
+        container.addWidget(self.max_btn)
+        container.addWidget(self.close_btn)
 
     def updateMaxBtn(self, is_maximized: bool):
-        if hasattr(self.main, 'max_btn'):
-            max_icon, maxed_icon = getMaxIcon(self._current_theme)
-            self.main.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
+        if hasattr(self, 'max_btn'):
+            theme = getConfig().get("theme", "Light")
+            max_icon, maxed_icon = getMaxIcon(theme)
+            self.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
+
+    def createMonitor(self):
+        self.cpu_label = QLabel(self)
+        self.cpu_label.setObjectName("cpu_label")
+        self._usage_monitor = UsageMonitor(self, self.cpu_label, getConfig())
+        self._usage_monitor.sync()
 
     def updateIcons(self, theme: str):
-        self._current_theme = theme
         max_icon, maxed_icon = getMaxIcon(theme)
-        if hasattr(self.main, 'max_btn'):
-            is_maximized = self.main.isMaximized()
-            self.main.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
+        if hasattr(self, 'max_btn'):
+            is_maximized = self.isMaximized()
+            self.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
 
 
 class MenuControl:
@@ -237,11 +238,11 @@ class MenuControl:
         toolbar.setFloatable(False)
         toolbar.setFixedHeight(32)
         toolbar.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        toolbar.mouseDoubleClickEvent = self.main._onToolbarDoubleClick
+        toolbar.mouseDoubleClickEvent = self.main.onToolbarDblClick
         return toolbar
 
     def createWindowButton(self, toolbar: QToolBar):
-        self.main.window_control.createWindowButton(toolbar)
+        self.main.createWindowButton(toolbar)
 
     def buildViewMenu(self) -> QToolButton:
         btn, menu = self.createMenuButton(tr("模式") + "(&V)")

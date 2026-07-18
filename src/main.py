@@ -13,13 +13,13 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.util import AUTHOR, APP_NAME, logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, config_file, UsageMonitor, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copyWait
 from src.core.timer import TimerManager
-from src.gui.control import WindowMouse, WindowControl, managePlugins
+from src.gui.control import WindowControl, managePlugins
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
@@ -702,11 +702,11 @@ def getIcon(tool, icon_size=32):
     return icon
 
 
-class MainWindow(WindowMouse, QMainWindow):
+class MainWindow(WindowControl, QMainWindow):
     """启动器主窗口"""
     
     def __init__(self, app: QApplication=None, file_path=None):
-        super().__init__()
+        super().__init__(fallback_size=(600, 400))
 
         self.app = app
         self.editor = None
@@ -719,8 +719,6 @@ class MainWindow(WindowMouse, QMainWindow):
         Translator().setLanguage(self.config.get("language", "简体中文"))
         self._current_group = getConfig().get("Launch.active_group", "")
         self._current_group = _ensureGroup(self._tools, getConfig(), self._current_group)
-        self._fallback_size = (600, 400)
-        self.window_control = WindowControl(self)
         self._plugin_shortcuts = []
         self._service_processes = []
         self.setAcceptDrops(True)
@@ -831,8 +829,8 @@ class MainWindow(WindowMouse, QMainWindow):
             current = window.styleSheet()
             if style != current:
                 window.setStyleSheet(style)
-                if hasattr(window, 'window_control'):
-                    window.window_control.updateIcons(theme)
+                if isinstance(window, WindowControl):
+                    window.updateIcons(theme)
         except Exception:
             logger.exception("应用主题失败")
 
@@ -975,11 +973,8 @@ class MainWindow(WindowMouse, QMainWindow):
         title_layout.setSpacing(0)
         title_layout.addStretch(1)
 
-        self.cpu_label = QLabel(self)
-        self.cpu_label.setObjectName("cpu_label")
+        self.createMonitor()
         title_layout.addWidget(self.cpu_label)
-        self._usage_monitor = UsageMonitor(title_bar, self.cpu_label, self.config)
-        self._usage_monitor.sync()
 
         self.settings_btn = QPushButton(tr("设置"))
         self.settings_btn.setObjectName("settings_btn")
@@ -987,7 +982,7 @@ class MainWindow(WindowMouse, QMainWindow):
         self.settings_btn.clicked.connect(self._configDialog)
         title_layout.addWidget(self.settings_btn)
         
-        self.window_control.createWindowButton(title_layout)
+        self.createWindowButton(title_layout)
         
         parent_layout.addWidget(title_bar)
 
@@ -997,12 +992,12 @@ class MainWindow(WindowMouse, QMainWindow):
         parent_layout.addWidget(self.separate)
         
         # 标题栏双击最大化
-        title_bar.mouseDoubleClickEvent = self._titleDblClick
+        title_bar.mouseDoubleClickEvent = self.titleDblClick
 
-    def _titleDblClick(self, event):
+    def titleDblClick(self, event):
         """标题栏双击"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self._toggleMax()
+            self.toggleMax()
 
     def _createGroupBar(self, parent_layout):
         """创建分组按钮栏"""

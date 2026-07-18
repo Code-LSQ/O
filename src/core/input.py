@@ -167,8 +167,6 @@ class GlobalHotkeyListener(Singleton):
         def onRelease(key):
             nonlocal ctrl_was_held
             try:
-                if self._is_pasting:
-                    return
                 key_name = self._getKeyName(key)
                 if not key_name:
                     return
@@ -178,6 +176,9 @@ class GlobalHotkeyListener(Singleton):
                     self._hotkey_triggered = False
                     if key_name in self._modifier_press_order:
                         self._modifier_press_order.remove(key_name)
+                
+                if self._is_pasting:
+                    return
                 
                 if double_ctrl_enabled and key_name in ('ctrl_l', 'ctrl_r', 'ctrl'):
                     ctrl_was_held = False
@@ -424,8 +425,9 @@ def eventToKey(event):
         parts.append("Meta")
     
     key_name = codeToKey(key)
-    if key_name:
-        parts.append(key_name)
+    if not key_name:
+        return None
+    parts.append(key_name)
     
     return "+".join(parts) if parts else None
 
@@ -533,6 +535,9 @@ class KeyCaptureFilter(QObject):
         return super().eventFilter(obj, event)
 
     def _buildSeq(self, keys):
+        other_keys = keys - {'ctrl', 'shift', 'alt', 'meta'}
+        if not other_keys:
+            return None
         parts = []
         if 'ctrl' in keys:
             parts.append("Ctrl")
