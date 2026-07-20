@@ -1706,11 +1706,16 @@ class AIExtendPlugin(PluginBase):
             self._standalone_window.deleteLater()
             self._standalone_window = None
         if self.dock:
-            if self.stream_thread and self.stream_thread.isRunning():
-                self.stream_thread.requestInterruption()
-                self.stream_thread.wait(2000)
-            self.main.editor.removeDockWidget(self.dock)
-            self.dock.deleteLater()
+            try:
+                if self.stream_thread and self.stream_thread.isRunning():
+                    self.stream_thread.requestInterruption()
+                    self.stream_thread.wait(2000)
+                editor = self.main.editor
+                if editor:
+                    editor.removeDockWidget(self.dock)
+                self.dock.deleteLater()
+            except RuntimeError:
+                pass
             self.dock = None
             self._panel = None
 

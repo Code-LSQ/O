@@ -66,8 +66,13 @@ class AIBaseAdapter(ABC):
         self._override_api_url = api_url
     
     def _getProfileUrl(self, default_url: str) -> str:
-        profile = _getProfile(self.config)
-        return profile.get("api_url", "") or default_url
+        """获取当前配置的 API URL，统一清洗后返回，优先使用构造时传入的覆盖值"""
+        if self._override_api_url:
+            url = str(self._override_api_url)
+        else:
+            profile = _getProfile(self.config)
+            url = profile.get("api_url", "") or default_url
+        return url.strip().rstrip('/')
     
     @abstractmethod
     def getApiUrl(self, model: str = "") -> str:
@@ -269,10 +274,8 @@ class OpenAIAdapter(AIBaseAdapter):
     大多数 AI API 采用此格式，是所有兼容适配器的基类"""
     
     def getApiUrl(self, model: str = "") -> str:
-        if self._override_api_url:
-            return f"{str(self._override_api_url).strip().rstrip('/')}/chat/completions"
         url = self._getProfileUrl("https://api.deepseek.com")
-        return f"{str(url).strip().rstrip('/')}/chat/completions"
+        return f"{url}/chat/completions"
 
     def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
@@ -303,7 +306,7 @@ class OpenAIAdapter(AIBaseAdapter):
     
     def getModelListUrl(self) -> str:
         url = self._getProfileUrl("https://api.deepseek.com")
-        return f"{str(url).strip().rstrip('/')}/models"
+        return f"{url}/models"
     
     def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
@@ -323,7 +326,7 @@ class OllamaAdapter(AIBaseAdapter):
     
     def getApiUrl(self, model: str = "") -> str:
         url = self._getProfileUrl("http://127.0.0.1:11434")
-        return f"{str(url).strip().rstrip('/')}/api/chat"
+        return f"{url}/api/chat"
     
     def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
@@ -397,7 +400,7 @@ class OllamaAdapter(AIBaseAdapter):
     
     def getModelListUrl(self) -> str:
         url = self._getProfileUrl("http://127.0.0.1:11434")
-        return f"{str(url).strip().rstrip('/')}/api/tags"
+        return f"{url}/api/tags"
     
     def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
@@ -417,7 +420,7 @@ class ClaudeAdapter(AIBaseAdapter):
     
     def getApiUrl(self, model: str = "") -> str:
         url = self._getProfileUrl("https://api.anthropic.com")
-        return f"{str(url).strip().rstrip('/')}/v1/messages"
+        return f"{url}/v1/messages"
     
     def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
@@ -496,7 +499,7 @@ class ClaudeAdapter(AIBaseAdapter):
     
     def getModelListUrl(self) -> str:
         url = self._getProfileUrl("https://api.anthropic.com")
-        return f"{str(url).strip().rstrip('/')}/v1/models"
+        return f"{url}/v1/models"
     
     def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
@@ -518,7 +521,7 @@ class GeminiAdapter(AIBaseAdapter):
         if not model:
             model = profile.get("model", "") or ""
         api_key = self._getApiKey()
-        return f"{str(url).strip().rstrip('/')}/v1beta/models/{model}:generateContent?key={api_key}"
+        return f"{url}/v1beta/models/{model}:generateContent?key={api_key}"
     
     def getHeaders(self, api_key: str) -> Dict[str, str]:
         return {
@@ -584,7 +587,7 @@ class GeminiAdapter(AIBaseAdapter):
     def getModelListUrl(self) -> str:
         url = self._getProfileUrl("https://generativelanguage.googleapis.com")
         api_key = self._getApiKey()
-        return f"{str(url).strip().rstrip('/')}/v1beta/models?key={api_key}"
+        return f"{url}/v1beta/models?key={api_key}"
     
     def parseModelsResponse(self, response: requests.Response) -> List[str]:
         result = response.json()
@@ -605,6 +608,8 @@ AI_ADAPTER = [
     ("DeepSeek", OpenAIAdapter, "https://api.deepseek.com"),
     ("Gemini", GeminiAdapter, "https://generativelanguage.googleapis.com"),
     ("Ollama", OllamaAdapter, "http://127.0.0.1:11434"),
+    ("OpenCode Go", OpenAIAdapter, "https://opencode.ai/zen/go/v1"),
+    ("OpenCode Zen", OpenAIAdapter, "https://opencode.ai/zen/v1"),
     ("OpenAI", OpenAIAdapter, "https://api.openai.com"),
     ("OpenRouter", OpenAIAdapter, "https://openrouter.ai/api/v1"),
     ("New API", OpenAIAdapter, "https://newapi.pro/v1"),

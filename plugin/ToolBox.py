@@ -14,11 +14,9 @@ from src.plugin import PluginBase
 from src.main import getIcon
 from src.file import FileSelect
 from src.config import getConfig
-from src.util import logger, root, data_dir, tr, BINARY_EXTENSIONS, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget
+from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles
 from src.core.timer import TimerManager
 
-
-_MAX_SEARCH_FILE_SIZE = 10 * 1024 * 1024
 
 cache_file = data_dir / "MD5.json"
 copy_file = data_dir / "copy.txt"
@@ -58,8 +56,8 @@ class ToolBox(PluginBase):
         self._scroll_timer = _AutoScrollTimer(self.main)
         self._copy_mgr = _AutoCopyManager()
         self._copy_mgr.initMonitor(self.main)
-        self._search_mgr = _AutoSearchManager(self.main.editor)
-        self._search_mgr.initMonitor(self.main.editor)
+        self._search_mgr = _AutoSearchManager(self.main)
+        self._search_mgr.initMonitor(self.main)
         self._click_mgr = _AutoClickManager(self.main)
 
     def cleanup(self):
@@ -377,81 +375,6 @@ class SearchDialog(QDialog):
             super().keyPressEvent(event)
 
 
-class FileSearcher:
-    def __init__(self, search_text: str, case_sensitive: bool = False, regex: bool = False):
-        self.search_text = search_text
-        self.case_sensitive = case_sensitive
-        self.regex = regex
-
-    def searchFiles(self, paths: List[str], abort_check=None) -> List[dict]:
-        results = []
-        for path in paths:
-            if abort_check and abort_check():
-                break
-            if not os.path.exists(path):
-                continue
-            if os.path.isfile(path):
-                results.extend(self._searchFile(path))
-            elif os.path.isdir(path):
-                results.extend(self._searchDirectory(path, abort_check))
-        return results
-
-    def _searchFile(self, file_path: str) -> List[dict]:
-        results = []
-        abs_path = os.path.abspath(file_path)
-        try:
-            if os.path.getsize(file_path) > _MAX_SEARCH_FILE_SIZE:
-                return []
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                for line_num, line in enumerate(f, 1):
-                    matches = self._findMatches(line)
-                    if matches:
-                        results.append({
-                            "file": abs_path,
-                            "line": line_num,
-                            "content": line.strip(),
-                            "matches": matches
-                        })
-        except Exception:
-            logger.exception(f"搜索文件失败 {file_path}")
-        return results
-
-    def _searchDirectory(self, dir_path: str, abort_check=None) -> List[dict]:
-        results = []
-        for root_dir, dirs, files in os.walk(dir_path):
-            if abort_check and abort_check():
-                break
-            for file in files:
-                if self._isTextFile(file):
-                    file_path = os.path.join(root_dir, file)
-                    results.extend(self._searchFile(file_path))
-        return results
-
-    @staticmethod
-    def _isTextFile(filename: str) -> bool:
-        ext = os.path.splitext(filename)[1].lower()
-        return ext not in BINARY_EXTENSIONS or filename in {'Makefile', 'Dockerfile', 'Vagrantfile'}
-
-    def _findMatches(self, line: str) -> List[str]:
-        matches = []
-        search_text = self.search_text
-        if self.regex:
-            try:
-                flags = 0 if self.case_sensitive else re.IGNORECASE
-                for match in re.finditer(search_text, line, flags):
-                    matches.append(match.group())
-            except re.error:
-                pass
-        else:
-            if self.case_sensitive:
-                if search_text in line:
-                    matches.append(search_text)
-            else:
-                if search_text.lower() in line.lower():
-                    matches.append(search_text)
-        return matches
-
-
 class SearchWorkerThread(QThread):
     finished = Signal(list)
     error = Signal(str)
@@ -459,13 +382,17 @@ class SearchWorkerThread(QThread):
     def __init__(self, search_text: str, search_paths: List[str],
                  case_sensitive: bool, regex: bool):
         super().__init__()
-        self._searcher = FileSearcher(search_text, case_sensitive, regex)
+        self.search_text = search_text
         self.search_paths = search_paths
+        self.case_sensitive = case_sensitive
+        self.regex = regex
 
     def run(self):
         try:
-            results = self._searcher.searchFiles(
-                self.search_paths, abort_check=self.isInterruptionRequested
+            results = searchFiles(
+                self.search_text, self.search_paths,
+                case_sensitive=self.case_sensitive, regex=self.regex,
+                abort_check=self.isInterruptionRequested
             )
             if not self.isInterruptionRequested():
                 self.finished.emit(results)
@@ -1307,8 +1234,8 @@ class _AutoCopyManager:
 
 
 class _AutoSearchManager:
-    def __init__(self, parent=None):
-        self.parent = parent
+    def __init__(self, main=None):
+        self.main = main
         self.enabled = False
         self.search_paths: List[str] = []
         self.case_sensitive = False
@@ -1328,10 +1255,8 @@ class _AutoSearchManager:
         self.enabled = enabled
         if enabled and self.search_paths:
             self._monitor.start()
-            logger.info("自动搜索已启动")
         else:
             self._monitor.stop()
-            logger.info("自动搜索已停止")
 
     def _onClipboardChange(self, text: str):
         if self.enabled and text and self.search_paths:
@@ -1358,8 +1283,7 @@ class _AutoSearchManager:
         if self._popup:
             self._popup.close()
             self._popup = None
-        mw = self.parent
-        self._popup = QDialog(mw)
+        self._popup = QDialog(self.main)
         self._popup.setWindowTitle(tr("自动搜索结果"))
         self._popup.setFixedSize(500, 300)
         layout = QVBoxLayout()
@@ -1406,13 +1330,18 @@ class _AutoSearchManager:
 
     def _openFile(self, file_path: str, line: int):
         if not Path(file_path).exists():
+            logger.info(f"自动搜索打开文件失败: 文件不存在 {file_path}")
             messageBox(self._popup, tr("错误"), tr("文件不存在") + " " + file_path, 1)
             return
-        mw = self.parent
-        open_method = getattr(mw, 'openFilePath', None)
+        editor = self.main.editor if self.main.editor else self.main._openEditor()
+        open_method = getattr(editor, 'openFilePath', None)
         if open_method:
             open_method(file_path)
-            QTimer.singleShot(100, lambda: self._gotoLine(mw, line))
+            editor.activateWindow()
+            editor.raise_()
+            QTimer.singleShot(100, lambda: self._gotoLine(editor, line))
+        else:
+            logger.info(f"自动搜索打开文件失败: 编辑器无 openFilePath, editor={editor}")
 
     def _gotoLine(self, mw, line: int):
         get_ed = getattr(mw, 'getEditor', None)

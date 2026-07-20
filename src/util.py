@@ -997,8 +997,7 @@ class ClipboardMonitor(Singleton):
     def stop(self):
         self.enabled = False
         try:
-            if self._clipboard.receivers(self._clipboard.dataChanged) > 0:
-                self._clipboard.dataChanged.disconnect(self._onClipboardChanged)
+            self._clipboard.dataChanged.disconnect(self._onClipboardChanged)
         except (TypeError, RuntimeError):
             logger.exception("剪贴板信号断开失败")
 
@@ -1343,6 +1342,81 @@ def fileTree(directory: Path, prefix: str = "") -> list:
             lines.extend(fileTree(item, sub_prefix))
 
     return lines
+
+
+_MAX_SEARCH_FILE_SIZE = 10 * 1024 * 1024
+
+
+def searchFiles(search_text, paths, case_sensitive=False, regex=False, abort_check=None):
+    """在路径列表中搜索文件内容"""
+    results = []
+    for path in paths:
+        if abort_check and abort_check():
+            break
+        if not os.path.exists(path):
+            continue
+        if os.path.isfile(path):
+            results.extend(_searchFile(path, search_text, case_sensitive, regex))
+        elif os.path.isdir(path):
+            results.extend(_searchDirectory(path, search_text, case_sensitive, regex, abort_check))
+    return results
+
+
+def _searchFile(file_path, search_text, case_sensitive, regex):
+    results = []
+    abs_path = os.path.abspath(file_path)
+    try:
+        if os.path.getsize(file_path) > _MAX_SEARCH_FILE_SIZE:
+            return []
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line_num, line in enumerate(f, 1):
+                matches = _findMatches(line, search_text, case_sensitive, regex)
+                if matches:
+                    results.append({
+                        "file": abs_path,
+                        "line": line_num,
+                        "content": line.strip(),
+                        "matches": matches,
+                    })
+    except Exception:
+        logger.exception(f"搜索文件失败 {file_path}")
+    return results
+
+
+def _searchDirectory(dir_path, search_text, case_sensitive, regex, abort_check=None):
+    results = []
+    for root_dir, dirs, files in os.walk(dir_path):
+        if abort_check and abort_check():
+            break
+        for file in files:
+            if _isTextFile(file):
+                file_path = os.path.join(root_dir, file)
+                results.extend(_searchFile(file_path, search_text, case_sensitive, regex))
+    return results
+
+
+def _isTextFile(filename):
+    ext = os.path.splitext(filename)[1].lower()
+    return ext not in BINARY_EXTENSIONS or filename in {"Makefile", "Dockerfile", "Vagrantfile"}
+
+
+def _findMatches(line, search_text, case_sensitive, regex):
+    matches = []
+    if regex:
+        try:
+            flags = 0 if case_sensitive else re.IGNORECASE
+            for match in re.finditer(search_text, line, flags):
+                matches.append(match.group())
+        except re.error:
+            pass
+    else:
+        if case_sensitive:
+            if search_text in line:
+                matches.append(search_text)
+        else:
+            if search_text.lower() in line.lower():
+                matches.append(search_text)
+    return matches
 
 
 # Windows 11 右键一级菜单
