@@ -232,6 +232,8 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(tr("设置"))
         self.setMinimumSize(500, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self._shortcuts_capturing = False
+        self._capturing_row = -1
         self.initUI()
 
     def initUI(self):
@@ -249,7 +251,6 @@ class SettingsDialog(QDialog):
         tabs = [
             (self.initOptions(), tr("选项")),
             (self.initEdit(), tr("编辑")),
-            (self.initShortcuts(), tr("快捷键")),
         ]
         for widget, name in tabs:
             scroll = QScrollArea()
@@ -262,6 +263,26 @@ class SettingsDialog(QDialog):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.tab_list.addItem(item)
         self.tab_list.currentRowChanged.connect(self.stack.setCurrentIndex)
+
+        self._plugin_tabs = []
+        from src.plugin import getPluginManager
+        pm = getPluginManager()
+        for plugin in pm.plugins.values():
+            try:
+                w = plugin.configWidget(self.stack)
+                if w is not None:
+                    scroll = QScrollArea()
+                    scroll.setWidget(w)
+                    scroll.setWidgetResizable(True)
+                    scroll.setFrameShape(QFrame.Shape.NoFrame)
+                    self.stack.addWidget(scroll)
+                    item = QListWidgetItem(plugin.description or plugin.name)
+                    item.setSizeHint(QSize(0, 36))
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.tab_list.addItem(item)
+                    self._plugin_tabs.append(plugin)
+            except Exception:
+                logger.exception(f"插件 {plugin.name} 设置页加载失败")
 
         # 按钮
         button_layout = QHBoxLayout()
@@ -534,6 +555,45 @@ class SettingsDialog(QDialog):
         # 搜索引擎管理
         self._initEngines(layout)
 
+        # 快捷键
+        self.shortcuts_table = QTableWidget()
+        self.shortcuts_table.setColumnCount(2)
+        self.shortcuts_table.setHorizontalHeaderLabels([tr("操作"), tr("快捷键")])
+        self.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.shortcuts_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.shortcuts_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectItems)
+        self.shortcuts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.shortcuts_table.horizontalHeader().setHighlightSections(False)
+        self.shortcuts_table.setStyleSheet("""
+            QTableWidget { outline: none; border: none; }
+            QTableWidget::item:selected { background: #dddddd; color: inherit; border: none; outline: none; }
+        """)
+
+        default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
+        saved_shortcuts = self.config.get("Edit.shortcuts", {})
+
+        self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
+        for i, key in enumerate(self.SHORTCUT_MAP):
+            display_key = self.SHORTCUT_MAP[key]
+            display_name = tr(display_key)
+            action_item = QTableWidgetItem(display_name)
+            action_item.setFlags(action_item.flags() & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable))
+            self.shortcuts_table.setItem(i, 0, action_item)
+
+            keyseq = saved_shortcuts.get(key, default_shortcuts.get(key, ""))
+            key_item = QTableWidgetItem(keyseq)
+            key_item.setData(Qt.ItemDataRole.UserRole, key)
+            self.shortcuts_table.setItem(i, 1, key_item)
+
+        layout.addRow(self.shortcuts_table)
+
+        self.shortcuts_table.cellDoubleClicked.connect(self._onCellDblClick)
+        self.shortcuts_table.viewport().installEventFilter(self)
+
+        reset_btn = QPushButton(tr("重置为默认值"))
+        reset_btn.clicked.connect(self._setDefaults)
+        layout.addRow(reset_btn)
+
         return tab
 
     def _initEngines(self, layout):
@@ -617,53 +677,6 @@ class SettingsDialog(QDialog):
         if current_row >= 0:
             self.search_engines_list.takeItem(current_row)
 
-    def initShortcuts(self):
-        """快捷键设置"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        self.shortcuts_table = QTableWidget()
-        self.shortcuts_table.setColumnCount(2)
-        self.shortcuts_table.setHorizontalHeaderLabels([tr("操作"), tr("快捷键")])
-        self.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.shortcuts_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.shortcuts_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectItems)
-        self.shortcuts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.shortcuts_table.horizontalHeader().setHighlightSections(False)
-        self.shortcuts_table.setStyleSheet("""
-            QTableWidget { outline: none; border: none; }
-            QTableWidget::item:selected { background: #dddddd; color: inherit; border: none; outline: none; }
-        """)
-        
-        default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
-        saved_shortcuts = self.config.get("Edit.shortcuts", {})
-        
-        self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
-        for i, key in enumerate(self.SHORTCUT_MAP):
-            display_key = self.SHORTCUT_MAP[key]
-            display_name = tr(display_key)
-            action_item = QTableWidgetItem(display_name)
-            action_item.setFlags(action_item.flags() & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable))
-            self.shortcuts_table.setItem(i, 0, action_item)
-            
-            keyseq = saved_shortcuts.get(key, default_shortcuts.get(key, ""))
-            key_item = QTableWidgetItem(keyseq)
-            key_item.setData(Qt.ItemDataRole.UserRole, key)
-            self.shortcuts_table.setItem(i, 1, key_item)
-        
-        layout.addWidget(self.shortcuts_table)
-        
-        self.shortcuts_table.cellDoubleClicked.connect(self._onCellDblClick)
-        self.shortcuts_table.viewport().installEventFilter(self)
-        
-        reset_btn = QPushButton(tr("重置为默认值"))
-        reset_btn.clicked.connect(self._setDefaults)
-        layout.addWidget(reset_btn)
-        
-        self._shortcuts_capturing = False
-        self._capturing_row = -1
-        return tab
-    
     def _onCellDblClick(self, row, column):
         """双击快捷键列时开始捕获"""
         if column == 1:
@@ -853,6 +866,15 @@ class SettingsDialog(QDialog):
 
         for key, value in settings.items():
             self.config.set(key, value)
+
+        for plugin in self._plugin_tabs:
+            try:
+                # saveConfig 返回 False 表示校验失败，保持对话框不关闭
+                if plugin.saveConfig(save=False) is False:
+                    return
+            except Exception:
+                logger.exception(f"插件 {plugin.name} 设置保存失败")
+                return
 
         self.config.save()
         self.settings_changed.emit(settings)

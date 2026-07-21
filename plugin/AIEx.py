@@ -63,6 +63,7 @@ class AIExtendPlugin(PluginBase):
         self._ai_capturing = False
         self._pending_ai_prompt = None
         self._current_ai_dialog = None
+        self._ai_settings_widget = None
 
 
     def loadConfig(self):
@@ -93,7 +94,6 @@ class AIExtendPlugin(PluginBase):
     def getAction(self):
         menu = QMenu(self.description, self.main)
 
-        menu.addAction("AI 设置", self._showSettingsDialog)
         menu.addAction("OCR", self.showOcrDialog)
         menu.addAction("面板", self._togglePanel)
 
@@ -192,33 +192,10 @@ class AIExtendPlugin(PluginBase):
 
     # ── AI 设置 ──
 
-    def _showSettingsDialog(self):
-        """打开 AI 设置对话框"""
-        dlg = QDialog(self.main)
-        dlg.setAttribute(Qt.WA_DeleteOnClose)
-        dlg.setWindowTitle("AI " + tr("设置"))
-        dlg.setMinimumSize(500, 500)
-        layout = QVBoxLayout(dlg)
-
-        tab = self._buildSettingsTab(dlg)
-        layout.addWidget(tab, 1)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        ok_btn = QPushButton(tr("确定"))
-        ok_btn.clicked.connect(lambda: self._saveSettings(dlg))
-        btn_layout.addWidget(ok_btn)
-        cancel_btn = QPushButton(tr("取消"))
-        cancel_btn.clicked.connect(dlg.reject)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-
-        dlg.exec()
-
-    def _buildSettingsTab(self, parent):
+    def configWidget(self, parent=None):
         """构建 AI 设置界面"""
-        tab = QWidget(parent)
-        layout = QVBoxLayout(tab)
+        w = QWidget(parent)
+        layout = QVBoxLayout(w)
 
         # 暂存当前配置用于编辑
         self._edit_profiles = {k: dict(v) for k, v in self.settings.get("profiles", {"默认配置": {}}).items()}
@@ -359,7 +336,19 @@ class AIExtendPlugin(PluginBase):
         self._settingsLoadProfile()
         self._settingsReloadPromptList()
 
-        return tab
+        self._ai_settings_widget = w
+        w.destroyed.connect(lambda: setattr(self, '_ai_settings_widget', None))
+        return w
+
+    def saveConfig(self, save=True):
+        if getattr(self, '_ai_settings_widget', None) is not None:
+            self._settingsSaveProfile()
+            self.settings["active"] = self._edit_active
+            self.settings["profiles"] = self._edit_profiles
+            self.settings["stream"] = self._settings_stream_cb.isChecked()
+            self.settings["load_balance"] = self._edit_load_balance
+            self.settings["prompts"] = self._edit_prompts
+        super().saveConfig(save=save)
 
     def _onSettingsProfileChanged(self, index):
         profile_name = self._settings_profile_combo.currentText()
@@ -630,15 +619,6 @@ class AIExtendPlugin(PluginBase):
         layout2.addLayout(btn_layout)
         dlg2.exec()
 
-    def _saveSettings(self, dlg):
-        self._settingsSaveProfile()
-        self.settings["active"] = self._edit_active
-        self.settings["profiles"] = self._edit_profiles
-        self.settings["stream"] = self._settings_stream_cb.isChecked()
-        self.settings["load_balance"] = self._edit_load_balance
-        self.settings["prompts"] = self._edit_prompts
-        self.saveConfig()
-        dlg.accept()
 
     def _settingsReloadPromptList(self):
         """重新加载提示词列表"""

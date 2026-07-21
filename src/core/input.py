@@ -58,6 +58,7 @@ class GlobalHotkeyListener(Singleton):
     _pressed_keys = set()
     _vk_pressed = set()
     _hotkey_triggered = False
+    _tool_hotkeys_fired = set()
     _is_pasting = False
     _placeholders = {"Select": ""}
     _last_tool_hotkey_time = 0
@@ -88,6 +89,7 @@ class GlobalHotkeyListener(Singleton):
     def _init(self):
         self._lock = threading.Lock()
         self._last_tool_hotkey_time = 0
+        self._tool_hotkeys_fired = set()
     
     @staticmethod
     def _getKeyName(key):
@@ -119,6 +121,7 @@ class GlobalHotkeyListener(Singleton):
         self._main_window = main_window
         
         self._vk_pressed.clear()
+        self._tool_hotkeys_fired.clear()
         with self._lock:
             self._pressed_keys = set()
             self._hotkey_triggered = False
@@ -175,7 +178,7 @@ class GlobalHotkeyListener(Singleton):
                     self._pressed_keys.discard(key_name)
                     self._hotkey_triggered = False
                     if key_name in self._modifier_press_order:
-                        self._modifier_press_order.remove(key_name)
+                        self._modifier_press_order = [k for k in self._modifier_press_order if k != key_name]
                 
                 if self._is_pasting:
                     return
@@ -208,17 +211,29 @@ class GlobalHotkeyListener(Singleton):
                 for hotkey_str, tool in self._tool_hotkeys.items():
                     hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
                     if hotkey_keys and self._checkHotkey(pressed_names, hotkey_keys):
+                        if hotkey_str in self._tool_hotkeys_fired:
+                            self._keyboard_listener.suppress_event()
+                            return
                         current_time = time.time()
                         if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
                             self._keyboard_listener.suppress_event()
                             return
                         self._last_tool_hotkey_time = current_time
+                        self._tool_hotkeys_fired.add(hotkey_str)
                         self._pending_tool = tool
                         self._pending_hotkey = hotkey_str
                         QMetaObject.invokeMethod(main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
                         self._keyboard_listener.suppress_event()
             elif msg in (WM_KEYUP, WM_SYSKEYUP):
                 self._vk_pressed.discard(vk)
+                if self._tool_hotkeys_fired:
+                    pressed_up = set()
+                    for vk_code in self._vk_pressed:
+                        name = self._VK_TO_NAME.get(vk_code)
+                        pressed_up.add(name if name else str(vk_code))
+                    stale = {s for s in self._tool_hotkeys_fired
+                             if not self._checkHotkey(pressed_up, self._tool_hotkeys_cache.get(s, set()))}
+                    self._tool_hotkeys_fired -= stale
 
         try:
             self._keyboard_listener = keyboard.Listener(
@@ -271,6 +286,7 @@ class GlobalHotkeyListener(Singleton):
             self._mouse_listener = None
         
         self._vk_pressed.clear()
+        self._tool_hotkeys_fired.clear()
         with self._lock:
             self._pressed_keys = set()
             self._hotkey_triggered = False
@@ -378,11 +394,12 @@ class GlobalHotkeyListener(Singleton):
 
         for hotkey_str, tool in self._tool_hotkeys.items():
             hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
-            if hotkey_keys and self._checkHotkey(pressed_keys, hotkey_keys):
+            if hotkey_keys and hotkey_str not in self._tool_hotkeys_fired and self._checkHotkey(pressed_keys, hotkey_keys):
                 current_time = time.time()
                 if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
                     return
                 self._last_tool_hotkey_time = current_time
+                self._tool_hotkeys_fired.add(hotkey_str)
                 logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
                 self._pending_tool = tool
                 self._pending_hotkey = hotkey_str

@@ -1,11 +1,11 @@
 from ctypes import WinDLL, wintypes, byref, sizeof, Structure
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QDialog, QTextEdit, QMenu
+from PySide6.QtWidgets import QVBoxLayout, QLabel, QWidget, QTextEdit, QMenu
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import logger, messageBox, dialogBox
+from src.util import logger, messageBox
 
 CDS_UPDATEREGISTRY = 0x01
 CDS_TEST = 0x00000002
@@ -24,6 +24,7 @@ class ResolutionPlugin(PluginBase):
         super().__init__(main=main)
         self.resolutions = ["1280×720", "1920×1080", "1920×1200", "2560×1440", "2560×1600", "3200×2000"]
         self._original_devmode = None
+        self._res_edit = None
 
     def loadConfig(self):
         super().loadConfig()
@@ -35,18 +36,38 @@ class ResolutionPlugin(PluginBase):
         if not super().initialize():
             return
 
-    def _saveSettings(self):
-        self.settings["Resolution"] = self.resolutions
-        self.saveConfig()
+    def configWidget(self, parent=None):
+        w = QWidget(parent)
+        layout = QVBoxLayout(w)
+        layout.addWidget(QLabel("每行一个分辨率，格式如 1920×1080"))
+        self._res_edit = QTextEdit()
+        self._res_edit.setPlainText("\n".join(self.resolutions))
+        w.destroyed.connect(lambda: setattr(self, '_res_edit', None))
+        layout.addWidget(self._res_edit)
+        return w
+
+    def saveConfig(self, save=True):
+        if self._res_edit is not None:
+            lines = self._res_edit.toPlainText().strip().split("\n")
+            resolutions = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if parseResolution(line) is None:
+                    messageBox(self._res_edit, "格式错误", f"无效格式：{line}\n应为 1920×1080", 1)
+                    return False
+                resolutions.append(line)
+            if not resolutions:
+                messageBox(self._res_edit, "警告", "至少需要一条分辨率", 1)
+                return False
+            self.resolutions = resolutions
+            self.settings["Resolution"] = resolutions
+        # 校验失败返回 False，SettingsDialog.accept() 遇到 False 会放弃关闭，用户修正后重新提交。不要 raise，会打乱 accept 的流程。
+        return super().saveConfig(save=save)
 
     def getAction(self):
         menu = QMenu()
-
-        settings_action = QAction("设置", self.main)
-        settings_action.triggered.connect(self._showSettings)
-        menu.addAction(settings_action)
-        menu.addSeparator()
-
         for res_str in self.resolutions:
             parsed = parseResolution(res_str)
             if parsed is None:
@@ -57,14 +78,6 @@ class ResolutionPlugin(PluginBase):
             menu.addAction(action)
 
         return menu
-
-    def _showSettings(self):
-        self.initialize()
-        dialog = ResolutionSettingsDialog(self.main, self.resolutions)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.resolutions = dialog.resolutions
-            self._saveSettings()
-            logger.info(f"分辨率列表已更新: {self.resolutions}")
 
     def _switchResolution(self, w, h):
         self.initialize()
@@ -195,45 +208,3 @@ def parseResolution(text: str) -> Optional[Tuple[int, int]]:
     except (ValueError, IndexError):
         logger.exception("分辨率字符串解析失败")
     return None
-
-
-class ResolutionSettingsDialog(QDialog):
-    def __init__(self, parent, resolutions: List[str]):
-        super().__init__(parent)
-        self.setWindowTitle("分辨率设置")
-        self.setMinimumSize(350, 300)
-        self.resolutions = resolutions[:]
-        self._initUI()
-
-    def _initUI(self):
-        layout = QVBoxLayout(self)
-
-        label = QLabel("每行一个分辨率，格式如 1920×1080")
-        layout.addWidget(label)
-
-        self.edit = QTextEdit()
-        layout.addWidget(self.edit)
-
-        dialogBox(layout, self, show=False)
-
-        self._loadData()
-
-    def _loadData(self):
-        self.edit.setPlainText("\n".join(self.resolutions))
-
-    def accept(self):
-        lines = self.edit.toPlainText().strip().split("\n")
-        resolutions = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            if parseResolution(line) is None:
-                messageBox(self, "格式错误", f"无效格式：{line}\n应为 1920×1080", 1)
-                return
-            resolutions.append(line)
-        if not resolutions:
-            messageBox(self, "警告", "至少需要一条分辨率", 1)
-            return
-        self.resolutions = resolutions
-        super().accept()

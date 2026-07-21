@@ -219,7 +219,7 @@ class OpenListPlugin(PluginBase):
         self.selected_task_name = self.settings.get("selected_task", "")
         self.tasks = [TaskConfig.fromDict(t) for t in self.settings.get("tasks", [])]
 
-    def saveConfig(self) -> dict:
+    def saveConfig(self, save=True) -> dict:
         self.settings.update({
             "path": self.openlist_path,
             "port": self.port,
@@ -228,7 +228,7 @@ class OpenListPlugin(PluginBase):
             "selected_task": self.selected_task_name,
             "tasks": [t.toDict() for t in self.tasks]
         })
-        return super().saveConfig()
+        return super().saveConfig(save=save)
 
     def initialize(self):
         if not super().initialize():

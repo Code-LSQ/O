@@ -102,7 +102,8 @@ class PluginBase(ABC):
             if saved:
                 self.settings.update(saved)
     
-    def saveConfig(self) -> dict:
+    def saveConfig(self, save=True) -> dict:
+        """save=False 时只更新内存不写盘"""
         if self.main and hasattr(self.main, 'config'):
             plugin_config = self.main.config.get("Plugin", {})
             existing = plugin_config.get(self.name, {})
@@ -110,8 +111,14 @@ class PluginBase(ABC):
             existing.update(self.settings)
             existing["enabled"] = enabled
             plugin_config[self.name] = existing
-            self.main.config.save()
+            if save:
+                self.main.config.save()
         return self.settings
+
+    def configWidget(self, parent=None):
+        """返回插件设置页 QWidget，嵌入到设置对话框标签页中。
+        返回 None 表示无设置。不调 initialize()，只用 loadConfig() 后已就绪的数据。"""
+        return None
     
     def getSelect(self, callback):
         """异步获取当前选中文本，完成后回调 callback(text)"""

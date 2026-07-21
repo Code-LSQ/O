@@ -46,10 +46,10 @@ if sys.platform == "win32":
             )
             if enabled:
                 if Interpret:
-                    app_path = f'"{sys.executable}" "{app_path}"'
+                    reg_cmd = f'"{sys.executable}" "{app_path}"'
                 else:
-                    app_path = f'"{app_path}"'
-                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, app_path)
+                    reg_cmd = f'"{app_path}"'
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, reg_cmd)
                 logger.info("开机自启已启用")
             else:
                 try:
@@ -316,6 +316,7 @@ if sys.platform == "win32":
 elif sys.platform == "linux":
 
     SYSTEM_ACT = {
+        "命令提示符": "Terminal",
         "回收站": "trash://",
     }
 
@@ -357,6 +358,7 @@ elif sys.platform == "linux":
                     return False
             return True
         
+    @lru_cache(maxsize=256)
     def getFileIcon(file_path: str, size: int = 128) -> QIcon:
         if file_path == "Terminal":
             for p in ["/usr/bin/gnome-terminal", "/usr/bin/xterm", "/usr/bin/konsole"]:
@@ -399,15 +401,19 @@ elif sys.platform == "linux":
             return True
         except Exception:
             logger.exception(f"{path} 移动到回收站失败")
-            return False
+        return False
 
-        def setMenu(enabled: bool) -> bool:
-            return True
+    def setMenu(enabled: bool) -> bool:
+        return True
+
+    def isMenuRegister() -> bool:
+        return True
 
 
 elif sys.platform == "darwin":
 
     SYSTEM_ACT = {
+        "命令提示符": "Terminal",
         "回收站": os.path.expanduser("~/.Trash"),
     }
 
@@ -448,6 +454,7 @@ elif sys.platform == "darwin":
                     return False
             return True
 
+    @lru_cache(maxsize=256)
     def getFileIcon(file_path: str, size: int = 128) -> QIcon:
         if file_path == "Terminal":
             for p in ["/System/Applications/Utilities/Terminal.app", "/Applications/iTerm.app"]:
@@ -475,4 +482,7 @@ elif sys.platform == "darwin":
         return False
 
     def setMenu(enabled: bool) -> bool:
+        return True
+
+    def isMenuRegister() -> bool:
         return True

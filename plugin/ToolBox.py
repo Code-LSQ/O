@@ -49,6 +49,7 @@ class ToolBox(PluginBase):
         self._click_mgr = None
         self._dup_finder = None
         self._dup_finder_gen = 0
+        self._tb_widget = None
 
     def initialize(self):
         if not super().initialize():
@@ -72,8 +73,6 @@ class ToolBox(PluginBase):
 
     def getAction(self):
         menu = QMenu(self.description, self.main)
-
-        menu.addAction("工具箱设置", self._showSettings)
 
         menu.addAction(tr("搜索"), self._openSearch)
         menu.addAction("快速文本", self._quickText)
@@ -237,17 +236,20 @@ class ToolBox(PluginBase):
         dialog = SearchDialog(config.get("Launch.tools", {}), self.main)
         dialog.exec()
 
-    def _showSettings(self):
-        self.initialize()
-        dialog = ToolBoxSettings(self.settings, self.main)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+    def configWidget(self, parent=None):
+        self._tb_widget = ToolBoxSettings(self.settings, parent)
+        self._tb_widget.destroyed.connect(lambda: setattr(self, '_tb_widget', None))
+        return self._tb_widget
+
+    def saveConfig(self, save=True):
+        if self._tb_widget is not None:
             old_speed = self.settings.get("scroll.speed", 50)
-            self.settings.update(dialog.getSetting())
+            self.settings.update(self._tb_widget.getSetting())
             new_speed = self.settings.get("scroll.speed", 50)
-            if self._scroll_timer.enabled and old_speed != new_speed:
+            if self._scroll_timer and self._scroll_timer.enabled and old_speed != new_speed:
                 self._scroll_timer.stop()
                 self._scroll_timer.start(new_speed)
-            self.saveConfig()
+        super().saveConfig(save=save)
 
     def _ensureEditor(self):
         if not self.main:
@@ -987,12 +989,10 @@ class DuplicatePanelManager:
     def isVisible(self) -> bool:
         return self.panel is not None
 
-class ToolBoxSettings(QDialog):
+class ToolBoxSettings(QWidget):
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
         self.settings = dict(settings)
-        self.setWindowTitle("工具箱设置")
-        self.setMinimumWidth(450)
         self.initUI()
 
     def initUI(self):
@@ -1084,16 +1084,6 @@ class ToolBoxSettings(QDialog):
             item = QListWidgetItem(entry.get("note", "") or entry.get("text", ""))
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._qt_list.addItem(item)
-
-        btn_row = QHBoxLayout()
-        ok_btn = QPushButton("确定")
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn = QPushButton("取消")
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addStretch()
-        btn_row.addWidget(ok_btn)
-        btn_row.addWidget(cancel_btn)
-        layout.addRow(btn_row)
 
     def _addSearchPath(self):
         path = getFilePath(self, "选择搜索路径", mode="dir")
