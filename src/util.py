@@ -1098,6 +1098,9 @@ def messageBox(parent, title, text, num: int = 2):
     差异仅为 StandardButton.Ok 的文本为确定，.Cancel 的文本为取消
     统一使用 Ok、Cancel ，不使用 Yes、No
     最好统一标题，信息、提示、完成、成功、警告、错误"""
+    # 之后需要修改 messageBox，对于一个按钮的可以使用，两个
+    # 考虑改成 dialog 吧，然后延申就是 inputDialog，dictDialog，要加个控制靠右的参数
+    # 此外其他还有一些封装也做了
 
     msg_box = QMessageBox(parent)
     msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
@@ -1129,6 +1132,13 @@ def messageBox(parent, title, text, num: int = 2):
         msg_box.button(QMessageBox.StandardButton.Cancel).setText(tr("取消"))
 
     return msg_box.exec()
+
+
+def dialog(parent, title, text, num: int = 2, center=True):
+    """封装 QDialog，不再使用 QMessageBox"""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    pass
 
 
 def activateWidget(cls):

@@ -128,10 +128,7 @@ class PluginBase(ABC):
     def onFileOpen(self, file_path: str):
         """文件打开时的回调"""
         pass
-    
-    def onFileSave(self, file_path: str):
-        """文件保存时的回调"""
-        pass
+
 
 class PluginManager(Singleton):
     """插件管理器 - 负责插件的扫描、加载、启用/禁用等
@@ -143,7 +140,6 @@ class PluginManager(Singleton):
         self.plugins: Dict[str, PluginBase] = {}
         self._scan_cache: Dict[str, tuple] = {}
         self.enabled_plugins: Dict[str, bool] = {}
-        self._file_handlers: List[tuple] = []
         self.extra_plugin_dir = None
         self.scanPlugins()
     
@@ -306,14 +302,7 @@ class PluginManager(Singleton):
         """检查插件是否已启用"""
         return self.enabled_plugins.get(plugin_name, False)
     
-    def registerFileHandler(self, can_handle: callable, open_file: callable):
-        """注册文件处理器。can_handle(file_path)->bool, open_file(file_path, main_window)"""
-        self._file_handlers.append((can_handle, open_file))
-    
-    @property
-    def fileHandlers(self) -> list:
-        return self._file_handlers
-    
+
     def initConfig(self, config):
         """从 config["Plugin"] 读取启用状态，扫描插件，加载已启用的插件"""
         plugin_config = config.get("Plugin", {})

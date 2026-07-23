@@ -4,11 +4,11 @@ import json
 import tempfile
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
-from PySide6.QtCore import Signal, Qt, QEvent, QSize
+from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
+from PySide6.QtCore import Signal, Qt, QSize
 
 from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
-from src.core.input import eventToKey, KeyCaptureFilter
+from src.core.input import KeyCaptureFilter
 from src.system import setAutoStart, setMenu
 
 DEFAULT_CONFIG = {
@@ -232,8 +232,6 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(tr("设置"))
         self.setMinimumSize(500, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self._shortcuts_capturing = False
-        self._capturing_row = -1
         self.initUI()
 
     def initUI(self):
@@ -556,39 +554,25 @@ class SettingsDialog(QDialog):
         self._initEngines(layout)
 
         # 快捷键
-        self.shortcuts_table = QTableWidget()
-        self.shortcuts_table.setColumnCount(2)
-        self.shortcuts_table.setHorizontalHeaderLabels([tr("操作"), tr("快捷键")])
-        self.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.shortcuts_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.shortcuts_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectItems)
-        self.shortcuts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.shortcuts_table.horizontalHeader().setHighlightSections(False)
-        self.shortcuts_table.setStyleSheet("""
-            QTableWidget { outline: none; border: none; }
-            QTableWidget::item:selected { background: #dddddd; color: inherit; border: none; outline: none; }
-        """)
+        header_label = QLabel("<b>" + tr("操作") + "</b>")
+        header_shortcut = QLabel("<b>" + tr("快捷键") + "</b>")
+        layout.addRow(header_label, header_shortcut)
 
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
         saved_shortcuts = self.config.get("Edit.shortcuts", {})
 
-        self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
-        for i, key in enumerate(self.SHORTCUT_MAP):
-            display_key = self.SHORTCUT_MAP[key]
-            display_name = tr(display_key)
-            action_item = QTableWidgetItem(display_name)
-            action_item.setFlags(action_item.flags() & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable))
-            self.shortcuts_table.setItem(i, 0, action_item)
-
+        self.shortcut_edits = {}
+        for key in self.SHORTCUT_MAP:
+            line_edit = QLineEdit()
             keyseq = saved_shortcuts.get(key, default_shortcuts.get(key, ""))
-            key_item = QTableWidgetItem(keyseq)
-            key_item.setData(Qt.ItemDataRole.UserRole, key)
-            self.shortcuts_table.setItem(i, 1, key_item)
-
-        layout.addRow(self.shortcuts_table)
-
-        self.shortcuts_table.cellDoubleClicked.connect(self._onCellDblClick)
-        self.shortcuts_table.viewport().installEventFilter(self)
+            line_edit.setText(keyseq)
+            line_edit.setMaximumWidth(150)
+            line_edit.setToolTip(tr("点击后按下快捷键"))
+            key_filter = KeyCaptureFilter(self)
+            key_filter.key_captured.connect(lambda seq, le=line_edit: self._onShortcutCapture(seq, le))
+            line_edit.installEventFilter(key_filter)
+            self.shortcut_edits[key] = line_edit
+            layout.addRow(tr(self.SHORTCUT_MAP[key]), line_edit)
 
         reset_btn = QPushButton(tr("重置为默认值"))
         reset_btn.clicked.connect(self._setDefaults)
@@ -677,66 +661,11 @@ class SettingsDialog(QDialog):
         if current_row >= 0:
             self.search_engines_list.takeItem(current_row)
 
-    def _onCellDblClick(self, row, column):
-        """双击快捷键列时开始捕获"""
-        if column == 1:
-            self._shortcuts_capturing = True
-            self._capturing_row = row
-            self.shortcuts_table.setCurrentCell(row, 1)
-            key_item = self.shortcuts_table.item(row, 1)
-            key_item.setFlags(key_item.flags() | Qt.ItemFlag.ItemIsEditable)
-            self.shortcuts_table.openPersistentEditor(key_item)
-            editor = self.shortcuts_table.indexWidget(self.shortcuts_table.model().index(row, 1))
-            if editor:
-                self._shortcut_editor = editor
-                self._shortcut_key_filter = KeyCaptureFilter(self)
-                self._shortcut_key_filter.key_captured.connect(lambda seq: self._onKeyCapture(seq, row))
-                self._shortcut_key_filter.capture_cancelled.connect(lambda: self._closeEditor(row))
-                editor.installEventFilter(self._shortcut_key_filter)
-                editor.installEventFilter(self)
-                editor.setFocus()
-
-    def _onKeyCapture(self, seq, row):
+    def _onShortcutCapture(self, seq, line_edit):
         """处理快捷键捕获"""
-        key_item = self.shortcuts_table.item(row, 1)
-        if key_item:
-            key_item.setText(seq)
-        if hasattr(self, '_shortcut_editor') and self._shortcut_editor:
-            self._shortcut_editor.setText(seq)
-            self._shortcut_editor.selectAll()
+        line_edit.setText(seq)
 
-    def _closeEditor(self, row):
-        """清理快捷键编辑器"""
-        key_item = self.shortcuts_table.item(row, 1)
-        if key_item:
-            self.shortcuts_table.closePersistentEditor(key_item)
-        if hasattr(self, '_shortcut_key_filter'):
-            self._shortcut_key_filter.deleteLater()
-            del self._shortcut_key_filter
-        if hasattr(self, '_shortcut_editor'):
-            del self._shortcut_editor
-        self._shortcuts_capturing = False
-        self._capturing_row = -1
-    
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.FocusOut and self._shortcuts_capturing \
-                and obj is getattr(self, '_shortcut_editor', None):
-            self._closeEditor(self._capturing_row)
-            return True
-        if event.type() == QEvent.Type.KeyPress and self._shortcuts_capturing and obj == self.shortcuts_table.viewport():
-                key = event.key()
-                if key == Qt.Key.Key_Escape:
-                    self._shortcuts_capturing = False
-                    self._capturing_row = -1
-                    return True
-                seq = eventToKey(event)
-                if seq:
-                    key_item = self.shortcuts_table.item(self._capturing_row, 1)
-                    if key_item:
-                        key_item.setText(seq)
-                self._shortcuts_capturing = False
-                self._capturing_row = -1
-                return True
         return super().eventFilter(obj, event)
 
     def _onHotkeyCapture(self, seq):
@@ -746,26 +675,20 @@ class SettingsDialog(QDialog):
     def _setDefaults(self):
         """重置快捷键为默认值"""
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
-        self.shortcuts_table.setRowCount(len(self.SHORTCUT_MAP))
-        for i, key in enumerate(self.SHORTCUT_MAP):
-            display_key = self.SHORTCUT_MAP[key]
-            display_name = tr(display_key)
-            self.shortcuts_table.setItem(i, 0, QTableWidgetItem(display_name))
-            self.shortcuts_table.item(i, 0).setFlags(self.shortcuts_table.item(i, 0).flags() & ~Qt.ItemFlag.ItemIsEditable)
-            keyseq = default_shortcuts.get(key, "")
-            self.shortcuts_table.setItem(i, 1, QTableWidgetItem(keyseq))
+        for key in self.SHORTCUT_MAP:
+            line_edit = self.shortcut_edits.get(key)
+            if line_edit:
+                line_edit.setText(default_shortcuts.get(key, ""))
 
     def getSetting(self) -> dict:
         """获取设置"""
-        # 构建快捷键字典
         shortcuts = {}
-        if hasattr(self, 'shortcuts_table') and self.shortcuts_table:
-            for i, key in enumerate(self.SHORTCUT_MAP):
-                key_item = self.shortcuts_table.item(i, 1)
-                if key_item:
-                    keyseq = key_item.text()
-                    if keyseq:
-                        shortcuts[key] = keyseq
+        for key in self.SHORTCUT_MAP:
+            line_edit = self.shortcut_edits.get(key)
+            if line_edit:
+                keyseq = line_edit.text()
+                if keyseq:
+                    shortcuts[key] = keyseq
         
         return {
             "language": self.language_combo.currentData(),

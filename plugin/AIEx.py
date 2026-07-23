@@ -77,8 +77,8 @@ class AIExtendPlugin(PluginBase):
         self.settings.setdefault("dialog", "")
         self.settings.setdefault("load_balance", {"enabled": False, "profiles": {}})
         self.settings.setdefault("prompt", "请识别图片中的所有文字内容，直接输出识别到的文字，不需要额外说明。如果图片中没有文字，请回复'未识别到文字'。")
+        self.settings.setdefault("system_prompt", "")
         self.settings.setdefault("prompts", {
-            "系统提示词": "",
             "提取内容": "请提取以下内容中的关键信息，按条理清晰的结构输出，不需要额外解释。",
             "代码": "你是一位经验丰富的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有广泛的知识。请帮助我编写和优化以下代码。\n\n{request}",
             "翻译": "你是一名翻译，请将以下文本 {request} 翻译成中文，你只需要返回翻译结果，无需额外解释。",
@@ -182,10 +182,9 @@ class AIExtendPlugin(PluginBase):
 
     def _buildPromptsMenu(self, menu):
         prompts = self.settings.get("prompts", {})
-        names = [n for n in prompts if n != "系统提示词"]
 
-        if names:
-            for name in names:
+        if prompts:
+            for name in prompts:
                 act = QAction(name, self.main)
                 act.triggered.connect(lambda checked, n=name: self.runAiPrompt(n))
                 menu.addAction(act)
@@ -206,50 +205,51 @@ class AIExtendPlugin(PluginBase):
             active = list(self._edit_profiles.keys())[0]
         self._edit_active = active
 
-        # 配置选择区
-        profile_row = QHBoxLayout()
-        profile_row.addWidget(QLabel(tr("当前配置")))
+        top_row = QHBoxLayout()
+        top_row.addWidget(QLabel(tr("当前配置")))
         self._settings_profile_combo = QComboBox()
-        self._settings_profile_combo.setFixedWidth(160)
+        self._settings_profile_combo.setMinimumWidth(100)
         for name in self._edit_profiles:
             self._settings_profile_combo.addItem(name, name)
         idx = self._settings_profile_combo.findText(self._edit_active)
         if idx >= 0:
             self._settings_profile_combo.setCurrentIndex(idx)
         self._settings_profile_combo.currentIndexChanged.connect(self._onSettingsProfileChanged)
-        profile_row.addWidget(self._settings_profile_combo)
+        top_row.addWidget(self._settings_profile_combo)
+        top_row.addSpacing(10)
+        top_row.addWidget(QLabel("API " + tr("接口")))
+        self._settings_endpoint_combo = QComboBox()
+        self._settings_endpoint_combo.setMinimumWidth(100)
+        for name, cls, url in AI_ADAPTER:
+            self._settings_endpoint_combo.addItem(name, url)
+        self._settings_endpoint_combo.currentTextChanged.connect(self._onSettingsEndpointChanged)
+        top_row.addWidget(self._settings_endpoint_combo)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
+        # 按钮行
+        btn_row = QHBoxLayout()
         rename_btn = QPushButton(tr("重命名"))
         rename_btn.setFixedWidth(70)
         rename_btn.clicked.connect(lambda: self._settingsRenameProfile(parent))
-        profile_row.addWidget(rename_btn)
-
+        btn_row.addWidget(rename_btn)
         new_btn = QPushButton(tr("新建"))
         new_btn.setFixedWidth(60)
         new_btn.clicked.connect(lambda: self._settingsNewProfile(parent))
-        profile_row.addWidget(new_btn)
-
+        btn_row.addWidget(new_btn)
         copy_btn = QPushButton(tr("复制"))
         copy_btn.setFixedWidth(60)
         copy_btn.clicked.connect(lambda: self._settingsCopyProfile(parent))
-        profile_row.addWidget(copy_btn)
-
+        btn_row.addWidget(copy_btn)
         delete_btn = QPushButton(tr("删除"))
         delete_btn.setFixedWidth(60)
         delete_btn.clicked.connect(lambda: self._settingsDeleteProfile(parent))
-        profile_row.addWidget(delete_btn)
+        btn_row.addWidget(delete_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
-        profile_row.addStretch()
-        layout.addLayout(profile_row)
-
-        # API 端点
+        # 接口地址
         endpoint_layout = QFormLayout()
-        self._settings_endpoint_combo = QComboBox()
-        for name, cls, url in AI_ADAPTER:
-            self._settings_endpoint_combo.addItem(name, url)
-        endpoint_layout.addRow("API " + tr("接口"), self._settings_endpoint_combo)
-
-        self._settings_endpoint_combo.currentTextChanged.connect(self._onSettingsEndpointChanged)
         self._settings_custom_url_edit = QLineEdit()
         endpoint_layout.addRow(tr("接口地址"), self._settings_custom_url_edit)
         layout.addLayout(endpoint_layout)
@@ -267,10 +267,10 @@ class AIExtendPlugin(PluginBase):
         model_layout.addWidget(QLabel(tr("模型")))
         self._settings_model_combo = QComboBox()
         self._settings_model_combo.setEditable(True)
-        self._settings_model_combo.setMinimumWidth(300)
+        self._settings_model_combo.setMinimumWidth(250)
         model_layout.addWidget(self._settings_model_combo)
         self._settings_refresh_btn = QPushButton(tr("刷新"))
-        self._settings_refresh_btn.setFixedWidth(70)
+        self._settings_refresh_btn.setFixedWidth(60)
         self._settings_refresh_btn.clicked.connect(lambda: self._settingsRefreshModels(parent))
         model_layout.addWidget(self._settings_refresh_btn)
         model_layout.addStretch()
@@ -313,6 +313,12 @@ class AIExtendPlugin(PluginBase):
         action_row.addWidget(test_btn)
         layout.addLayout(action_row)
 
+        layout.addWidget(QLabel(tr("系统提示词")))
+        self._settings_system_prompt_edit = QTextEdit()
+        self._settings_system_prompt_edit.setMaximumHeight(80)
+        self._settings_system_prompt_edit.setPlaceholderText(tr("输入系统提示词，将在每次对话前作为 system message 发送"))
+        layout.addWidget(self._settings_system_prompt_edit)
+
         self._settings_prompt_list = QListWidget()
         self._settings_prompt_list.setMaximumHeight(120)
         layout.addWidget(self._settings_prompt_list)
@@ -348,6 +354,7 @@ class AIExtendPlugin(PluginBase):
             self.settings["stream"] = self._settings_stream_cb.isChecked()
             self.settings["load_balance"] = self._edit_load_balance
             self.settings["prompts"] = self._edit_prompts
+            self.settings["system_prompt"] = self._settings_system_prompt_edit.toPlainText().strip()
         super().saveConfig(save=save)
 
     def _onSettingsProfileChanged(self, index):
@@ -367,6 +374,7 @@ class AIExtendPlugin(PluginBase):
                     break
 
     def _settingsLoadProfile(self):
+        self._settings_system_prompt_edit.setPlainText(self.settings.get("system_prompt", ""))
         profile = self._edit_profiles.get(self._edit_active, {})
         self._settings_api_key_edit.setText(profile.get("api_key", ""))
 
@@ -624,9 +632,7 @@ class AIExtendPlugin(PluginBase):
         """重新加载提示词列表"""
         self._settings_prompt_list.clear()
         for name, value in self._edit_prompts.items():
-            builtin = name in ("系统提示词",)
-            display = name + "  (内置)" if builtin else name
-            item = QListWidgetItem(display)
+            item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, {"name": name, "value": value})
             self._settings_prompt_list.addItem(item)
 
@@ -659,7 +665,6 @@ class AIExtendPlugin(PluginBase):
         data = current_item.data(Qt.ItemDataRole.UserRole)
         old_name = data.get("name", "")
         old_value = data.get("value", "")
-        builtin = old_name in ("系统提示词",)
 
         dlg = QDialog(self._settings_prompt_list)
         dlg.setWindowTitle(tr("编辑提示词"))
@@ -670,9 +675,6 @@ class AIExtendPlugin(PluginBase):
 
         name_edit = QLineEdit()
         name_edit.setText(old_name)
-        if builtin:
-            name_edit.setReadOnly(True)
-            name_edit.setStyleSheet("background: #e0e0e0;")
         form_layout.addRow(tr("提示词名称"), name_edit)
 
         value_edit = QTextEdit()
@@ -701,9 +703,6 @@ class AIExtendPlugin(PluginBase):
             return
         data = current_item.data(Qt.ItemDataRole.UserRole)
         name = data.get("name", "") if isinstance(data, dict) else current_item.text()
-        if name in ("系统提示词",):
-            messageBox(self._settings_prompt_list, tr("禁止删除"), tr("内置提示词不可删除"), 1)
-            return
         if messageBox(self._settings_prompt_list, tr("确认删除"), tr("是否确认删除") + " " + current_item.text()):
             self._edit_prompts.pop(name, None)
             self._settingsReloadPromptList()
@@ -851,15 +850,14 @@ class AIExtendPlugin(PluginBase):
 
     def _buildPromptBar(self, layout):
         prompts = self.settings.get("prompts", {})
-        visible_prompts = [n for n in prompts if n != "系统提示词"]
 
-        if visible_prompts:
+        if prompts:
             prompt_frame = QFrame()
             prompt_frame.setObjectName("ai_prompt_bar")
             prompt_layout = QHBoxLayout(prompt_frame)
             prompt_layout.setContentsMargins(5, 5, 5, 5)
 
-            for name in visible_prompts:
+            for name in prompts:
                 btn = QPushButton(name)
                 btn.setFixedWidth(75)
                 btn.clicked.connect(lambda checked, n=name: self._onPromptClicked(n))

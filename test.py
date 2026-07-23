@@ -370,10 +370,6 @@ class TestPluginBase(_PluginTestBase):
         plugin = self.PluginBase()
         plugin.onFileOpen("/some/path")
 
-    def testOnFileSaveDoesNotRaise(self):
-        plugin = self.PluginBase()
-        plugin.onFileSave("/some/path")
-
     def testCleanupDoesNotRaise(self):
         plugin = self.PluginBase()
         plugin.cleanup()

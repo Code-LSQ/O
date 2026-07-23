@@ -789,7 +789,7 @@ class AIClient:
     def _prepareMessages(self, messages: List[Dict[str, str]], prompt_name: Optional[str] = None) -> List[Dict]:
         request_messages = []
 
-        system_prompt = self.getPrompt("系统提示词")
+        system_prompt = self.config.get("system_prompt", "")
         if system_prompt:
             request_messages.append({"role": "system", "content": system_prompt})
 

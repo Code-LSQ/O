@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt, QTimer
 from src.config import SettingsDialog, getConfig
 from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, showFile, ENCODING_MAP
 from src.system import setMenu, isMenuRegister
-from src.plugin import getPluginManager
 from src.file import ArchiveItemModel, FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
@@ -679,13 +678,6 @@ class EditorWindow(WindowControl, QMainWindow):
         if not file_path or not os.path.isfile(file_path):
             messageBox(self, tr("打开失败"), tr("文件不存在或路径无效") + ": " + str(file_path), 1)
             return
-
-        # 插件 fileHandlers 优先级最高
-        for can_handle, open_file in getPluginManager().fileHandlers:
-            if can_handle(file_path):
-                open_file(file_path, self)
-                self.config.addRecentFile(file_path)
-                return
 
         if self._use_tabs:
             editor = self.addTab(file_path)

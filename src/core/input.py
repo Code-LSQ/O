@@ -248,15 +248,25 @@ class GlobalHotkeyListener(Singleton):
             
             if mouse_side_enabled:
                 self._mouse_listener = None
+                _last_side_click_time = 0
 
                 def mouseWinFilter(msg, data):
+                    nonlocal _last_side_click_time
                     WM_XBUTTONDOWN = 0x020B
                     WM_XBUTTONUP = 0x020C
-                    if msg in (WM_XBUTTONDOWN, WM_XBUTTONUP):
+                    if msg == WM_XBUTTONDOWN:
                         button = data.mouseData >> 16
                         if button in (1, 2):
-                            if msg == WM_XBUTTONDOWN:
-                                QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
+                            current = time.time()
+                            if current - _last_side_click_time < 0.3:
+                                self._mouse_listener.suppress_event()
+                                return
+                            _last_side_click_time = current
+                            QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
+                            self._mouse_listener.suppress_event()
+                    elif msg == WM_XBUTTONUP:
+                        button = data.mouseData >> 16
+                        if button in (1, 2):
                             self._mouse_listener.suppress_event()
 
                 self._mouse_listener = mouse.Listener(
