@@ -8,3 +8,4 @@ data/
 
 # 忽略 AI Agent 文件
 AGENTS.md
+CLAUDE.md

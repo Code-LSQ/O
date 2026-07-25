@@ -335,8 +335,8 @@ class Singleton:
 
 def showFile(path: str, parent=None):
     try:
+        path = os.path.abspath(os.path.expandvars(path))
         if sys.platform == "win32":
-            path = os.path.abspath(path)
             subprocess.Popen(["explorer", "/select,", path])
         elif sys.platform == "linux":
             subprocess.Popen(["xdg-open", path])
@@ -698,11 +698,8 @@ env = RuntimeManager()
 
 def openTerminal(path):
     """打开终端"""
-    if not path:
-        logger.warning(f"无效的路径: {path!r}")
-        return False
 
-    path = os.path.abspath(path)
+    path = os.path.abspath(os.path.expandvars(path))
     if os.path.isfile(path):
         path = os.path.dirname(path)
 

@@ -686,7 +686,7 @@ def _ensureGroup(tools: dict, config, current_group: str) -> str:
     return current_group
 
 def getIcon(tool, icon_size=32):
-    icon_path = tool.get("icon", "")
+    icon_path = os.path.expandvars(tool.get("icon", ""))
     path = tool.get("path", "") or tool.get("url", "")
     path = os.path.expandvars(path)
     icon = QIcon()
@@ -789,15 +789,6 @@ class MainWindow(WindowControl, QMainWindow):
         layout.addLayout(btn_layout)
 
         dialog.exec()
-
-    def _syncTools(self):
-        """同步 _tools 到配置"""
-        getConfig().set("Launch.tools", self._tools)
-
-    def _saveTools(self):
-        """同步 _tools 到配置并保存"""
-        self._syncTools()
-        getConfig().save()
 
     def _openEditor(self, file_path=None):
         """打开/激活编辑器窗口"""
@@ -1105,7 +1096,7 @@ class MainWindow(WindowControl, QMainWindow):
                 messageBox(self, tr("警告"), tr("分组名称已存在"), 1)
                 return
             self._tools[name.strip()] = []
-            self._saveTools()
+            getConfig().save()
             self.refreshGroup()
     
     def _renameGroup(self, group: str):
@@ -1123,7 +1114,7 @@ class MainWindow(WindowControl, QMainWindow):
                 self._current_group = name.strip()
                 getConfig().set("Launch.active_group", name.strip())
             
-            self._saveTools()
+            getConfig().save()
             self.refreshGroup()
             self.refreshTool()
     
@@ -1138,7 +1129,7 @@ class MainWindow(WindowControl, QMainWindow):
             
             self._current_group = _ensureGroup(self._tools, getConfig(), self._current_group)
             
-            self._saveTools()
+            getConfig().save()
             self.refreshGroup()
             self.refreshTool()
     
@@ -1150,7 +1141,8 @@ class MainWindow(WindowControl, QMainWindow):
         if 0 <= new_idx < len(groups):
             groups[idx], groups[new_idx] = groups[new_idx], groups[idx]
             self._tools = {g: self._tools.get(g, []) for g in groups}
-            self._syncTools()
+            getConfig().set("Launch.tools", self._tools)
+            getConfig().save()
             self.refreshGroup()
     
     def switchGroup(self, group: str):
@@ -1239,7 +1231,7 @@ class MainWindow(WindowControl, QMainWindow):
                     target_index -= 1
                 tools.insert(target_index, item)
                 self._tools[self._current_group] = tools
-                self._saveTools()
+                getConfig().save()
                 self.refreshTool()
         
         event.acceptProposedAction()
@@ -1520,7 +1512,7 @@ class MainWindow(WindowControl, QMainWindow):
         }
         tool_data = {k: v for k, v in tool_data.items() if v}
         self._tools.setdefault(self._current_group, []).append(tool_data)
-        self._saveTools()
+        getConfig().save()
         self.refreshTool()
     
     def _addTool(self):
@@ -1541,7 +1533,7 @@ class MainWindow(WindowControl, QMainWindow):
     def _onToolUpdate(self, dialog, index):
         tool_data = dialog.getData()
         self._tools[self._current_group][index] = tool_data
-        self._saveTools()
+        getConfig().save()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()
@@ -1552,14 +1544,14 @@ class MainWindow(WindowControl, QMainWindow):
         new_tool["name"] = f"{new_tool['name']}_" + tr("副本")
         new_tool = {k: v for k, v in new_tool.items() if v}
         self._tools.setdefault(self._current_group, []).append(new_tool)
-        self._saveTools()
+        getConfig().save()
         self.refreshTool()
 
     def _moveTool(self, tool: dict, index: int, target_group: str):
         """将工具移动到目标分组"""
         self._tools[self._current_group].pop(index)
         self._tools.setdefault(target_group, []).append(tool)
-        self._saveTools()
+        getConfig().save()
         self.refreshTool()
         self.refreshGroup()
     
@@ -1569,7 +1561,7 @@ class MainWindow(WindowControl, QMainWindow):
         if tool_type == "网址":
             webbrowser.open(tool.get("url", ""))
             return
-        tool_path = tool.get("path", "")
+        tool_path = os.path.expandvars(tool.get("path", ""))
         if not tool_path:
             return
         if self._path_mode == "relative":
@@ -1578,7 +1570,7 @@ class MainWindow(WindowControl, QMainWindow):
 
     def _openInEditor(self, tool: dict):
         """在编辑器中打开工具文件"""
-        tool_path = tool.get("path", "")
+        tool_path = os.path.expandvars(tool.get("path", ""))
         if not tool_path:
             return
         path_mode = self._path_mode
@@ -1593,7 +1585,7 @@ class MainWindow(WindowControl, QMainWindow):
             tool = tools[index]
             if messageBox(self, tr("确认删除"), tr("是否确认删除") + " \"" + tool.get('name', '') + "\""):
                 self._tools[self._current_group].pop(index)
-                self._saveTools()
+                getConfig().save()
                 self.refreshTool()
                 self.registerHotkeys()
 
@@ -1627,7 +1619,7 @@ class MainWindow(WindowControl, QMainWindow):
 
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
-        cwd = tool.get("cwd", "")
+        cwd = os.path.expandvars(tool.get("cwd", ""))
         args = argsPlaceholder(tool.get("args", ""))
 
         if not path and tool_type != "预设":
@@ -1937,7 +1929,7 @@ class MainWindow(WindowControl, QMainWindow):
     def _editAccepted(self, dialog):
         final_data = dialog.getData()
         self._tools.setdefault(self._current_group, []).append(final_data)
-        self._saveTools()
+        getConfig().save()
         self.refreshTool()
         self.registerHotkeys()
         dialog.close()

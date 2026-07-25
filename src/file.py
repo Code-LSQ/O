@@ -82,13 +82,11 @@ def createBackup(file_path: str, config=None) -> Optional[str]:
 def _cleanBackups() -> None:
     """清理超过指定天数的旧备份文件"""
     try:
-        days_to_keep = 7
-        
         if not backup_dir.exists():
             return
         
         current_time = time.time()
-        cutoff_time = current_time - (days_to_keep * 86400)
+        cutoff_time = current_time - (7 * 86400)
         
         for backup_file in backup_dir.iterdir():
             if backup_file.is_file():

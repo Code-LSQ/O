@@ -2,25 +2,27 @@
 
 用法:
     --util                    仅 util 测试
-    --compare                 仅 compare 测试
     --plugin                  仅 plugin 测试
     --ai                      仅 AI adapter 测试
     --sync                    仅 sync 测试
     --perf                    性能测试
     --exception               异常测试
-    --list                    列出测试组
-    --gen-tokens
-    --launch                  启动程序本体
+    --all                     运行全部测试
     -m                 启动程序本体并启用 tracemalloc 内存追踪 + Qt 对象计数
-    --help                    帮助
+    -h, --help                帮助
 
 
 维护说明:
-    所有 TestCase 统一使用 applyMock() 工厂注入 mock 依赖，
-    setUp/tearDown 配对管理 patchers，禁止全局状态。
+    - 所有 TestCase 统一使用 applyMock() 工厂注入 mock 依赖，
+      setUp() 中调用 addCleanup(p.stop) 管理 patchers，禁止使用 tearDown 手工 stop。
+    - 临时目录在 setUp() 中创建，通过 addCleanup 注册清理，禁止 try/finally。
+    - 组内多个 TestCase 共享同一 mock 组合时，创建 _GroupNameBase 基类避免重复。
+    - 辅助方法统一使用小驼峰命名法（camelCase）
+    - 测试类在类级 import 模块和函数，后续通过 self.xxx 访问
+    - 继承 Base TestCase 的子类如需额外初始化，必须先调用 super().setUp()，确保基类 mock 已就位。
 新增分组:
-    1. 在 _GROUP_REGISTRY 注册 (group_name, test_class)
-    2. 按需调用 applyMock(mock_key=...) 注入依赖
+    1. 在 _GROUP_REGISTRY 注册 (group_name, test_class_list)
+    2. 按需调用 applyMock(qt=True, util=True, ...) 注入依赖
     3. main() 自动注册 --group_name CLI 参数
 
 """
@@ -37,10 +39,13 @@ import types
 import unittest
 import fnmatch
 import tarfile
+import zipfile
+import tracemalloc
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
+from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
 
 sys.dont_write_bytecode = True
@@ -97,10 +102,7 @@ _SHARED_UTIL_ATTRS = {
         "DATABASE": {".db", ".sqlite"},
         "DISK": {".iso"},
     },
-    "IMAGE_EXTENSIONS": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp"},
     "TEXT_EXTENSIONS": {".txt", ".md", ".py", ".js", ".json", ".html", ".css", ".xml"},
-    "MARKDOWN_EXTENSIONS": {".md", ".markdown"},
-    "ZIP_EXTENSIONS": {".zip", ".jar", ".apk"},
     "TAR_EXTENSIONS": {".tar", ".tar.gz", ".tgz"},
     "ENCODING_MAP": {"UTF-8": "utf-8", "GBK": "gb18030", "Shift-JIS": "shift_jis"},
     "formatFileSize": MagicMock(return_value="1.0 KB"),
@@ -130,6 +132,10 @@ def _makeQtCore():
             QRunnable=MagicMock,
             Slot=MagicMock,
             QUrl=MagicMock,
+            QMetaObject=MagicMock,
+            QSize=MagicMock,
+            QEvent=MagicMock,
+            QFileInfo=MagicMock,
         ),
         "PySide6.QtGui": MagicMock(),
         "PySide6.QtWidgets": MagicMock(),
@@ -137,8 +143,11 @@ def _makeQtCore():
 
 
 def _makeUtil():
-    """Create src.util mock module"""
-    return {"src.util": _makeModule("src.util", **_SHARED_UTIL_ATTRS)}
+    """Create src.util mock module (auto-fills missing attrs via MagicMock)"""
+    mod = MagicMock(name="src.util")
+    for k, v in _SHARED_UTIL_ATTRS.items():
+        setattr(mod, k, v)
+    return {"src.util": mod}
 
 
 def _makeFile():
@@ -181,7 +190,7 @@ def applyMock(
 ):
     """按需组装 mock 环境，每个 setUp() 中调用
 
-    返回 patcher 列表，调用方需在 tearDown() 中对每个 patcher 执行 stop()。
+    返回 patcher 列表，调用方需在 addCleanup 中对每个 patcher 执行 stop()。
     """
     patchers = []
 
@@ -261,11 +270,8 @@ def applyMock(
 
 class TestEncodingMap(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(util=True)
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+        for p in applyMock(util=True):
+            self.addCleanup(p.stop)
 
     def testEncodingMapContainsCommon(self):
         encodings = sys.modules["src.util"].ENCODING_MAP
@@ -281,40 +287,19 @@ class TestEncodingMap(unittest.TestCase):
 
 class TestFileExtensions(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(util=True)
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
-    def testImageExtensionsContainCommon(self):
-        exts = sys.modules["src.util"].IMAGE_EXTENSIONS
-        for ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
-            self.assertIn(ext, exts)
+        for p in applyMock(util=True):
+            self.addCleanup(p.stop)
 
     def testTextExtensionsContainCommon(self):
         exts = sys.modules["src.util"].TEXT_EXTENSIONS
         for ext in [".txt", ".md", ".py", ".json"]:
             self.assertIn(ext, exts)
 
-    def testMarkdownExtensions(self):
-        exts = sys.modules["src.util"].MARKDOWN_EXTENSIONS
-        self.assertIn(".md", exts)
-        self.assertIn(".markdown", exts)
-
-    def testZipExtensions(self):
-        exts = sys.modules["src.util"].ZIP_EXTENSIONS
-        self.assertIn(".zip", exts)
-        self.assertIn(".apk", exts)
-
 
 class TestConstants(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(util=True)
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+        for p in applyMock(util=True):
+            self.addCleanup(p.stop)
 
     def testAppName(self):
         self.assertEqual(sys.modules["src.util"].APP_NAME, "O")
@@ -324,16 +309,11 @@ class TestConstants(unittest.TestCase):
 
 
 class _PluginTestBase(unittest.TestCase):
+    from src.plugin import PluginManager, PluginBase
+
     def setUp(self):
-        self._patchers = applyMock(qt=True, util=True, psutil=True, pynput=True, real_plugin=True)
-        from src.plugin import PluginManager, PluginBase
-
-        self.PluginBase = PluginBase
-        self.PluginManager = PluginManager
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+        for p in applyMock(qt=True, util=True, psutil=True, pynput=True, real_plugin=True):
+            self.addCleanup(p.stop)
 
 
 class TestPluginBase(_PluginTestBase):
@@ -460,12 +440,9 @@ class _PluginWithTempDirBase(_PluginTestBase):
     def setUp(self):
         super().setUp()
         self.temp_plugin_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.temp_plugin_dir, ignore_errors=True))
         self.pm = self.PluginManager()
         self.pm.plugin_dir = Path(self.temp_plugin_dir)
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_plugin_dir, ignore_errors=True)
-        super().tearDown()
 
     def _createPluginFile(self, name, content):
         path = os.path.join(self.temp_plugin_dir, name)
@@ -655,18 +632,20 @@ class P1(PluginBase):
 # Group: ai (61 tests)
 
 
-class TestResolveImageUrls(unittest.TestCase):
+class _AITestBase(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(
+        for p in applyMock(
             qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        ):
+            self.addCleanup(p.stop)
+
+
+class TestResolveImageUrls(_AITestBase):
+    def setUp(self):
+        super().setUp()
         from src.core.AI import resolveImageUrls
 
         self.resolveImageUrls = resolveImageUrls
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
 
     def testNoImagesNoChange(self):
         messages = [{"role": "user", "content": "hello"}]
@@ -720,18 +699,12 @@ class TestResolveImageUrls(unittest.TestCase):
         self.assertEqual(messages[0]["content"][0]["text"], "hello")
 
 
-class TestAIClientBuildPromptContent(unittest.TestCase):
+class TestAIClientBuildPromptContent(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         from src.core.AI import getAIClient
 
         self.getAIClient = getAIClient
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
 
     def testWithRequestPlaceholder(self):
         client = self.getAIClient(config={})
@@ -759,18 +732,12 @@ class TestAIClientBuildPromptContent(unittest.TestCase):
         self.assertEqual(result, "text and text")
 
 
-class TestAIClientExtractUserMessage(unittest.TestCase):
+class TestAIClientExtractUserMessage(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         from src.core.AI import getAIClient
 
         self.getAIClient = getAIClient
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
 
     def testSimpleTextMessage(self):
         client = self.getAIClient(config={})
@@ -827,26 +794,21 @@ class TestAIClientExtractUserMessage(unittest.TestCase):
         self.assertNotIn("image", result)
 
 
-class TestLoadBalancing(unittest.TestCase):
+class TestLoadBalancing(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         from src.core.AI import getAIClient
 
         self.getAIClient = getAIClient
         client = self.getAIClient(config={})
         client.__class__._lb_failures = {}
         client.__class__._lb_disabled = {}
+        self.addCleanup(self._cleanLb)
 
-    def tearDown(self):
-        from src.core.AI import getAIClient
-
-        client = getAIClient(config={})
-        client.__class__._lb_failures = {}
-        client.__class__._lb_disabled = {}
-        for p in self._patchers:
-            p.stop()
+    def _cleanLb(self):
+        from src.core.AI import AIClient
+        AIClient._lb_failures = {}
+        AIClient._lb_disabled = {}
 
     def testLbDisabledNoGroups(self):
         config = {"load_balance": {"enabled": False}}
@@ -967,11 +929,9 @@ class TestLoadBalancing(unittest.TestCase):
         self.assertIsNone(result)
 
 
-class TestAdaptersBuildChatRequest(unittest.TestCase):
+class TestAdaptersBuildChatRequest(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         from src.core.AI import OpenAIAdapter, ClaudeAdapter, OllamaAdapter, GeminiAdapter, AIError
 
         self.OpenAIAdapter = OpenAIAdapter
@@ -979,10 +939,6 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.OllamaAdapter = OllamaAdapter
         self.GeminiAdapter = GeminiAdapter
         self.AIError = AIError
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
 
     def testOpenaiAdapterBuildRequest(self):
         adapter = self.OpenAIAdapter(
@@ -1168,11 +1124,9 @@ class TestAdaptersBuildChatRequest(unittest.TestCase):
         self.assertEqual(out_t, 10)
 
 
-class TestAdapterMap(unittest.TestCase):
+class TestAdapterMap(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         from src.core.AI import (
             AI_ADAPTER,
             getAdapterEndpoint,
@@ -1188,10 +1142,6 @@ class TestAdapterMap(unittest.TestCase):
         self.ClaudeAdapter = ClaudeAdapter
         self.OllamaAdapter = OllamaAdapter
         self.GeminiAdapter = GeminiAdapter
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
 
     def testAdapterMapContainsKnownServices(self):
         names = [name for name, cls, url in self.AI_ADAPTER if cls is not None]
@@ -1217,20 +1167,14 @@ class TestAdapterMap(unittest.TestCase):
         self.assertIsInstance(adapter, self.OpenAIAdapter)
 
 
-class TestAIClientBuildFileMessage(unittest.TestCase):
+class TestAIClientBuildFileMessage(_AITestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
-        )
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.test_dir, ignore_errors=True))
         from src.core.AI import getAIClient
 
         self.getAIClient = getAIClient
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-        shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _makeFile(self, name, content=b"test"):
         path = os.path.join(self.test_dir, name)
@@ -1262,50 +1206,36 @@ class TestAIClientBuildFileMessage(unittest.TestCase):
 # Group: sync (20 tests)
 
 
-class TestSyncModeConstants(unittest.TestCase):
+class _SyncTestBase(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(
+        for p in applyMock(
             qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
-        )
+        ):
+            self.addCleanup(p.stop)
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+
+class TestSyncModeConstants(_SyncTestBase):
+    from plugin.OpenList import MODE_SYNC, MODE_BACKUP, TASK_STATUS_RUNNING, TASK_STATUS_SUCCESS, TASK_STATUS_FAILED, TASK_STATUS_ABORTED
 
     def testModeConstants(self):
-        from plugin.OpenList import MODE_SYNC, MODE_BACKUP
-
-        self.assertEqual(MODE_SYNC, "sync")
-        self.assertEqual(MODE_BACKUP, "backup")
+        self.assertEqual(self.MODE_SYNC, "sync")
+        self.assertEqual(self.MODE_BACKUP, "backup")
 
     def testTaskStatusConstants(self):
-        from plugin.OpenList import (
-            TASK_STATUS_RUNNING,
-            TASK_STATUS_SUCCESS,
-            TASK_STATUS_FAILED,
-            TASK_STATUS_ABORTED,
-        )
-
-        self.assertEqual(TASK_STATUS_RUNNING, "running")
-        self.assertEqual(TASK_STATUS_SUCCESS, "success")
-        self.assertEqual(TASK_STATUS_FAILED, "failed")
-        self.assertEqual(TASK_STATUS_ABORTED, "aborted")
+        self.assertEqual(self.TASK_STATUS_RUNNING, "running")
+        self.assertEqual(self.TASK_STATUS_SUCCESS, "success")
+        self.assertEqual(self.TASK_STATUS_FAILED, "failed")
+        self.assertEqual(self.TASK_STATUS_ABORTED, "aborted")
 
 
-class TestTaskConfig(unittest.TestCase):
+class TestTaskConfig(_SyncTestBase):
+    from plugin.OpenList import TaskConfig
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
-        )
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+        super().setUp()
 
     def testDefaultValues(self):
-        from plugin.OpenList import TaskConfig
 
-        cfg = TaskConfig()
+        cfg = self.TaskConfig()
         self.assertEqual(cfg.name, "")
         self.assertEqual(cfg.src_path, "")
         self.assertEqual(cfg.dst_path, "")
@@ -1316,9 +1246,8 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(cfg.tree_folders, "")
 
     def testToDictRoundtrip(self):
-        from plugin.OpenList import TaskConfig
 
-        cfg = TaskConfig(
+        cfg = self.TaskConfig(
             name="test_task",
             src_path="/local/path",
             dst_path="/remote/path",
@@ -1332,48 +1261,38 @@ class TestTaskConfig(unittest.TestCase):
         self.assertEqual(d["name"], "test_task")
         self.assertEqual(d["mode"], "sync")
         self.assertTrue(d["confirm_before_sync"])
-        restored = TaskConfig.fromDict(d)
+        restored = self.TaskConfig.fromDict(d)
         self.assertEqual(restored.name, "test_task")
         self.assertEqual(restored.mode, "sync")
         self.assertTrue(restored.confirm_before_sync)
 
     def testFromDictMissingKeys(self):
-        from plugin.OpenList import TaskConfig
-
-        cfg = TaskConfig.fromDict({"name": "minimal"})
+        cfg = self.TaskConfig.fromDict({"name": "minimal"})
         self.assertEqual(cfg.name, "minimal")
         self.assertEqual(cfg.mode, "backup")
         self.assertEqual(cfg.src_path, "")
 
     def testBackupModeDefault(self):
-        from plugin.OpenList import TaskConfig
-
-        cfg = TaskConfig.fromDict({"name": "backup_task"})
+        cfg = self.TaskConfig.fromDict({"name": "backup_task"})
         self.assertEqual(cfg.mode, "backup")
 
 
-class TestSyncDiffAlgorithm(unittest.TestCase):
+class TestSyncDiffAlgorithm(_SyncTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
-        )
+        super().setUp()
         self.local_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.local_dir, ignore_errors=True))
         self.remote_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.remote_dir, ignore_errors=True))
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-        shutil.rmtree(self.local_dir, ignore_errors=True)
-        shutil.rmtree(self.remote_dir, ignore_errors=True)
-
-    def _touch(self, folder, rel_path, content=b""):
+    def _createFile(self, folder, rel_path, content=b""):
         full = os.path.join(folder, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "wb") as f:
             f.write(content)
         return rel_path
 
-    def _scan(self, folder):
+    def _scanDir(self, folder):
         """扫描目录，返回 {rel_path: {size, mtime}}"""
         files = {}
         for root, dirs, fnames in os.walk(folder):
@@ -1395,68 +1314,68 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         return worker
 
     def testLocalFileNotInRemote(self):
-        self._touch(self.local_dir, "new.txt", b"local only")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.local_dir, "new.txt", b"local only")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("new.txt", to_upload)
         self.assertEqual(len(to_delete), 0)
 
     def testRemoteFileNotInLocalSyncMode(self):
-        self._touch(self.remote_dir, "old.txt", b"remote only")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.remote_dir, "old.txt", b"remote only")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("old.txt", to_delete)
 
     def testBackupModeNoDelete(self):
-        self._touch(self.remote_dir, "extra.txt", b"extra")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.remote_dir, "extra.txt", b"extra")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("backup")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertEqual(len(to_delete), 0)
 
     def testIdenticalFilesNoSyncNeeded(self):
         content = b"same content"
-        self._touch(self.local_dir, "match.txt", content)
-        self._touch(self.remote_dir, "match.txt", content)
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.local_dir, "match.txt", content)
+        self._createFile(self.remote_dir, "match.txt", content)
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertNotIn("match.txt", to_upload)
 
     def testFileContentChangedNeedsUpdate(self):
-        self._touch(self.local_dir, "changed.txt", b"new version!")
-        self._touch(self.remote_dir, "changed.txt", b"old version")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.local_dir, "changed.txt", b"new version!")
+        self._createFile(self.remote_dir, "changed.txt", b"old version")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("changed.txt", to_upload)
 
     def testNestedFolderStructure(self):
-        self._touch(self.local_dir, "a/b/c/deep.txt", b"deep")
-        self._touch(self.local_dir, "root.txt", b"root")
-        self._touch(self.remote_dir, "root.txt", b"root")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.local_dir, "a/b/c/deep.txt", b"deep")
+        self._createFile(self.local_dir, "root.txt", b"root")
+        self._createFile(self.remote_dir, "root.txt", b"root")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertTrue(any("deep.txt" in k for k in to_upload))
 
     def testBidirectionalDiff(self):
-        self._touch(self.local_dir, "only_local.txt", b"A")
-        self._touch(self.remote_dir, "only_remote.txt", b"B")
-        self._touch(self.local_dir, "both_diff.txt", b"content C1 longer")
-        self._touch(self.remote_dir, "both_diff.txt", b"content C2")
-        self._touch(self.local_dir, "both_same.txt", b"D")
-        self._touch(self.remote_dir, "both_same.txt", b"D")
-        local = self._scan(self.local_dir)
-        remote = self._scan(self.remote_dir)
+        self._createFile(self.local_dir, "only_local.txt", b"A")
+        self._createFile(self.remote_dir, "only_remote.txt", b"B")
+        self._createFile(self.local_dir, "both_diff.txt", b"content C1 longer")
+        self._createFile(self.remote_dir, "both_diff.txt", b"content C2")
+        self._createFile(self.local_dir, "both_same.txt", b"D")
+        self._createFile(self.remote_dir, "both_same.txt", b"D")
+        local = self._scanDir(self.local_dir)
+        remote = self._scanDir(self.remote_dir)
         worker = self._makeWorker("sync")
         to_upload, to_delete = worker._compareFiles(local, remote)
         self.assertIn("only_local.txt", to_upload)
@@ -1465,15 +1384,7 @@ class TestSyncDiffAlgorithm(unittest.TestCase):
         self.assertNotIn("both_same.txt", to_upload)
 
 
-class TestExcludeRules(unittest.TestCase):
-    def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
-        )
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+class TestExcludeRules(_SyncTestBase):
 
     def testGlobExcludeMatch(self):
         rules = ["*.pyc", "*/__pycache__/*"]
@@ -1505,28 +1416,22 @@ class TestExcludeRules(unittest.TestCase):
             self.assertTrue(fnmatch.fnmatch(f"file{r}", r))
 
 
-class TestTarPackaging(unittest.TestCase):
+class TestTarPackaging(_SyncTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
-        )
+        super().setUp()
         self.test_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.test_dir, ignore_errors=True))
         self.tar_path = os.path.join(self.test_dir, "test.tar")
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-        shutil.rmtree(self.test_dir, ignore_errors=True)
-
-    def _touch(self, rel, content=b""):
+    def _createFile(self, rel, content=b""):
         path = os.path.join(self.test_dir, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(content)
 
     def testCreateTarWithFiles(self):
-        self._touch("file1.txt", b"content1")
-        self._touch("file2.txt", b"content2")
+        self._createFile("file1.txt", b"content1")
+        self._createFile("file2.txt", b"content2")
 
         with tarfile.open(self.tar_path, "w") as tar:
             tar.add(os.path.join(self.test_dir, "file1.txt"), arcname="file1.txt")
@@ -1541,7 +1446,7 @@ class TestTarPackaging(unittest.TestCase):
         self.assertIn("file2.txt", names)
 
     def testTarPreservesContent(self):
-        self._touch("data.bin", b"\x00\x01\x02\x03")
+        self._createFile("data.bin", b"\x00\x01\x02\x03")
         with tarfile.open(self.tar_path, "w") as tar:
             tar.add(os.path.join(self.test_dir, "data.bin"), arcname="data.bin")
 
@@ -1555,23 +1460,17 @@ class TestTarPackaging(unittest.TestCase):
 
 
 class TestLazyInitPerformance(unittest.TestCase):
-    """启动性能测试"""
 
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True, psutil=True, pynput=True, markdown=True, util=True, real_logger_util=True
-        )
-
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
+        for p in applyMock(
+            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+        ):
+            self.addCleanup(p.stop)
 
     def testTimePerfCounterBaseline(self):
-        """测试 time.perf_counter 基本可用性"""
         start = time.perf_counter()
-        import time as tm
 
-        tm.sleep(0.01)
+        time.sleep(0.01)
         elapsed = time.perf_counter() - start
         logger.info("time.perf_counter 基准测试: %.4f 秒 (预期 ~0.01)", elapsed)
         self.assertGreater(elapsed, 0)
@@ -1579,82 +1478,57 @@ class TestLazyInitPerformance(unittest.TestCase):
 
 
 class TestSyncPerformance(unittest.TestCase):
-    """同步算法性能测试 (基于文件系统 walk + diff)"""
 
     def setUp(self):
-        self._patchers = applyMock(
+        for p in applyMock(
             qt=True, psutil=True, pynput=True, markdown=True, util=True, real_logger_util=True
-        )
+        ):
+            self.addCleanup(p.stop)
         self.local_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.local_dir, ignore_errors=True))
         self.remote_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.remote_dir, ignore_errors=True))
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-        shutil.rmtree(self.local_dir, ignore_errors=True)
-        shutil.rmtree(self.remote_dir, ignore_errors=True)
-
-    def _touch(self, folder, rel_path, content=b""):
+    def _createFile(self, folder, rel_path, content=b""):
         full = os.path.join(folder, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "wb") as f:
             f.write(content)
 
-    def _tree(self, folder):
+    def _listFiles(self, folder):
         result = set()
-        for root, dirs, files in os.walk(folder):
+        for root, _, files in os.walk(folder):
             for f in files:
                 rel = os.path.relpath(os.path.join(root, f), folder)
                 result.add(rel)
         return result
 
-    def testDiff100Files(self):
-        """测试 100 个文件的同步 diff 耗时"""
-        for i in range(100):
-            self._touch(self.local_dir, f"file_{i}.txt", f"content_{i}".encode())
-        for i in range(80):
-            self._touch(self.remote_dir, f"file_{i}.txt", f"content_{i}".encode())
+    def _runDiffTest(self, total, remote_count, expected_upload, threshold):
+        for i in range(total):
+            self._createFile(self.local_dir, f"file_{i}.txt", f"content_{i}".encode())
+        for i in range(remote_count):
+            self._createFile(self.remote_dir, f"file_{i}.txt", f"content_{i}".encode())
 
         start = time.perf_counter()
-        local = self._tree(self.local_dir)
-        remote = self._tree(self.remote_dir)
+        local = self._listFiles(self.local_dir)
+        remote = self._listFiles(self.remote_dir)
         to_upload = local - remote
         to_delete = remote - local
         elapsed = time.perf_counter() - start
 
         logger.info(
-            "100 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
-            elapsed,
-            len(to_upload),
-            len(to_delete),
+            "%d 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
+            total, elapsed, len(to_upload), len(to_delete),
         )
-        self.assertEqual(len(to_upload), 20)
+        self.assertEqual(len(to_upload), expected_upload)
         self.assertEqual(len(to_delete), 0)
-        self.assertLess(elapsed, 2.0, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 2.0 秒")
+        self.assertLess(elapsed, threshold, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 {threshold} 秒")
+
+    def testDiff100Files(self):
+        self._runDiffTest(100, 80, 20, 2.0)
 
     def testDiff1000Files(self):
-        """测试 1000 个文件的同步 diff 耗时"""
-        for i in range(1000):
-            self._touch(self.local_dir, f"file_{i}.txt", f"content_{i}".encode())
-        for i in range(800):
-            self._touch(self.remote_dir, f"file_{i}.txt", f"content_{i}".encode())
-
-        start = time.perf_counter()
-        local = self._tree(self.local_dir)
-        remote = self._tree(self.remote_dir)
-        to_upload = local - remote
-        to_delete = remote - local
-        elapsed = time.perf_counter() - start
-
-        logger.info(
-            "1000 文件 diff 耗时: %.4f 秒 (上传=%d, 删除=%d)",
-            elapsed,
-            len(to_upload),
-            len(to_delete),
-        )
-        self.assertEqual(len(to_upload), 200)
-        self.assertEqual(len(to_delete), 0)
-        self.assertLess(elapsed, 5.0, f"diff 耗时 {elapsed:.4f} 秒，超过阈值 5.0 秒")
+        self._runDiffTest(1000, 800, 200, 5.0)
 
 
 # Group: exception (异常测试)
@@ -1683,11 +1557,9 @@ _PROFILE_CONFIG_NO_KEY = {
 }
 
 
-class TestApiKeyErrors(unittest.TestCase):
-    """API Key 异常测试"""
-
+class _ExceptionTestBase(unittest.TestCase):
     def setUp(self):
-        self._patchers = applyMock(
+        for p in applyMock(
             qt=True,
             psutil=True,
             pynput=True,
@@ -1696,19 +1568,20 @@ class TestApiKeyErrors(unittest.TestCase):
             util=True,
             config=True,
             file_mod=True,
-        )
+        ):
+            self.addCleanup(p.stop)
+
+
+class TestApiKeyErrors(_ExceptionTestBase):
+    def setUp(self):
+        super().setUp()
         from src.core.AI import OpenAIAdapter, AIError
 
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
     @patch("requests.Session.post")
     def testOpenai401Error(self, mock_post):
-        """测试 OpenAI API 返回 401 时抛出 AIError"""
         mock_resp = MagicMock()
         mock_resp.status_code = 401
         mock_resp.json.return_value = {"error": {"message": "Incorrect API key"}}
@@ -1721,7 +1594,6 @@ class TestApiKeyErrors(unittest.TestCase):
 
     @patch("requests.Session.post")
     def testOpenai403Error(self, mock_post):
-        """测试 OpenAI API 返回 403 时抛出 AIError"""
         mock_resp = MagicMock()
         mock_resp.status_code = 403
         mock_resp.json.return_value = {"error": {"message": "Account suspended"}}
@@ -1733,13 +1605,11 @@ class TestApiKeyErrors(unittest.TestCase):
         self.assertIn("403", str(ctx.exception))
 
     def testMissingApiKey(self):
-        """测试未设置 API Key 时抛出 AIError"""
         adapter = self.OpenAIAdapter(config=_PROFILE_CONFIG_NO_KEY)
         with self.assertRaises(self.AIError):
             adapter.chat([], model="gpt-4")
 
     def testMissingApiUrl(self):
-        """测试未设置 API URL 时使用默认值 (不抛异常)"""
         cfg = {
             "AI": {
                 "active_profile": "default",
@@ -1751,32 +1621,16 @@ class TestApiKeyErrors(unittest.TestCase):
         self.assertIn("chat/completions", url)
 
 
-class TestNetworkErrors(unittest.TestCase):
-    """网络异常测试"""
-
+class TestNetworkErrors(_ExceptionTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True,
-            psutil=True,
-            pynput=True,
-            keyboard=True,
-            mouse=True,
-            util=True,
-            config=True,
-            file_mod=True,
-        )
+        super().setUp()
         from src.core.AI import OpenAIAdapter, AIError
 
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
     @patch("requests.Session.post")
     def testTimeoutError(self, mock_post):
-        """测试网络超时抛 AIError"""
         mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
 
         adapter = self.OpenAIAdapter(config=_PROFILE_CONFIG_WITH_KEY)
@@ -1786,7 +1640,6 @@ class TestNetworkErrors(unittest.TestCase):
 
     @patch("requests.Session.post")
     def testConnectionError(self, mock_post):
-        """测试网络断开抛 AIError"""
         mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         adapter = self.OpenAIAdapter(config=_PROFILE_CONFIG_WITH_KEY)
@@ -1795,85 +1648,50 @@ class TestNetworkErrors(unittest.TestCase):
         self.assertIn("网络", str(ctx.exception))
 
 
-class TestPluginErrors(unittest.TestCase):
-    """插件异常测试 (使用真实 src.plugin 模块)"""
-
+class TestPluginErrors(_ExceptionTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True,
-            psutil=True,
-            pynput=True,
-            keyboard=True,
-            mouse=True,
-            util=True,
-            config=True,
-            file_mod=True,
-            real_plugin=True,
-        )
+        super().setUp()
+        for p in applyMock(real_plugin=True):
+            self.addCleanup(p.stop)
         from src.plugin import PluginManager
 
         self.PluginManager = PluginManager
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
     def testEnableNonExistentPlugin(self):
-        """测试启用不存在的插件返回 False"""
         mgr = self.PluginManager()
         result = mgr.enablePlugin("nonexistent_plugin")
         self.assertFalse(result)
 
     def testDisableNonExistentPlugin(self):
-        """测试禁用不存在的插件不报错"""
         mgr = self.PluginManager()
         mgr.disablePlugin("nonexistent_plugin")
 
     def testReloadNonExistentPlugin(self):
-        """测试重新加载不存在的插件返回 False"""
         mgr = self.PluginManager()
         result = mgr.reloadPlugin("nonexistent_plugin")
         self.assertFalse(result)
 
     def testLoadPluginClassInvalidName(self):
-        """测试加载无效插件类返回 None"""
         mgr = self.PluginManager()
         result = mgr.loadPluginClass("invalid")
         self.assertIsNone(result)
 
     def testScanCacheAfterFailedLoad(self):
-        """测试加载失败后扫描缓存状态一致"""
         mgr = self.PluginManager()
         mgr.loadPluginClass("invalid")
         self.assertIsNotNone(mgr._scan_cache)
 
 
-class TestModelErrors(unittest.TestCase):
-    """AI 模型异常返回测试"""
-
+class TestModelErrors(_ExceptionTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True,
-            psutil=True,
-            pynput=True,
-            keyboard=True,
-            mouse=True,
-            util=True,
-            config=True,
-            file_mod=True,
-        )
+        super().setUp()
         from src.core.AI import OpenAIAdapter, AIError
 
         self.OpenAIAdapter = OpenAIAdapter
         self.AIError = AIError
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
     @patch("requests.Session.post")
     def testEmptyResponseText(self, mock_post):
-        """测试 AI 返回空文本"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
@@ -1885,7 +1703,6 @@ class TestModelErrors(unittest.TestCase):
 
     @patch("requests.Session.post")
     def testMalformedJsonResponse(self, mock_post):
-        """测试 API 返回非 JSON 数据"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
@@ -1898,7 +1715,6 @@ class TestModelErrors(unittest.TestCase):
 
     @patch("requests.Session.post")
     def testMissingChoicesKey(self, mock_post):
-        """测试 API 返回缺少 choices 字段"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": "123"}
@@ -1909,37 +1725,913 @@ class TestModelErrors(unittest.TestCase):
             adapter.chat([{"role": "user", "content": "hi"}], model="gpt-4")
 
 
-class TestConfigErrors(unittest.TestCase):
-    """配置异常测试"""
-
+class TestConfigErrors(_ExceptionTestBase):
     def setUp(self):
-        self._patchers = applyMock(
-            qt=True,
-            psutil=True,
-            pynput=True,
-            keyboard=True,
-            mouse=True,
-            util=True,
-            config=True,
-            file_mod=True,
-        )
+        super().setUp()
         from src.core.AI import OpenAIAdapter
 
         self.OpenAIAdapter = OpenAIAdapter
 
-    def tearDown(self):
-        for p in self._patchers:
-            p.stop()
-
     def testEmptyConfigReturnsDefaults(self):
-        """测试空配置时返回默认值"""
         adapter = self.OpenAIAdapter(config={})
         self.assertIsNotNone(adapter)
 
     def testPartialConfig(self):
-        """测试部分配置不报错"""
         adapter = self.OpenAIAdapter(config={"AI": {"api_key": "test"}})
         self.assertIsNotNone(adapter)
+
+
+# Group: md (Markdown 处理)
+
+
+class TestExtractToc(unittest.TestCase):
+    """纯逻辑，无需 mock"""
+    from src.core.md import extractToc
+
+    def testEmptyContent(self):
+        self.assertEqual(self.extractToc(""), [])
+
+    def testNoHeadings(self):
+        result = self.extractToc("普通文本\n\n没有标题\n")
+        self.assertEqual(result, [])
+
+    def testSimpleHeadings(self):
+        result = self.extractToc("# H1\n## H2\n### H3")
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["text"], "H1")
+        self.assertEqual(result[0]["level"], 1)
+        self.assertEqual(result[1]["text"], "H2")
+        self.assertEqual(result[1]["level"], 2)
+        self.assertEqual(result[2]["text"], "H3")
+        self.assertEqual(result[2]["level"], 3)
+
+    def testMixedContent(self):
+        content = "# 标题\n\n段落文字\n\n## 子标题\n\n- 列表项\n\n### 三级"
+        result = self.extractToc(content)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["line"], 1)
+        self.assertEqual(result[1]["line"], 5)
+        self.assertEqual(result[2]["line"], 9)
+
+    def testAnchorGeneration(self):
+        content = "# Hello World\n# Hello World\n"
+        result = self.extractToc(content)
+        self.assertEqual(len(result), 2)
+        self.assertNotEqual(result[0]["anchor"], result[1]["anchor"])
+
+    def testChineseHeadings(self):
+        content = "# 中文标题\n## 二级标题\n"
+        result = self.extractToc(content)
+        self.assertEqual(len(result), 2)
+        self.assertIn("中文", result[0]["text"])
+
+    def testLineNumberCorrect(self):
+        content = "开头\n\n# 标题在第3行\n\n中间\n\n## 在第6行"
+        result = self.extractToc(content)
+        self.assertEqual(result[0]["line"], 3)
+        self.assertEqual(result[1]["line"], 7)
+
+
+class TestRenderMarkdown(unittest.TestCase):
+    from src.core.md import renderMarkdown, renderForView
+
+    def setUp(self):
+        for p in applyMock(util=True):
+            self.addCleanup(p.stop)
+
+    def testEmptyString(self):
+        result = self.renderMarkdown("")
+        self.assertIsNotNone(result)
+        self.assertIn("</html>", result)
+
+    def testBasicMarkdown(self):
+        result = self.renderMarkdown("# Hello")
+        self.assertIn("Hello", result)
+        self.assertIn("</html>", result)
+
+    def testCodeBlock(self):
+        result = self.renderMarkdown("```python\nprint('hi')\n```")
+        self.assertIn("hljs", result)
+
+    def testTable(self):
+        result = self.renderMarkdown("| A | B |\n| - | - |\n| 1 | 2 |")
+        self.assertIn("<table>", result)
+
+    def testList(self):
+        result = self.renderMarkdown("- item1\n- item2")
+        self.assertIn("item1", result)
+        self.assertIn("<li>", result)
+
+    def testInlineCode(self):
+        result = self.renderMarkdown("这是 `code` 测试")
+        self.assertIn("<code>", result)
+
+    def testBoldAndItalic(self):
+        result = self.renderMarkdown("**粗体** *斜体*")
+        self.assertIn("<strong>", result)
+        self.assertIn("<em>", result)
+
+    def testLink(self):
+        result = self.renderMarkdown("[GitHub](https://github.com)")
+        self.assertIn('href="https://github.com"', result)
+
+    def testChineseContent(self):
+        result = self.renderMarkdown("你好世界")
+        self.assertIn("你好世界", result)
+
+    def testBlockquote(self):
+        result = self.renderMarkdown("> 引用内容")
+        self.assertIn("<blockquote>", result)
+
+    def testHorizontalRule(self):
+        result = self.renderMarkdown("---")
+        self.assertIn("<hr", result)
+
+    def testNestedList(self):
+        result = self.renderMarkdown("- 一级\n  - 二级")
+        self.assertIn("一级", result)
+        self.assertIn("二级", result)
+
+    def testRenderForViewEmpty(self):
+        html, ok = self.renderForView("")
+        self.assertIsNone(html)
+        self.assertFalse(ok)
+
+    def testRenderForViewValid(self):
+        html, ok = self.renderForView("**bold**")
+        self.assertIsNotNone(html)
+        self.assertTrue(ok)
+        self.assertIn("<strong>", html)
+
+
+# Group: timer (定时器)
+
+
+class TestLRUCache(unittest.TestCase):
+    from src.core.timer import LRUCache
+
+    def setUp(self):
+        for p in applyMock(qt=True, util=True):
+            self.addCleanup(p.stop)
+
+    def testSetAndGet(self):
+        c = self.LRUCache(max_size=3)
+        c.set("a", 1)
+        self.assertEqual(c.get("a"), 1)
+
+    def testGetDefault(self):
+        c = self.LRUCache(max_size=3)
+        self.assertIsNone(c.get("missing"))
+        self.assertEqual(c.get("missing", 42), 42)
+
+    def testEviction(self):
+        c = self.LRUCache(max_size=2)
+        c.set("a", 1)
+        c.set("b", 2)
+        c.set("c", 3)
+        self.assertNotIn("a", c)
+        self.assertIn("b", c)
+        self.assertIn("c", c)
+
+    def testReordering(self):
+        c = self.LRUCache(max_size=2)
+        c.set("a", 1)
+        c.set("b", 2)
+        c.get("a")
+        c.set("c", 3)
+        self.assertIn("a", c)
+        self.assertNotIn("b", c)
+
+    def testClear(self):
+        c = self.LRUCache(max_size=3)
+        c.set("a", 1)
+        c.set("b", 2)
+        c.clear()
+        self.assertEqual(len(c), 0)
+        self.assertNotIn("a", c)
+
+    def testLen(self):
+        c = self.LRUCache(max_size=3)
+        self.assertEqual(len(c), 0)
+        c.set("a", 1)
+        self.assertEqual(len(c), 1)
+        c.set("b", 2)
+        self.assertEqual(len(c), 2)
+
+    def testContains(self):
+        c = self.LRUCache(max_size=3)
+        c.set("key", "val")
+        self.assertTrue("key" in c)
+        self.assertFalse("missing" in c)
+
+    def testZeroMaxSize(self):
+        c = self.LRUCache(max_size=0)
+        c.set("a", 1)
+        self.assertEqual(len(c), 0)
+        self.assertNotIn("a", c)
+
+    def testOverwriteSameKey(self):
+        c = self.LRUCache(max_size=5)
+        c.set("a", 1)
+        c.set("a", 2)
+        self.assertEqual(c.get("a"), 2)
+        self.assertEqual(len(c), 1)
+
+
+class TestWeakCallbackSet(unittest.TestCase):
+    from src.core.timer import WeakCallbackSet
+
+    def setUp(self):
+        for p in applyMock(qt=True, util=True):
+            self.addCleanup(p.stop)
+
+    def testAddAndIterate(self):
+        s = self.WeakCallbackSet()
+        def cb():
+            pass
+        s.add(cb)
+        self.assertEqual(list(s), [cb])
+
+    def testRemove(self):
+        s = self.WeakCallbackSet()
+        def cb():
+            pass
+        s.add(cb)
+        s.remove(cb)
+        self.assertEqual(len(s), 0)
+
+    def testBool(self):
+        s = self.WeakCallbackSet()
+        self.assertFalse(s)
+        def cb():
+            pass
+        s.add(cb)
+        self.assertTrue(s)
+
+    def testLen(self):
+        s = self.WeakCallbackSet()
+        def cb1():
+            pass
+        def cb2():
+            pass
+        s.add(cb1)
+        s.add(cb2)
+        self.assertEqual(len(s), 2)
+        s.remove(cb1)
+        self.assertEqual(len(s), 1)
+
+    def testAddDuplicate(self):
+        s = self.WeakCallbackSet()
+        def cb():
+            pass
+        self.assertTrue(s.add(cb))
+        self.assertIsNotNone(s.add(cb))
+
+    def testRemoveNonExistent(self):
+        s = self.WeakCallbackSet()
+        s.remove(lambda: None)
+
+    def testAddLambda(self):
+        s = self.WeakCallbackSet()
+        s.add(lambda: None)
+        self.assertEqual(len(s), 1)
+
+
+class TestCronField(unittest.TestCase):
+    from src.core.timer import _CronField
+
+    def testStar(self):
+        f = self._CronField("*", 0, 59)
+        self.assertTrue(f.match(0))
+        self.assertTrue(f.match(30))
+        self.assertTrue(f.match(59))
+        self.assertFalse(f.match(-1))
+        self.assertFalse(f.match(60))
+
+    def testSingleValue(self):
+        f = self._CronField("30", 0, 59)
+        self.assertTrue(f.match(30))
+        self.assertFalse(f.match(0))
+        self.assertFalse(f.match(59))
+
+    def testStep(self):
+        f = self._CronField("*/5", 0, 59)
+        self.assertTrue(f.match(0))
+        self.assertTrue(f.match(5))
+        self.assertTrue(f.match(55))
+        self.assertFalse(f.match(3))
+        self.assertFalse(f.match(59))
+
+    def testRange(self):
+        f = self._CronField("10-20", 0, 59)
+        self.assertTrue(f.match(10))
+        self.assertTrue(f.match(15))
+        self.assertTrue(f.match(20))
+        self.assertFalse(f.match(9))
+        self.assertFalse(f.match(21))
+
+    def testMultipleValues(self):
+        f = self._CronField("0,30,45", 0, 59)
+        self.assertTrue(f.match(0))
+        self.assertTrue(f.match(30))
+        self.assertTrue(f.match(45))
+        self.assertFalse(f.match(15))
+
+    def testRangeWithStep(self):
+        f = self._CronField("10-20/5", 0, 59)
+        self.assertTrue(f.match(10))
+        self.assertTrue(f.match(15))
+        self.assertTrue(f.match(20))
+        self.assertFalse(f.match(11))
+
+    def testOutOfRangeRaises(self):
+        with self.assertRaises(ValueError):
+            self._CronField("60", 0, 59)
+
+    def testNextMatch(self):
+        f = self._CronField("10,20,30", 0, 59)
+        self.assertEqual(f.nextMatch(5), 10)
+        self.assertEqual(f.nextMatch(10), 10)
+        self.assertEqual(f.nextMatch(11), 20)
+        self.assertEqual(f.nextMatch(35), None)
+
+    def testDayOfWeek7to0(self):
+        f = self._CronField("0-7", 0, 7)
+        self.assertTrue(f.match(0))
+        self.assertTrue(f.match(7))
+
+
+class TestCronExpr(unittest.TestCase):
+    from datetime import datetime
+    from src.core.timer import _CronExpr
+
+    def testEveryMinute(self):
+        e = self._CronExpr("* * * * *")
+        now = self.datetime(2026, 7, 23, 10, 30)
+        n = e.nextMatch(now)
+        self.assertEqual(n.minute, 31)
+
+    def testSpecificMinute(self):
+        e = self._CronExpr("0 * * * *")
+        now = self.datetime(2026, 7, 23, 10, 30)
+        n = e.nextMatch(now)
+        self.assertEqual(n.minute, 0)
+        self.assertEqual(n.hour, 11)
+
+    def testEvery5Minutes(self):
+        e = self._CronExpr("*/5 * * * *")
+        now = self.datetime(2026, 7, 23, 10, 33)
+        n = e.nextMatch(now)
+        self.assertEqual(n.minute, 35)
+
+    def testHourBoundary(self):
+        e = self._CronExpr("0 * * * *")
+        now = self.datetime(2026, 7, 23, 10, 0)
+        n = e.nextMatch(now)
+        self.assertEqual(n.hour, 11)
+
+    def testDayBoundary(self):
+        e = self._CronExpr("0 0 * * *")
+        now = self.datetime(2026, 7, 23, 10, 0)
+        n = e.nextMatch(now)
+        self.assertEqual(n.hour, 0)
+        self.assertEqual(n.day, 24)
+
+    def testWeekday(self):
+        e = self._CronExpr("0 9 * * 1-5")
+        now = self.datetime(2026, 7, 23, 10, 0)
+        n = e.nextMatch(now)
+        self.assertEqual(n.hour, 9)
+        self.assertEqual(n.day, 24)
+
+    def testInvalidFieldCount(self):
+        with self.assertRaises(ValueError):
+            self._CronExpr("* * * *")
+
+    def testSpecificMonth(self):
+        e = self._CronExpr("0 0 1 1 *")
+        now = self.datetime(2026, 7, 23, 10, 0)
+        n = e.nextMatch(now)
+        self.assertEqual(n.month, 1)
+        self.assertEqual(n.year, 2027)
+
+    def testCronWeekday(self):
+        from src.core.timer import _cronWeekday
+        self.assertEqual(_cronWeekday(2026, 7, 23), 4)
+        self.assertEqual(_cronWeekday(2026, 7, 19), 0)
+
+
+# Group: file (文件工具)
+
+
+class TestCompileRules(unittest.TestCase):
+    from src.file import _compileSingleRule, compileRules, _matchRelPath
+
+    def testEmptyRule(self):
+        self.assertIsNone(self._compileSingleRule(""))
+
+    def testSimpleGlob(self):
+        result = self._compileSingleRule("*.pyc")
+        self.assertIsNotNone(result)
+        pattern, is_dir, root_only = result
+        self.assertFalse(is_dir)
+        self.assertFalse(root_only)
+        self.assertIsNotNone(pattern.match("test.pyc"))
+        self.assertIsNone(pattern.match("test.py"))
+
+    def testDirExclude(self):
+        result = self._compileSingleRule("*/__pycache__/")
+        self.assertIsNotNone(result)
+        pattern, is_dir, root_only = result
+        self.assertTrue(is_dir)
+
+    def testRootOnly(self):
+        result = self._compileSingleRule("/file.txt")
+        self.assertIsNotNone(result)
+        pattern, is_dir, root_only = result
+        self.assertTrue(root_only)
+
+    def testCompileRulesList(self):
+        rules = ["*.pyc", "*.log", ""]
+        compiled = self.compileRules(rules)
+        self.assertEqual(len(compiled), 2)
+
+    def testMatchRelPath(self):
+        pattern, _, _ = self._compileSingleRule("*.pyc")
+        self.assertTrue(self._matchRelPath("test.pyc", pattern, False))
+        self.assertFalse(self._matchRelPath("test.py", pattern, False))
+
+    def testMatchDirOnly(self):
+        pattern, _, _ = self._compileSingleRule("*/git/")
+        self.assertTrue(self._matchRelPath("project/git", pattern, True))
+        self.assertFalse(self._matchRelPath(".gitignore", pattern, True))
+
+
+class TestIsExcluded(unittest.TestCase):
+    from src.file import _compileSingleRule, isExcluded
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.d, ignore_errors=True))
+
+    def testNotExcluded(self):
+        f = os.path.join(self.d, "test.txt")
+        open(f, "w").close()
+        rules = [self._compileSingleRule("*.pyc")]
+        self.assertFalse(self.isExcluded(f, self.d, rules))
+
+    def testExcludedByGlob(self):
+        f = os.path.join(self.d, "test.pyc")
+        open(f, "w").close()
+        rules = [self._compileSingleRule("*.pyc")]
+        self.assertTrue(self.isExcluded(f, self.d, rules))
+
+    def testExcludedDir(self):
+        project = os.path.join(self.d, "project")
+        os.mkdir(project)
+        sub = os.path.join(project, "__pycache__")
+        os.mkdir(sub)
+        rules = [self._compileSingleRule("*/__pycache__/")]
+        self.assertTrue(self.isExcluded(sub, self.d, rules))
+
+    def testRootOnlyRule(self):
+        os.mkdir(os.path.join(self.d, "sub"))
+        f = os.path.join(self.d, "sub", ".git")
+        open(f, "w").close()
+        rules = [self._compileSingleRule("/.git")]
+        self.assertFalse(self.isExcluded(f, self.d, rules))
+
+
+# Group: config (配置)
+
+
+class TestConfigAccess(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True):
+            self.addCleanup(p.stop)
+        from src.config import ConfigManager
+        ConfigManager._instance = None
+        self.cm = ConfigManager()
+
+    def testGetTopLevel(self):
+        self.cm.config = {"theme": "Dark"}
+        self.assertEqual(self.cm.get("theme"), "Dark")
+
+    def testGetNested(self):
+        self.cm.config = {"Edit": {"font_size": 14}}
+        self.assertEqual(self.cm.get("Edit.font_size"), 14)
+
+    def testGetNestedDefault(self):
+        self.cm.config = {}
+        self.assertEqual(self.cm.get("Edit.font_size", 12), 12)
+
+    def testGetMissingDefault(self):
+        self.cm.config = {}
+        self.assertIsNone(self.cm.get("nonexistent"))
+
+    def testSetTopLevel(self):
+        self.cm.config = {}
+        self.cm.set("theme", "Dark")
+        self.assertEqual(self.cm.config["theme"], "Dark")
+
+    def testSetNested(self):
+        self.cm.config = {}
+        self.cm.set("Edit.font_size", 14)
+        self.assertEqual(self.cm.config["Edit"]["font_size"], 14)
+
+    def testSetDeepNested(self):
+        self.cm.config = {}
+        self.cm.set("a.b.c", "deep")
+        self.assertEqual(self.cm.config["a"]["b"]["c"], "deep")
+
+    def testGetPartialPath(self):
+        self.cm.config = {"a": "not_dict"}
+        self.assertIsNone(self.cm.get("a.b"))
+
+    def testDeepUpdate(self):
+        base = {"a": 1, "b": {"c": 2}}
+        update = {"b": {"d": 3}, "e": 4}
+        result = self.cm._deepUpdate(base, update)
+        self.assertEqual(result["a"], 1)
+        self.assertEqual(result["b"]["c"], 2)
+        self.assertEqual(result["b"]["d"], 3)
+        self.assertEqual(result["e"], 4)
+
+
+class TestConfigRecentFav(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True):
+            self.addCleanup(p.stop)
+        from src.config import ConfigManager
+        ConfigManager._instance = None
+        cm = ConfigManager()
+        cm.config = {"Edit": {"recent": [], "favorites": []}}
+        self.cm = cm
+
+    def testAddRecent(self):
+        self.cm.addRecentFile("/path/file.txt")
+        recent = self.cm.get("Edit.recent")
+        self.assertIn(os.path.normpath("/path/file.txt"), recent)
+
+    def testAddRecentDuplicate(self):
+        self.cm.addRecentFile("/path/file.txt")
+        self.cm.addRecentFile("/path/file.txt")
+        recent = self.cm.get("Edit.recent")
+        self.assertEqual(len(recent), 1)
+
+    def testAddRecentMax10(self):
+        for i in range(15):
+            self.cm.addRecentFile(f"/path/file_{i}.txt")
+        recent = self.cm.get("Edit.recent")
+        self.assertLessEqual(len(recent), 10)
+
+    def testAddFavorite(self):
+        self.cm.addFavorite("/path/fav.txt")
+        self.assertTrue(self.cm.isFavorite("/path/fav.txt"))
+
+    def testRemoveFavorite(self):
+        self.cm.addFavorite("/path/fav.txt")
+        self.cm.removeFavorite("/path/fav.txt")
+        self.assertFalse(self.cm.isFavorite("/path/fav.txt"))
+
+    def testIsFavoriteNotFound(self):
+        self.assertFalse(self.cm.isFavorite("/nonexistent"))
+
+    def testAddRecentNormalizesPath(self):
+        self.cm.addRecentFile("C:/path\\file.txt")
+        recent = self.cm.get("Edit.recent")
+        self.assertIn("C:\\path\\file.txt", recent)
+
+
+# Group: input (输入)
+
+
+class TestParseHotkey(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def _listener(self):
+        from src.core.input import GlobalHotkeyListener
+        return GlobalHotkeyListener()
+
+    def testCtrlShiftA(self):
+        l = self._listener()
+        result = l._parseHotkey("ctrl+shift+a")
+        self.assertIsNotNone(result)
+        self.assertIn("ctrl_l", result)
+        self.assertIn("shift_l", result)
+        self.assertIn("a", result)
+
+    def testAltF4(self):
+        l = self._listener()
+        result = l._parseHotkey("alt+f4")
+        self.assertIn("alt_l", result)
+        self.assertIn("f4", result)
+
+    def testWinR(self):
+        l = self._listener()
+        result = l._parseHotkey("win+r")
+        self.assertIn("cmd", result)
+        self.assertIn("r", result)
+
+    def testCaseInsensitive(self):
+        l = self._listener()
+        result = l._parseHotkey("Ctrl+Shift+E")
+        self.assertIn("ctrl_l", result)
+        self.assertIn("shift_l", result)
+        self.assertIn("e", result)
+
+    def testEmptyString(self):
+        l = self._listener()
+        result = l._parseHotkey("")
+        self.assertIsNone(result)
+
+    def testSingleKey(self):
+        l = self._listener()
+        result = l._parseHotkey("f1")
+        self.assertEqual(result, {"f1"})
+
+    def testSuperAlias(self):
+        l = self._listener()
+        result = l._parseHotkey("super+x")
+        self.assertIn("cmd", result)
+        self.assertIn("x", result)
+
+    def testMetaAlias(self):
+        l = self._listener()
+        result = l._parseHotkey("meta+v")
+        self.assertIn("cmd", result)
+        self.assertIn("v", result)
+
+
+class TestCheckHotkey(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def _makeListener(self):
+        from src.core.input import GlobalHotkeyListener
+        l = GlobalHotkeyListener()
+        l._modifier_press_order = ["ctrl_l", "c"]
+        return l
+
+    def testExactMatch(self):
+        l = self._makeListener()
+        hotkey = {"ctrl_l", "c"}
+        pressed = {"ctrl_l", "c", "shift_l"}
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+    def testNoMatchMissingKey(self):
+        l = self._makeListener()
+        hotkey = {"ctrl_l", "c"}
+        pressed = {"ctrl_l"}
+        self.assertFalse(l._checkHotkey(pressed, hotkey))
+
+    def testNoMatchEmptyHotkey(self):
+        l = self._makeListener()
+        self.assertFalse(l._checkHotkey(set(), set()))
+
+    def testCtrlRForCtrlL(self):
+        l = self._makeListener()
+        hotkey = {"ctrl_l", "c"}
+        pressed = {"ctrl_r", "c"}
+        l._modifier_press_order = ["ctrl_r", "c"]
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+    def testNoModifiersMatch(self):
+        l = self._makeListener()
+        hotkey = {"f1"}
+        pressed = {"f1"}
+        l._modifier_press_order = ["f1"]
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+    def testNoneHotkey(self):
+        l = self._makeListener()
+        self.assertFalse(l._checkHotkey({"a"}, None))
+
+    def testAltRForAltL(self):
+        l = self._makeListener()
+        hotkey = {"alt_l", "x"}
+        pressed = {"alt_r", "x"}
+        l._modifier_press_order = ["alt_r", "x"]
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+    def testShiftVariant(self):
+        l = self._makeListener()
+        hotkey = {"shift_l", "a"}
+        pressed = {"shift_r", "a"}
+        l._modifier_press_order = ["shift_r", "a"]
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+
+# Group: resolution (分辨率)
+
+
+class TestParseResolution(unittest.TestCase):
+    from plugin.Resolution import parseResolution
+
+    def testStandard(self):
+        result = self.parseResolution("1920×1080")
+        self.assertEqual(result, (1920, 1080))
+
+    def testAltSeparator(self):
+        result = self.parseResolution("800x600")
+        self.assertIsNone(result)
+
+    def testWithWhitespace(self):
+        result = self.parseResolution("  2560×1440  ")
+        self.assertEqual(result, (2560, 1440))
+
+    def testInvalidText(self):
+        result = self.parseResolution("abc×def")
+        self.assertIsNone(result)
+
+    def testEmptyString(self):
+        result = self.parseResolution("")
+        self.assertIsNone(result)
+
+    def testZeroValue(self):
+        result = self.parseResolution("0×1080")
+        self.assertIsNone(result)
+
+    def testNegativeValue(self):
+        result = self.parseResolution("-1920×1080")
+        self.assertIsNone(result)
+
+    def testPartial(self):
+        result = self.parseResolution("1920×")
+        self.assertIsNone(result)
+
+
+# Group: toolbox (RenameItem)
+
+
+class TestRenameItem(unittest.TestCase):
+    from plugin.ToolBox import RenameItem
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.test_dir, ignore_errors=True))
+        self.file_path = os.path.join(self.test_dir, "hello_world.txt")
+        open(self.file_path, "w").close()
+
+    def testFindReplace(self):
+        item = self.RenameItem(self.file_path)
+        item.applyFindReplace("hello", "hi")
+        self.assertEqual(item.new_name, "hi_world.txt")
+
+    def testFindReplaceCaseSensitive(self):
+        item = self.RenameItem(self.file_path)
+        item.applyFindReplace("Hello", "Hi", case_sensitive=True)
+        self.assertEqual(item.new_name, "hello_world.txt")
+
+    def testFindReplaceCaseInsensitive(self):
+        item = self.RenameItem(self.file_path)
+        item.applyFindReplace("Hello", "Hi", case_sensitive=False)
+        self.assertEqual(item.new_name, "Hi_world.txt")
+
+    def testPrefix(self):
+        item = self.RenameItem(self.file_path)
+        item.applyPrefix("new_")
+        self.assertEqual(item.new_name, "new_hello_world.txt")
+
+    def testSuffix(self):
+        item = self.RenameItem(self.file_path)
+        item.applySuffix("_v2")
+        self.assertEqual(item.new_name, "hello_world_v2.txt")
+
+    def testNumberingPrefix(self):
+        item = self.RenameItem(self.file_path)
+        item.applyNumbering(1, 1, "prefix", 3)
+        self.assertEqual(item.new_name, "001_hello_world.txt")
+
+    def testNumberingSuffix(self):
+        item = self.RenameItem(self.file_path)
+        item.applyNumbering(5, 2, "suffix", 2)
+        self.assertEqual(item.new_name, "hello_world_05.txt")
+
+    def testNumberingReplace(self):
+        item = self.RenameItem(self.file_path)
+        item.applyNumbering(1, 1, "replace", 3)
+        self.assertEqual(item.new_name, "001.txt")
+
+    def testFindReplaceEmptyFind(self):
+        item = self.RenameItem(self.file_path)
+        item.applyFindReplace("", "x")
+        self.assertEqual(item.new_name, "hello_world.txt")
+
+    def testDirectoryPrefix(self):
+        item = self.RenameItem(self.test_dir)
+        item.applyPrefix("pfx_")
+        self.assertEqual(item.new_name, "pfx_" + os.path.basename(self.test_dir))
+
+    def testGetNewPath(self):
+        item = self.RenameItem(self.file_path)
+        item.applyPrefix("new_")
+        expected = os.path.join(self.test_dir, "new_hello_world.txt")
+        self.assertEqual(item.getNewPath(), expected)
+
+
+# Group: update (更新)
+
+
+class TestGetReleaseInfo(unittest.TestCase):
+    from src.core.update import getReleaseInfo
+
+    @patch("requests.get")
+    def testSuccess(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "tag_name": "v1.2.3",
+            "body": "Release notes",
+            "assets": [{"name": "O.exe"}]
+        }
+        mock_get.return_value = mock_resp
+        result = self.getReleaseInfo("https://example.com/release")
+        self.assertIsNotNone(result)
+        self.assertEqual(result["version"], "1.2.3")
+        self.assertEqual(result["body"], "Release notes")
+        self.assertEqual(len(result["assets"]), 1)
+
+    @patch("requests.get")
+    def testNetworkError(self, mock_get):
+        mock_get.side_effect = requests.exceptions.RequestException("timeout")
+        result = self.getReleaseInfo("https://example.com/release")
+        self.assertIsNone(result)
+
+    @patch("requests.get")
+    def testBadJson(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
+        mock_get.return_value = mock_resp
+        result = self.getReleaseInfo("https://example.com/release")
+        self.assertIsNone(result)
+
+    @patch("requests.get")
+    def testMissingTag(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"body": "notes"}
+        mock_get.return_value = mock_resp
+        result = self.getReleaseInfo("https://example.com/release")
+        self.assertIsNone(result)
+
+    @patch("requests.get")
+    def testHttpError(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.raise_for_status.side_effect = requests.exceptions.RequestException("404")
+        mock_get.return_value = mock_resp
+        result = self.getReleaseInfo("https://example.com/release")
+        self.assertIsNone(result)
+
+
+class TestExtractUpdate(unittest.TestCase):
+    from src.core.update import extractUpdate
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(self.test_dir, ignore_errors=True))
+        self.zip_path = self.test_dir / "update.zip"
+        self.extract_dir = self.test_dir / "extracted"
+
+    def testExtractValidZip(self):
+        with zipfile.ZipFile(self.zip_path, "w") as zf:
+            zf.writestr("file1.txt", "hello")
+            zf.writestr("sub/file2.txt", "world")
+        result = self.extractUpdate(self.zip_path, self.extract_dir)
+        self.assertTrue(result)
+        self.assertTrue((self.extract_dir / "file1.txt").exists())
+        self.assertTrue((self.extract_dir / "sub" / "file2.txt").exists())
+        self.assertEqual((self.extract_dir / "file1.txt").read_text(), "hello")
+
+    def testExtractBadZip(self):
+        self.zip_path.write_bytes(b"not a zip file")
+        result = self.extractUpdate(self.zip_path, self.extract_dir)
+        self.assertFalse(result)
+
+    def testExtractOverwritesExisting(self):
+        self.extract_dir.mkdir()
+        (self.extract_dir / "old.txt").write_text("old")
+        with zipfile.ZipFile(self.zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+        result = self.extractUpdate(self.zip_path, self.extract_dir)
+        self.assertTrue(result)
+        self.assertTrue((self.extract_dir / "new.txt").exists())
+        self.assertFalse((self.extract_dir / "old.txt").exists())
+
+    def testNonExistentZip(self):
+        result = self.extractUpdate(self.test_dir / "nonexistent.zip", self.extract_dir)
+        self.assertFalse(result)
+
+    def testEmptyZip(self):
+        with zipfile.ZipFile(self.zip_path, "w") as zf:
+            pass
+        result = self.extractUpdate(self.zip_path, self.extract_dir)
+        self.assertTrue(result)
 
 
 # CLI + 测试编排
@@ -2028,8 +2720,80 @@ _register(
     "异常测试 (API Key, 网络, 插件, 文件, 模型, 配置)",
 )
 
+_register(
+    "md",
+    [
+        TestExtractToc,
+        TestRenderMarkdown,
+    ],
+    "Markdown 处理 (extractToc, renderMarkdown)",
+)
 
-# 内存调试工具 (用于 --launch / -m)
+_register(
+    "timer",
+    [
+        TestLRUCache,
+        TestWeakCallbackSet,
+        TestCronField,
+        TestCronExpr,
+    ],
+    "定时器 (LRUCache, WeakCallbackSet, CronField, CronExpr)",
+)
+
+_register(
+    "file",
+    [
+        TestCompileRules,
+        TestIsExcluded,
+    ],
+    "文件工具 (compileRules, isExcluded)",
+)
+
+_register(
+    "config",
+    [
+        TestConfigAccess,
+        TestConfigRecentFav,
+    ],
+    "配置管理 (get/set, recent, favorites)",
+)
+
+_register(
+    "input",
+    [
+        TestParseHotkey,
+        TestCheckHotkey,
+    ],
+    "输入处理 (parseHotkey, checkHotkey)",
+)
+
+_register(
+    "resolution",
+    [
+        TestParseResolution,
+    ],
+    "分辨率 (self.parseResolution)",
+)
+
+_register(
+    "toolbox",
+    [
+        TestRenameItem,
+    ],
+    "工具箱 (RenameItem)",
+)
+
+_register(
+    "update",
+    [
+        TestGetReleaseInfo,
+        TestExtractUpdate,
+    ],
+    "更新 (getReleaseInfo, extractUpdate)",
+)
+
+
+# 内存调试工具 (用于 -m)
 
 
 class _MemState:
@@ -2043,7 +2807,7 @@ _MEM = _MemState()
 
 def _memInit():
     """初始化 tracemalloc 追踪"""
-    import tracemalloc
+    gc.collect()
 
     tracemalloc.start()
     _MEM.started = True
@@ -2052,12 +2816,24 @@ def _memInit():
     logger.info("tracemalloc 追踪已启动")
 
 
+def _gcTypeStats():
+    """统计 gc 中存活对象按类型分布 TOP10 + Qt 类型汇总"""
+    from collections import Counter
+
+    counter = Counter(type(o).__name__ for o in gc.get_objects())
+    qt_total = sum(v for k, v in counter.items() if k.startswith(("Q", "Py")))
+    top = counter.most_common(10)
+    logger.info(f"--- gc 对象 TOP10 (Qt 共 {qt_total} 个) ---")
+    for name, count in top:
+        logger.info(f"  {name}: {count}")
+
+
 def _memTakeSnapshot():
-    """拍快照并输出内存总量 TOP20"""
+    """拍快照并输出内存总量 TOP20 + gc 类型分布"""
     if not _MEM.started:
         return
-    import tracemalloc
 
+    gc.collect()
     current = tracemalloc.take_snapshot()
     _MEM.count += 1
 
@@ -2079,6 +2855,7 @@ def _memTakeSnapshot():
         )
     for i, stat in enumerate(stats[:20]):
         logger.info(f"  #{i+1} {stat}")
+    _gcTypeStats()
 
 
 def _countQtObjects(widget, max_depth=20):
@@ -2111,18 +2888,16 @@ def _logQtObjects(widget):
 def _patchMainWindow():
     """给 MainWindow.__init__ 打补丁，注入内存追踪和 Qt 对象计数定时器"""
     from src.main import MainWindow
-    from PySide6.QtCore import QTimer
 
     original_init = MainWindow.__init__
 
     def patchedInit(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        self._mem_toggle = False
         timer = QTimer(self)
         timer.timeout.connect(
             lambda: (
-                _memTakeSnapshot() if self._mem_toggle else _logQtObjects(self),
-                setattr(self, "_mem_toggle", not self._mem_toggle),
+                _memTakeSnapshot(),
+                _logQtObjects(self),
             )
         )
         timer.start(5000)
@@ -2140,37 +2915,23 @@ def main():
         parser.add_argument(
             f"--{name}", action="store_true", help=f'{info["description"]} ({info["count"]} 个测试)'
         )
-    parser.add_argument("--list", action="store_true", help="列出所有测试组")
-    parser.add_argument("--launch", action="store_true", help="启动程序本体")
+    parser.add_argument("--all", action="store_true", help="运行全部测试")
     parser.add_argument("-m", "--me", action="store_true", help="启动程序本体并启用内存追踪")
 
     args = parser.parse_args()
 
-    if args.launch or args.me:
-        test_flags = {"--launch", "-m"}
-        sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a not in test_flags]
-
-        if args.me:
-            _memInit()
-
+    if args.me:
+        _memInit()
+        sys.argv = [sys.argv[0]]
         from o import main as launch_app
-
-        if args.me:
-            _patchMainWindow()
-
+        _patchMainWindow()
         launch_app()
         return
 
-    if args.list:
-        print(f"{'组名':<12} {'测试数':<8} 说明")
-        print("-" * 50)
-        for name, info in sorted(_GROUP_REGISTRY.items()):
-            print(f"{name:<12} {info['count']:<8} {info['description']}")
-        total = sum(info["count"] for info in _GROUP_REGISTRY.values())
-        print(f"\n总计: {total} 个测试")
-        return
-
-    selected = [name for name in _GROUP_REGISTRY if getattr(args, name)]
+    if args.all:
+        selected = list(_GROUP_REGISTRY.keys())
+    else:
+        selected = [name for name in _GROUP_REGISTRY if getattr(args, name)]
 
     if not selected:
         parser.print_help()

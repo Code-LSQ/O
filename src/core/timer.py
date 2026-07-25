@@ -113,9 +113,15 @@ class LRUCache:
         self._max_size = max_size
     
     def get(self, key, default=None):
-        return self._cache.get(key, default)
+        if key in self._cache:
+            self._order.remove(key)
+            self._order.append(key)
+            return self._cache[key]
+        return default
     
     def set(self, key, value):
+        if self._max_size <= 0:
+            return
         if key in self._cache:
             self._order.remove(key)
         elif len(self._cache) >= self._max_size:
@@ -246,8 +252,10 @@ class _CronExpr:
                 else:
                     match = (self._days_of_month.match(try_d)
                              or self._days_of_week.match(_cronWeekday(y, mo, try_d)))
-                if match and try_d > d:
-                    d = try_d; h = 0; mi = 0
+                if match:
+                    if try_d > d:
+                        h = 0; mi = 0
+                    d = try_d
                     day_ok = True
                     break
             if not day_ok:
