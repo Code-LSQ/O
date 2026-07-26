@@ -1822,6 +1822,8 @@ class MainWindow(WindowControl, QMainWindow):
         # 更新窗口置顶状态
         self._keepTop()
         
+        self._usage_monitor.stop()
+
         # 始终重建UI以确保事件过滤器正确安装/卸载
         old_widget = self.centralWidget()
         if old_widget:

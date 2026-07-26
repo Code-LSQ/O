@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 from src.config import SettingsDialog, getConfig
 from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, showFile, ENCODING_MAP
 from src.system import setMenu, isMenuRegister
-from src.file import ArchiveItemModel, FolderPanelManager, createBackup
+from src.file import FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
@@ -106,7 +106,6 @@ class EditorWindow(WindowControl, QMainWindow):
         # 左侧文件夹视图（延迟创建）
         self._folder_panel_wrapper = None
         self._folder_placeholder = None
-        self.archive_model = ArchiveItemModel()
         
         # 编辑器区域
         editor_widget = QWidget()
@@ -469,24 +468,7 @@ class EditorWindow(WindowControl, QMainWindow):
 
         self.tab_widget.removeTab(index)
 
-        editor.text_edit.setZoomCallback(None)
-        editor.text_edit.removeEventFilter(editor)
-        editor.text_edit._parent_tab = None
-
-        for mode, handler in list(editor.handlers.items()):
-            handler.deactivate(editor)
-            handler.close(editor)
-        editor.handlers.clear()
-
-        editor._markdown_cache.clear()
-        editor._page_buffer.clear()
-
-        if editor.highlighter:
-            editor.highlighter.setDocument(None)
-            editor.highlighter.deleteLater()
-            editor.highlighter = None
-
-        editor.text_edit.setDocument(None)
+        editor.cleanup()
         editor.deleteLater()
         
         self._toc_panel.hidePanel()
@@ -987,12 +969,27 @@ class EditorWindow(WindowControl, QMainWindow):
         if self._checkUnsavedFiles(editors):
             event.ignore()
             return
-        
+
+        for editor in editors:
+            editor.cleanup()
+
+        if self.auto_save_timer:
+            self.auto_save_timer.stop()
+            self.auto_save_timer.deleteLater()
+            self.auto_save_timer = None
+
+        self._usage_monitor.stop()
+
+        folder = self.config.get("Edit.folder", "")
+        self._folder_panel_manager.close()
+        if folder:
+            self.config.set("Edit.folder", folder)
+
         self.config.updateWindowGeometry(self.geometry())
         self._saveCursorPositions()
         self._saveOpenFiles()
         self.config.save()
-        
+
         event.accept()
     
     def removeEmptyLines(self):

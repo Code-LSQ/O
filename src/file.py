@@ -1,8 +1,8 @@
 import os
 import re
+import time
 import shutil
 import fnmatch
-import time
 from pathlib import Path
 from functools import partial
 from typing import Tuple, Optional
@@ -767,6 +767,8 @@ class FolderPanelManager:
             self.panel.setParent(None)
             self.panel.deleteLater()
             self.panel = None
+            if self.model:
+                self.model.deleteLater()
             self.model = None
             self.tree = None
             self.header = None

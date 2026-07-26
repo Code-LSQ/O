@@ -3,6 +3,7 @@ import os
 import sys
 import re
 import json
+import time
 import base64
 import hashlib
 import logging
@@ -807,58 +808,145 @@ def formatFileSize(size: int) -> str:
         return f"{size / (1024 ** 4):.2f} TB"
 
 
-def download(url: str, path: Path, report=None):
-    """下载文件，path 若为文件夹路径，则尝试从服务器获取文件名，若为指定的文件路径，则直接下载为该路径，若已存在，则需重命名为 name(1).zip 类似。
-    从 HTTP 响应获取文件的最后修改时间，作为 os.utime() 的参数，格式为 Unix 时间戳"""
-    try:
-        response = requests.get(url, timeout=10, stream=True)
-        response.raise_for_status()
-        disposition = response.headers.get("Content-Disposition")
-        size_str = response.headers.get("Content-Length")
-        size = int(size_str) if size_str else 0
-        last_modified = response.headers.get("Last-Modified")
-        downloaded = 0
+RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
-        if path.is_dir():
-            name = None
-            if disposition and "filename=" in disposition:
-                name = disposition.split("filename=")[1].strip("'\"")
-            if not name:
-                name = Path(urlparse(url).path).name or "download"
-            path = path / name
 
-        # 到这里则 path 一定是文件了
-        if path.exists():
-            stem = path.stem
-            suffix = path.suffix
-            counter = 1
-            while path.exists():
-                path = path.with_name(f"{stem}({counter}){suffix}")
-                counter += 1
+def download(url: str, path: Path, report=None, retry: int = 3):
+    """下载文件，支持断点续传和自动重试。
 
-        with open(path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if report:
-                        report(downloaded, size)
+    path 若为文件夹路径，则从 URL 自动提取文件名。
+    断点续传使用 .part 文件实现，下载完成后自动重命名。
+    重试间隔 3 秒，404/403/401 不重试。"""
+    if path.is_dir():
+        name = _extractFilename(url)
+        if not name:
+            return False
+        path = path / name
 
-        if last_modified:
-            dt = datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z")
-            timestamp = dt.timestamp()
-            os.utime(path, [timestamp, timestamp])
-            time_info = dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-            logger.info(f"{path} 的最后修改时间为 {time_info}")
-        else:
-            logger.info("服务器未返回最后修改时间")
+    part_path = path.with_name(path.name + ".part")
+    offset = part_path.stat().st_size if part_path.exists() else 0
+    if offset > 0:
+        logger.info(f"续传 {path.name}，已下载 {offset} bytes")
 
-        return True
-    except requests.exceptions.RequestException:
-        logger.exception("网络错误")
-    except Exception:
-        logger.exception("未知下载错误")
+    last_error = None
+    retry_interval = 3
+
+    for attempt in range(retry + 1):
+        if attempt > 0:
+            logger.info(f"{retry_interval}s 后第 {attempt}/{retry} 次重试，原因: {last_error}")
+            time.sleep(retry_interval)
+            offset = part_path.stat().st_size if part_path.exists() else 0
+            if offset == 0 and part_path.exists():
+                part_path.unlink()
+
+        headers = {"Range": f"bytes={offset}-"} if offset > 0 else {}
+        try:
+            response = requests.get(url, headers=headers, timeout=30, stream=True)
+
+            if response.status_code == 416:
+                logger.warning("服务器文件已变化，从头下载")
+                offset = 0
+                response = requests.get(url, timeout=30, stream=True)
+
+            if response.status_code == 206:
+                pass
+            elif response.status_code == 200:
+                if offset > 0:
+                    logger.warning("服务器不支持断点续传，从头下载")
+                offset = 0
+            else:
+                if response.status_code in RETRYABLE_STATUSES:
+                    last_error = f"HTTP {response.status_code}"
+                    continue
+                response.raise_for_status()
+
+            total = _getDownloadSize(response, offset)
+            last_modified = response.headers.get("Last-Modified")
+            mode = "wb" if offset == 0 else "ab"
+
+            if mode == "wb":
+                offset = 0
+
+            downloaded = offset
+            if report and offset > 0:
+                report(offset, total)
+            with open(part_path, mode) as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if report:
+                            report(downloaded, total)
+
+            # 下载完成，替换目标文件
+            if path.exists():
+                path.unlink()
+            part_path.rename(path)
+
+            if last_modified:
+                _setFileMtime(path, last_modified)
+
+            logger.info(f"下载完成: {path}")
+            return True
+
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else 0
+            if status in RETRYABLE_STATUSES:
+                last_error = f"HTTP {status}"
+                continue
+            logger.exception("HTTP 错误")
+            return False
+
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ChunkedEncodingError) as e:
+            last_error = str(e)
+            continue
+
+        except OSError:
+            logger.exception("文件写入错误")
+            return False
+
+        except Exception:
+            logger.exception("下载错误")
+            return False
+
+    logger.error(f"下载失败，已重试 {retry} 次: {last_error}")
     return False
+
+
+def _extractFilename(url: str) -> str:
+    try:
+        resp = requests.head(url, timeout=10)
+        disp = resp.headers.get("Content-Disposition")
+        if disp and "filename=" in disp:
+            name = disp.split("filename=")[1].strip("'\"")
+            if name:
+                return name
+    except Exception:
+        pass
+    return Path(urlparse(url).path).name or ""
+
+
+def _getDownloadSize(response: requests.Response, offset: int) -> int:
+    cr = response.headers.get("Content-Range")
+    if cr:
+        try:
+            return int(cr.split("/")[1])
+        except (IndexError, ValueError):
+            pass
+    cl = response.headers.get("Content-Length")
+    if cl:
+        return int(cl) + offset
+    return 0
+
+
+def _setFileMtime(path: Path, last_modified: str):
+    try:
+        dt = datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z")
+        os.utime(path, [dt.timestamp(), dt.timestamp()])
+    except (ValueError, OSError):
+        pass
 
 
 def urlConvert(url: str):

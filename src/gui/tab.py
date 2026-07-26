@@ -4,13 +4,13 @@ import webbrowser
 from urllib import parse
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QPlainTextEdit, QTextEdit, QMenu
-from PySide6.QtCore import Qt, Signal, QEvent, QRect
+from PySide6.QtCore import Qt, Signal, QEvent, QRect, QObject
 from PySide6.QtGui import QTextCursor, QTextDocument, QPainter, QColor, QTextCharFormat, QAction, QKeySequence, QPalette, qGray
 
 from src.config import getConfig, DEFAULT_CONFIG
 from src.util import logger, EXTENSION, messageBox, urlToPath, tr, inputDialog
-from src.core.syntax import createHighlighter
 from src.core.timer import LRUCache
+from src.gui.syntax import createHighlighter
 from src.gui.view import ViewMode, listArchive, readFileLimit, addImageResource
 
 
@@ -846,10 +846,32 @@ class EditorTab(QWidget):
                         self.file_opened.emit(file_path)
                     event.acceptProposedAction()
 
+    def cleanup(self):
+        self.text_edit.setZoomCallback(None)
+        self.text_edit.removeEventFilter(self)
+        self.text_edit._parent_tab = None
+
+        for mode, handler in list(self.handlers.items()):
+            handler.deactivate(self)
+            handler.close(self)
+        self.handlers.clear()
+
+        self._original_content = ""
+        self._markdown_cache.clear()
+        self._page_buffer.clear()
+
+        if self.highlighter:
+            self.highlighter.setDocument(None)
+            self.highlighter.deleteLater()
+            self.highlighter = None
+
     def getHandler(self, mode):
         if mode not in self.handlers:
             cls = ViewMode._HANDLERS[mode]
-            self.handlers[mode] = cls()
+            handler = cls()
+            if isinstance(handler, QObject):
+                handler.setParent(self)
+            self.handlers[mode] = handler
         return self.handlers[mode]
 
     def _onTextChanged(self):
