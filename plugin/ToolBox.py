@@ -1068,15 +1068,21 @@ class ToolBoxSettings(QWidget):
         layout.addRow("快速文本", self._qt_list)
 
         qt_btn_h = QHBoxLayout()
-        qt_add = QPushButton("添加")
+        qt_add = QPushButton("新建")
         qt_add.clicked.connect(self._qtAdd)
         qt_edit = QPushButton("编辑")
         qt_edit.clicked.connect(self._qtEdit)
         qt_del = QPushButton("删除")
         qt_del.clicked.connect(self._qtDel)
+        qt_up = QPushButton("上移")
+        qt_up.clicked.connect(self._qtUp)
+        qt_down = QPushButton("下移")
+        qt_down.clicked.connect(self._qtDown)
         qt_btn_h.addWidget(qt_add)
         qt_btn_h.addWidget(qt_edit)
         qt_btn_h.addWidget(qt_del)
+        qt_btn_h.addWidget(qt_up)
+        qt_btn_h.addWidget(qt_down)
         qt_btn_h.addStretch()
         layout.addRow("", qt_btn_h)
 
@@ -1158,6 +1164,34 @@ class ToolBoxSettings(QWidget):
         if current:
             row = self._qt_list.row(current)
             self._qt_list.takeItem(row)
+
+    def _qtUp(self):
+        current = self._qt_list.currentItem()
+        if not current:
+            return
+        row = self._qt_list.row(current)
+        if row <= 0:
+            return
+        self._qtSwapItems(row, row - 1)
+        self._qt_list.setCurrentRow(row - 1)
+
+    def _qtDown(self):
+        current = self._qt_list.currentItem()
+        if not current:
+            return
+        row = self._qt_list.row(current)
+        if row < 0 or row >= self._qt_list.count() - 1:
+            return
+        self._qtSwapItems(row, row + 1)
+        self._qt_list.setCurrentRow(row + 1)
+
+    def _qtSwapItems(self, a: int, b: int):
+        if a > b:
+            a, b = b, a
+        item_a = self._qt_list.takeItem(a)
+        item_b = self._qt_list.takeItem(b - 1)
+        self._qt_list.insertItem(a, item_b)
+        self._qt_list.insertItem(b, item_a)
 
     def getSetting(self) -> dict:
         self.settings["scroll.speed"] = self.scroll_speed.value()

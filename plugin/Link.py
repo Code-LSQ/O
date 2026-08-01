@@ -105,6 +105,8 @@ class LinkManage(QDialog):
         button_layout.addWidget(self.pair_manage.add_btn)
         button_layout.addWidget(self.pair_manage.edit_btn)
         button_layout.addWidget(self.pair_manage.delete_btn)
+        button_layout.addWidget(self.pair_manage.up_btn)
+        button_layout.addWidget(self.pair_manage.down_btn)
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
 
@@ -114,6 +116,8 @@ class LinkManage(QDialog):
         self.pair_manage.add_btn.clicked.connect(self.add)
         self.pair_manage.edit_btn.clicked.connect(self.edit)
         self.pair_manage.delete_btn.clicked.connect(self.delete)
+        self.pair_manage.up_btn.clicked.connect(self.pair_manage.moveUp)
+        self.pair_manage.down_btn.clicked.connect(self.pair_manage.moveDown)
 
     def closeEvent(self, event):
         """对话框关闭时保存配置"""

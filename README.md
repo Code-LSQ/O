@@ -211,7 +211,7 @@ https://github.com/OpenListTeam/OpenList/releases
 
 语言文件在 O/src/lang/ ，第一个键 "翻译"，它的值表明这个文件对应的语言。
 
-主题文件存放在 O/src/theme/ ，如果主题需要使用白色的最大化图标，将主题名加入 getMaxIcon 函数中的集合。
+主题文件存放在 O/src/theme/ ，如果主题需要使用白色的最大化图标，将主题名加入 getMaxIcon 函数中的集合。暗色主题（Dark/Aurora_Dark/Modern_Dark）已默认加入。
 
 
 ### 感谢名单

@@ -154,7 +154,7 @@ class FindReplaceDialog(QDialog):
             pair_list.addItem(item)
 
         btn_layout = QHBoxLayout()
-        add_btn = QPushButton(tr("添加"))
+        add_btn = QPushButton(tr("新建"))
         edit_btn = QPushButton(tr("编辑"))
         delete_btn = QPushButton(tr("删除"))
         btn_layout.addWidget(add_btn)
@@ -186,7 +186,7 @@ class FindReplaceDialog(QDialog):
                 return False, tr("验证错误") + ": " + str(e)
 
         def addItem():
-            result = dictDialog(dialog, tr("添加"), name=tr("名称"), value=tr("规则"),
+            result = dictDialog(dialog, tr("新建"), name=tr("名称"), value=tr("规则"),
                                 name_text="",
                                 value_text='["find1","replace1"],["find2","replace2"]',
                                 textedit=True)

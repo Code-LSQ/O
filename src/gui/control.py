@@ -8,7 +8,7 @@ from src.config import DEFAULT_CONFIG, getConfig
 from src.gui.view import ViewMode
 
 def getMaxIcon(theme="Light"):
-    suffix = "-wh" if theme in {"Dark", "UI_Dark"} else ""
+    suffix = "-wh" if theme in {"Dark", "Aurora_Dark", "Modern_Dark"} else ""
     # 如果主题在这个集合中，使用白色的最大化图标，否则使用黑色的
 
     max_icon = QIcon(str(icon_dir / f"max{suffix}.svg"))

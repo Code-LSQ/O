@@ -396,7 +396,7 @@ class EditTool(QDialog):
         super().__init__(parent)
         self.tool_data = tool_data or {}
         self.setMinimumWidth(450)
-        self.setWindowTitle(tr("添加"))
+        self.setWindowTitle(tr("编辑") if self.tool_data else tr("新建"))
         self.setWindowFlags(Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._setupUI()
@@ -811,17 +811,33 @@ class MainWindow(WindowControl, QMainWindow):
             window = self
         try:
             theme = self.config.get("theme", "Light")
-            theme_name = theme.capitalize()
-            theme_file = theme_dir / f"{theme_name}.qss"
-            if not theme_file.exists():
-                return
-            with open(theme_file, "r", encoding="utf-8") as f:
-                style = f.read()
-            current = window.styleSheet()
-            if style != current:
-                window.setStyleSheet(style)
-                if isinstance(window, WindowControl):
-                    window.updateIcons(theme)
+            theme_file = theme_dir / f"{theme}.qss"
+            if theme_file.exists():
+                with open(theme_file, "r", encoding="utf-8") as f:
+                    style = f.read()
+                current = window.styleSheet()
+                if style != current:
+                    window.setStyleSheet(style)
+                    if isinstance(window, WindowControl):
+                        window.updateIcons(theme)
+
+            # 背景图 — 仅主窗口
+            if window is self:
+                bg = self.config.get("Launch.bg_image", "")
+                if bg and Path(bg).exists():
+                    bg_qss = (
+                        f'QMainWindow {{ background-image: url("{bg.replace(chr(92), "/")}");'
+                        f" background-repeat: no-repeat; background-position: center; }}\n"
+                        f"QWidget#launcher_root, QWidget#launcher_tools, "
+                        f"QWidget#launcher_content, QWidget#tools_inner, "
+                        f"QWidget#title_bar, QFrame#group_frame, QScrollArea#tools_scroll "
+                        f"{{ background: transparent; }}"
+                    )
+                    window.setStyleSheet(window.styleSheet() + "\n" + bg_qss)
+
+            # 透明度
+            opacity = self.config.get("Launch.opacity", 1.0)
+            window.setWindowOpacity(opacity)
         except Exception:
             logger.exception("应用主题失败")
 
@@ -896,6 +912,7 @@ class MainWindow(WindowControl, QMainWindow):
         self.setWindowFlags(flags)
         
         central_widget = QWidget()
+        central_widget.setObjectName("launcher_root")
         self.setCentralWidget(central_widget)
         
         main_layout = QVBoxLayout(central_widget)
@@ -1165,6 +1182,7 @@ class MainWindow(WindowControl, QMainWindow):
         scroll_area.dropEvent = lambda e: self.dropEvent(e)
         
         self.tools_widget = QWidget()
+        self.tools_widget.setObjectName("tools_inner")
         self.tools_widget.setAcceptDrops(True)
         self.tools_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tools_widget.customContextMenuRequested.connect(self._emptyMenu)
@@ -1829,6 +1847,7 @@ class MainWindow(WindowControl, QMainWindow):
         if old_widget:
             old_widget.deleteLater()
         self._setupUI()
+        self.applyTheme()
         QTimer.singleShot(0, self.refreshTool)
     
     def _keepTop(self):

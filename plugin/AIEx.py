@@ -324,7 +324,7 @@ class AIExtendPlugin(PluginBase):
         layout.addWidget(self._settings_prompt_list)
 
         prompt_btn_row = QHBoxLayout()
-        add_prompt_btn = QPushButton(tr("添加"))
+        add_prompt_btn = QPushButton(tr("新建"))
         add_prompt_btn.clicked.connect(self._settingsPromptAdd)
         prompt_btn_row.addWidget(add_prompt_btn)
         edit_prompt_btn = QPushButton(tr("编辑"))

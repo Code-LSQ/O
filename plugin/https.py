@@ -703,7 +703,6 @@ class HTTPDialog(QDialog):
 
         self.send_edit = QTextEdit()
         self.send_edit.setMaximumHeight(100)
-        self.send_edit.setStyleSheet("background: #eeeeee")
 
         self.send_btn = QPushButton("发送")
         self.send_btn.clicked.connect(self._sendData)
@@ -722,7 +721,6 @@ class HTTPDialog(QDialog):
 
         self.recv_edit = QTextEdit()
         self.recv_edit.setMaximumHeight(150)
-        self.recv_edit.setStyleSheet("background: #eeeeee")
         self.recv_edit.setReadOnly(True)
 
         clear_recv_btn = QPushButton("清空")
@@ -739,7 +737,7 @@ class HTTPDialog(QDialog):
         layout.addWidget(content)
 
         bottom_bar = QFrame()
-        bottom_bar.setObjectName("title_bar")
+        bottom_bar.setObjectName("bottom_bar")
         bottom_layout = QHBoxLayout(bottom_bar)
 
         self.start_btn = QPushButton("启动服务")

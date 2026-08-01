@@ -4,7 +4,7 @@ import json
 import tempfile
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame
+from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame, QSlider
 from PySide6.QtCore import Signal, Qt, QSize
 
 from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
@@ -41,6 +41,8 @@ DEFAULT_CONFIG = {
         "height": 400,
         "x": None,
         "y": None,
+        "opacity": 1.0,
+        "bg_image": "",
         "tools": {}
     },
     "Edit": {
@@ -334,6 +336,24 @@ class SettingsDialog(QDialog):
             self.theme_combo.setCurrentIndex(idx)
         layout.addRow(tr("主题"), self.theme_combo)
 
+        # 背景图
+        self.bg_image_edit, self.bg_image_browse = filePathWidget(
+            self, layout, tr("背景图"), tr("选择背景图片"),
+            tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.gif);;" + tr("所有文件") + " (*)")
+        self.bg_image_edit.setText(self.config.get("Launch.bg_image", ""))
+
+        # 透明度
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(30, 100)
+        self.opacity_slider.setValue(int(self.config.get("Launch.opacity", 1.0) * 100))
+        self.opacity_label = QLabel(f"{self.opacity_slider.value()}%")
+        self.opacity_slider.valueChanged.connect(
+            lambda v: self.opacity_label.setText(f"{v}%"))
+        opacity_layout = QHBoxLayout()
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        layout.addRow(tr("透明度"), opacity_layout)
+
         self.font_family_edit = QFontComboBox()
         self.font_family_edit.setCurrentText(self.config.get("font_family", "微软雅黑"))
         layout.addRow(tr("字体"), self.font_family_edit)
@@ -592,7 +612,7 @@ class SettingsDialog(QDialog):
         layout.addRow(self.search_engines_list)
 
         engine_btn_layout = QHBoxLayout()
-        self.add_engine_btn = QPushButton(tr("添加"))
+        self.add_engine_btn = QPushButton(tr("新建"))
         self.add_engine_btn.clicked.connect(self._addEngine)
         engine_btn_layout.addWidget(self.add_engine_btn)
 
@@ -708,6 +728,8 @@ class SettingsDialog(QDialog):
             "Edit.auto_save": self.auto_save_check.isChecked(),
             "Edit.auto_save_interval": self.auto_save_interval.value(),
             "Edit.shortcuts": shortcuts,
+            "Launch.bg_image": self.bg_image_edit.text().strip(),
+            "Launch.opacity": self.opacity_slider.value() / 100,
             "extra_plugin": self.extra_plugin_edit.text().strip(),
             "Plugin": self.config.get("Plugin", {}),
             "Edit.engine": self.searchEngine()

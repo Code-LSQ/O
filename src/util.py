@@ -447,7 +447,7 @@ def tr(key: str) -> str:
 
     文本中的英文与中文之间、专有名词与其他字符之间、字符串与变量之间，要有空格，不要在翻译中加，用 " " 拼接。如 tr("文本") + " " + var 或 var + " " + tr("文本") 拼接。专有名词与特殊字符相邻，可以合并。如 "API " + tr("接口")，tr("最大") + " Token"。
 
-    统一中文表述，尽可能减少相似度较高的翻译，对其进行复用。
+    统一中文表述，尽可能减少相似度较高的翻译，对其进行复用。如不再出现单独的 "添加"，统一使用 "新建" ，但在句子中允许出现 "添加"。
 
     """
     return Translator().tr(key)
@@ -1236,6 +1236,7 @@ def activateWidget(cls):
     return False
 
 
+# 原有的 ManagePair 类考虑的不好，增加一个 ItemManage 类，并逐步迁移。此外还需要收藏夹管理页面。
 class ManagePair(QDialog):
     """管理数据，每组数据有 name 和 value"""
 
@@ -1246,9 +1247,11 @@ class ManagePair(QDialog):
         # 创建控件
         self.pair_list = QListWidget()
         self.pair_list.setStyleSheet("QListWidget::item { height: 30px; }")
-        self.add_btn = QPushButton(tr("添加"))
+        self.add_btn = QPushButton(tr("新建"))
         self.edit_btn = QPushButton(tr("编辑"))
         self.delete_btn = QPushButton(tr("删除"))
+        self.up_btn = QPushButton(tr("上移"))
+        self.down_btn = QPushButton(tr("下移"))
 
         # 布局
         main_layout = QVBoxLayout(self)
@@ -1258,6 +1261,8 @@ class ManagePair(QDialog):
         button_layout.addWidget(self.add_btn)
         button_layout.addWidget(self.edit_btn)
         button_layout.addWidget(self.delete_btn)
+        button_layout.addWidget(self.up_btn)
+        button_layout.addWidget(self.down_btn)
         button_layout.addStretch()
         main_layout.addLayout(button_layout)
 
@@ -1266,6 +1271,8 @@ class ManagePair(QDialog):
             self.add_btn.clicked.connect(self.add)
             self.edit_btn.clicked.connect(self.edit)
             self.delete_btn.clicked.connect(self.delete)
+            self.up_btn.clicked.connect(self.moveUp)
+            self.down_btn.clicked.connect(self.moveDown)
 
         # 如果有初始数据，加载
         if pairs:
@@ -1286,13 +1293,11 @@ class ManagePair(QDialog):
             self.pair_list.addItem(item)
 
     def getPairs(self):
-        """获取当前所有配对，返回 dict {name: value}"""
-        pairs = {}
+        """获取当前所有配对，返回 list[{"name":..., "value":...}]（保持显示顺序）"""
+        pairs = []
         for i in range(self.pair_list.count()):
             item = self.pair_list.item(i)
-            name = item.text()
-            value = item.data(Qt.ItemDataRole.UserRole)
-            pairs[name] = value
+            pairs.append({"name": item.text(), "value": item.data(Qt.ItemDataRole.UserRole)})
         return pairs
 
     def pairDialog(self, title, initial_name="", initial_value=""):
@@ -1301,7 +1306,7 @@ class ManagePair(QDialog):
 
     def add(self):
         """添加新配对"""
-        name, value = self.pairDialog(tr("添加"))
+        name, value = self.pairDialog(tr("新建"))
         if name:
             item = QListWidgetItem(name)
             item.setData(Qt.ItemDataRole.UserRole, value)
@@ -1330,6 +1335,34 @@ class ManagePair(QDialog):
         if messageBox(self, tr("确认删除"), tr("是否确认删除") + " '" + current_item.text() + "'"):
             row = self.pair_list.row(current_item)
             self.pair_list.takeItem(row)
+
+    def moveUp(self):
+        current_item = self.pair_list.currentItem()
+        if not current_item:
+            return
+        row = self.pair_list.row(current_item)
+        if row <= 0:
+            return
+        self._swapItems(row, row - 1)
+        self.pair_list.setCurrentRow(row - 1)
+
+    def moveDown(self):
+        current_item = self.pair_list.currentItem()
+        if not current_item:
+            return
+        row = self.pair_list.row(current_item)
+        if row < 0 or row >= self.pair_list.count() - 1:
+            return
+        self._swapItems(row, row + 1)
+        self.pair_list.setCurrentRow(row + 1)
+
+    def _swapItems(self, a: int, b: int):
+        if a > b:
+            a, b = b, a
+        item_a = self.pair_list.takeItem(a)
+        item_b = self.pair_list.takeItem(b - 1)
+        self.pair_list.insertItem(a, item_b)
+        self.pair_list.insertItem(b, item_a)
 
 
 def fetchWebTitle(url):

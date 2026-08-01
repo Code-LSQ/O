@@ -189,6 +189,7 @@ QWidget#line_number_area {
 QLabel#cpu_label {
     padding: 0 10px;
     color: #000000;
+    background: transparent;
 }
 
 QWidget#toc_panel {
