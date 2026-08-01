@@ -12,7 +12,7 @@ from PySide6.QtGui import QAction, QTextCursor, QColor
 
 from src.plugin import PluginBase
 from src.main import getIcon
-from src.file import FileSelect
+from src.file import FileSelect, collectFiles
 from src.config import getConfig
 from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles
 from src.core.timer import TimerManager
@@ -47,8 +47,6 @@ class ToolBox(PluginBase):
         self._search_mgr = None
         self._duplicate_mgr = None
         self._click_mgr = None
-        self._dup_finder = None
-        self._dup_finder_gen = 0
         self._tb_widget = None
 
     def initialize(self):
@@ -142,33 +140,26 @@ class ToolBox(PluginBase):
         if not editor:
             return
 
-        if self._dup_finder:
-            self._dup_finder.cancel()
-            if self._dup_finder.isRunning():
-                self._dup_finder.wait()
-
-        self._dup_finder_gen += 1
-        gen = self._dup_finder_gen
-
         default_paths = self.settings.get("duplicate.paths", [])
         default_exclude = self.settings.get("duplicate.exclude", ["*.pyc", "*/__pycache__/", "*/.git/"])
-        result = FileSelect.select(editor, default_paths, default_exclude)
+
+        def scan(paths, rules, on_progress, on_done, on_error):
+            finder = DuplicateFinder(folder_path=paths[0] if paths else None, paths=paths, rules=rules)
+            finder.progress.connect(on_progress)
+            finder.finished.connect(on_done)
+            finder.error.connect(on_error)
+            return finder
+
+        result = FileSelect.select(editor, default_paths, default_exclude, scanner=scan)
         if not result:
             return
-        files, paths, rules = result
+        duplicates, paths, rules = result
         self.settings["duplicate.paths"] = paths
         self.settings["duplicate.exclude"] = rules
         self.saveConfig()
-        logger.info("正在扫描重复文件")
-        finder = DuplicateFinder(files, folder_path=paths[0] if paths else None)
-        finder.finished.connect(lambda dups, g=gen: self._onDupFinished(editor, dups, g))
-        finder.error.connect(lambda err: messageBox(editor, "错误", f"扫描失败: {err}", 1))
-        finder.start()
-        self._dup_finder = finder
+        self._showDupResults(editor, duplicates)
 
-    def _onDupFinished(self, editor, duplicates: dict, gen: int = 0):
-        if gen != self._dup_finder_gen:
-            return
+    def _showDupResults(self, editor, duplicates: dict):
         logger.info("扫描完成")
         if not duplicates:
             messageBox(editor, "查找结果", "未找到重复文件", 1)
@@ -730,10 +721,12 @@ class DuplicateFinder(QThread):
     finished = Signal(dict)
     error = Signal(str)
 
-    def __init__(self, files: List[str] = None, parent=None, folder_path: str = None):
+    def __init__(self, files: List[str] = None, parent=None, folder_path: str = None, paths: List[str] = None, rules: List[str] = None):
         super().__init__(parent)
         self.files = files or []
         self.folder_path = folder_path
+        self.paths = paths or []
+        self.rules = rules or []
         self._is_cancelled = False
 
     def cancel(self):
@@ -741,6 +734,12 @@ class DuplicateFinder(QThread):
 
     def run(self):
         try:
+            if self.paths:
+                self.progress.emit(0, 0)
+                self.files = collectFiles(self.paths, self.rules, abort_check=lambda: self._is_cancelled)
+                if self._is_cancelled:
+                    self.finished.emit({})
+                    return
             result = self.findDuplicates(self.files, self.folder_path)
             self.finished.emit(result)
         except Exception as e:
@@ -805,6 +804,8 @@ class DuplicateFinder(QThread):
     def _buildFileTree(self, folder_path: str) -> Dict:
         files = {}
         for root_dir, dirs, filenames in os.walk(folder_path):
+            if self._is_cancelled:
+                break
             for fn in filenames:
                 fp = os.path.join(root_dir, fn)
                 try:

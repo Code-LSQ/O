@@ -7,7 +7,7 @@ from pathlib import Path
 from functools import partial
 from typing import Tuple, Optional
 
-from PySide6.QtWidgets import QWidget, QDialog, QTextEdit, QVBoxLayout, QLabel, QMenu, QFileSystemModel, QTreeView
+from PySide6.QtWidgets import QWidget, QDialog, QTextEdit, QVBoxLayout, QLabel, QMenu, QFileSystemModel, QTreeView, QProgressBar, QDialogButtonBox
 from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QAction
 
@@ -101,8 +101,12 @@ def _cleanBackups() -> None:
 class FileSelect(QDialog):
     """文件选择对话框，支持拖放和排除规则"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, scanner=None):
         super().__init__(parent)
+        self._scanner = scanner
+        self._worker = None
+        self._scanning = False
+        self._result = None
         self.setWindowTitle(tr("选择文件夹"))
         self.resize(500, 400)
         self.setAcceptDrops(True)
@@ -123,13 +127,20 @@ class FileSelect(QDialog):
         self.path_edit.setAcceptDrops(False)
         self.exclude_edit.setAcceptDrops(False)
 
+        self.scan_status = QLabel()
+        self.scan_status.hide()
+        self.progress_bar = QProgressBar()
+        self.progress_bar.hide()
+
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
         main_layout.addWidget(self.label_path)
         main_layout.addWidget(self.path_edit)
         main_layout.addWidget(self.label_exclude)
         main_layout.addWidget(self.exclude_edit)
-        dialogBox(main_layout, self, show=False)
+        main_layout.addWidget(self.scan_status)
+        main_layout.addWidget(self.progress_bar)
+        self._box = dialogBox(main_layout, self, show=False)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -156,6 +167,88 @@ class FileSelect(QDialog):
 
         event.acceptProposedAction()
 
+    def accept(self):
+        """确定：校验路径后启动扫描，扫描期间再次点击则取消"""
+        if self._scanning:
+            self._cancelScan()
+            return
+        paths = self.getPaths()
+        rules = self.getExcludes()
+        if not paths:
+            return
+        if self._scanner is None:
+            super().accept()
+            return
+        self._startScan(paths, rules)
+
+    def _startScan(self, paths: list, rules: list):
+        """创建工作线程并开始扫描，扫描期间禁用输入"""
+        self._scanning = True
+        self._result = None
+        self.path_edit.setEnabled(False)
+        self.exclude_edit.setEnabled(False)
+        self.progress_bar.setRange(0, 0)
+        self.scan_status.setText(tr("正在扫描文件"))
+        self.progress_bar.show()
+        self.scan_status.show()
+        self._box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("取消"))
+        self._box.button(QDialogButtonBox.StandardButton.Cancel).setEnabled(False)
+        self._worker = self._scanner(paths, rules, self._onProgress, self._onScanDone, self._onScanError)
+        self._worker.start()
+
+    def _onProgress(self, cur: int, total: int):
+        """扫描进度回调，total 为 0 时表示收集文件阶段，进度条转圈"""
+        if total > 0:
+            self.progress_bar.setRange(0, total)
+            self.progress_bar.setValue(cur)
+            self.scan_status.setText(f"{tr('已扫描')} {cur}/{total}")
+        else:
+            self.progress_bar.setRange(0, 0)
+            self.scan_status.setText(tr("正在扫描文件"))
+
+    def _onScanDone(self, duplicates):
+        if not self._scanning:
+            return
+        self._scanning = False
+        self._worker = None
+        self._result = duplicates
+        self._resetUI()
+        super().accept()
+
+    def _onScanError(self, error: str):
+        if not self._scanning:
+            return
+        self._scanning = False
+        self._worker = None
+        self._resetUI()
+        messageBox(self, tr("错误"), tr("扫描失败") + ": " + error, 1)
+
+    def _cancelScan(self):
+        if self._worker:
+            self._worker.cancel()
+            if self._worker.isRunning():
+                self._worker.wait()
+        self._worker = None
+        self._scanning = False
+        self.reject()
+
+    def _resetUI(self):
+        self.path_edit.setEnabled(True)
+        self.exclude_edit.setEnabled(True)
+        self.progress_bar.hide()
+        self.scan_status.hide()
+        self._box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("确定"))
+        self._box.button(QDialogButtonBox.StandardButton.Cancel).setEnabled(True)
+
+    def closeEvent(self, event):
+        if self._scanning and self._worker:
+            self._worker.cancel()
+            if self._worker.isRunning():
+                self._worker.wait()
+            self._worker = None
+            self._scanning = False
+        super().closeEvent(event)
+
     def getPaths(self) -> list[str]:
         """获取用户输入的路径列表"""
         text = self.path_edit.toPlainText()
@@ -169,9 +262,11 @@ class FileSelect(QDialog):
         return [line.strip() for line in lines if line.strip()]
 
     @staticmethod
-    def select(parent=None, default_paths: list[str] = None, default_exclude_rules: list[str] = None) -> tuple:
-        """显示文件选择对话框并返回选中的文件列表"""
-        dialog = FileSelect(parent)
+    def select(parent=None, default_paths: list[str] = None, default_exclude_rules: list[str] = None, scanner=None) -> tuple:
+        """显示文件选择对话框并返回结果
+        scanner 提供时为扫描回调（对话框内扫描），返回 (duplicates, paths, rules)；
+        否则仅选择，返回 (files, paths, rules)"""
+        dialog = FileSelect(parent, scanner=scanner)
         if default_paths:
             dialog.path_edit.setPlainText('\n'.join(default_paths))
         if default_exclude_rules:
@@ -180,6 +275,8 @@ class FileSelect(QDialog):
         if result == QDialog.DialogCode.Accepted:
             paths = dialog.getPaths()
             rules = dialog.getExcludes()
+            if scanner:
+                return dialog._result, paths, rules
             files = collectFiles(paths, rules)
             return files, paths, rules
         return None
@@ -258,8 +355,8 @@ def isExcluded(file_path: str, base_path: str, exclude_rules: list[tuple[re.Patt
     return False
 
 
-def filterFiles(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
-    """过滤目录下符合规则的文件"""
+def filterFiles(base_path: str, exclude_rules_raw: list[str], abort_check=None) -> list[str]:
+    """过滤目录下符合规则的文件，abort_check 返回 True 时提前终止遍历"""
     if not os.path.isdir(base_path):
         return []
 
@@ -269,6 +366,8 @@ def filterFiles(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
     exclude_rules = compileRules(exclude_rules_raw)
 
     for root, dirs, files in os.walk(base_path, onerror=lambda _: None):  # 静默跳过不可访问的目录
+        if abort_check and abort_check():
+            break
         dirs_to_remove = []
         for d in dirs:
             dir_path = os.path.join(root, d)
@@ -286,12 +385,14 @@ def filterFiles(base_path: str, exclude_rules_raw: list[str]) -> list[str]:
     return result
 
 
-def collectFiles(paths: list[str], rules: list[str]) -> list[str]:
-    """从多个路径收集文件"""
+def collectFiles(paths: list[str], rules: list[str], abort_check=None) -> list[str]:
+    """从多个路径收集文件，abort_check 返回 True 时提前终止"""
     all_files = []
     for path in paths:
         if os.path.isdir(path):
-            all_files.extend(filterFiles(path, rules))
+            all_files.extend(filterFiles(path, rules, abort_check))
+            if abort_check and abort_check():
+                break
     return all_files
 
 

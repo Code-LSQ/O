@@ -43,6 +43,9 @@ config_file = data_dir / "config.json"
 
 data_dir.mkdir(parents=True, exist_ok=True)
 
+user_dir = data_dir / "user"
+user_dir.mkdir(exist_ok=True)
+
 log_file = data_dir / "app.log"
 log_handler = RotatingFileHandler(log_file, maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
 logging.basicConfig(
@@ -1383,7 +1386,7 @@ def fetchWebTitle(url):
 
 
 def fetchWebIcon(url):
-    """获取网站图标，保存到 data/url/ 并返回路径，失败返回 None"""
+    """获取网站图标，保存到 data/icon/ 并返回路径，失败返回 None"""
     try:
         if not url.startswith("http"):
             url = "https://" + url
@@ -1417,7 +1420,7 @@ def fetchWebIcon(url):
         if len(icon_data) < 100:
             return None
 
-        save_dir = data_dir / "url"
+        save_dir = data_dir / "icon"
         save_dir.mkdir(parents=True, exist_ok=True)
         hostname = parsed.netloc.replace(":", "_")
         ext = Path(urlparse(icon_url).path).suffix or ".png"

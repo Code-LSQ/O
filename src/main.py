@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.util import AUTHOR, APP_NAME, logger, theme_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
@@ -541,7 +541,7 @@ class EditTool(QDialog):
 
         if tool_type == "网址":
             self._path_label.setText("URL")
-            self.browse_btn.setText(tr("获取"))
+            self.browse_btn.setText(tr("获取图标"))
             self.browse_btn.setVisible(True)
             self.cwd_edit.setEnabled(False)
             self.cwd_browse_btn.setEnabled(False)
@@ -702,6 +702,23 @@ def getIcon(tool, icon_size=32):
     return icon
 
 
+COLOR_SELECTORS = {
+    "title_co": "QWidget#title_bar",
+    "group_co": "QFrame#group_frame",
+    "tool_co": "QWidget#launcher_tools, QWidget#launcher_content, QWidget#tools_inner, QScrollArea#tools_scroll",
+}
+
+
+def buildColorOverride(colors: dict) -> str:
+    """根据自定义配色生成覆盖 QSS，追加在主题 QSS 之后使其优先，非法值跳过"""
+    rules = []
+    for slot, selector in COLOR_SELECTORS.items():
+        color = colors.get(slot, "")
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            rules.append(f"{selector} {{ background: {color}; }}")
+    return "\n".join(rules)
+
+
 class MainWindow(WindowControl, QMainWindow):
     """启动器主窗口"""
     
@@ -811,7 +828,9 @@ class MainWindow(WindowControl, QMainWindow):
             window = self
         try:
             theme = self.config.get("theme", "Light")
-            theme_file = theme_dir / f"{theme}.qss"
+            theme_file = user_dir / f"{theme}.qss"
+            if not theme_file.exists():
+                theme_file = theme_dir / f"{theme}.qss"
             if theme_file.exists():
                 with open(theme_file, "r", encoding="utf-8") as f:
                     style = f.read()
@@ -834,6 +853,12 @@ class MainWindow(WindowControl, QMainWindow):
                         f"{{ background: transparent; }}"
                     )
                     window.setStyleSheet(window.styleSheet() + "\n" + bg_qss)
+
+            # 自定义配色 — 仅主窗口，追加在最后使其优先于主题和背景图
+            if window is self:
+                override = buildColorOverride(self.config.get("Launch.colors", {}))
+                if override:
+                    window.setStyleSheet(window.styleSheet() + "\n" + override)
 
             # 透明度
             opacity = self.config.get("Launch.opacity", 1.0)
@@ -1452,7 +1477,7 @@ class MainWindow(WindowControl, QMainWindow):
         plugin_items = self._pluginItems()
         if plugin_items:
             menu.addSeparator()
-            for name, path, note in plugin_items:
+            for name, path in plugin_items:
                 if path.startswith("plugin_menu:"):
                     sub_menu = self._pluginSubmenu(name)
                     if sub_menu:
@@ -1471,9 +1496,9 @@ class MainWindow(WindowControl, QMainWindow):
             pm = getPluginManager()
             for description, menu_item, plugin in pluginActionMenu(pm):
                 if isinstance(menu_item, QMenu):
-                    items.append((description, f"plugin_menu:{description}", description))
+                    items.append((description, f"plugin_menu:{description}"))
                 elif isinstance(menu_item, QAction) and menu_item.text():
-                    items.append((description, f"plugin_action:{description}", description))
+                    items.append((description, f"plugin_action:{description}"))
         except Exception:
             logger.exception("获取插件列表失败")
 
@@ -1511,7 +1536,7 @@ class MainWindow(WindowControl, QMainWindow):
             sub_action = QAction(action_text, self)
             sub_action.triggered.connect(
                 lambda checked, at=action_text, pn=plugin_name:
-                self._addPreset(at, f"plugin_action:{pn}:{at}", pn)
+                self._addPreset(at, f"plugin_action:{pn}:{at}", "")
             )
             sub_menu.addAction(sub_action)
         return sub_menu

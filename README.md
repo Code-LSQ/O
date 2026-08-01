@@ -7,7 +7,12 @@
 ### 项目简介
 
 
-O 是一个带了一些奇怪功能的快速启动器。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义 ，
+文档正在完善中……如果没找到想找的内容可以过几天再来。
+
+O 是一个带了一些奇怪功能的快速启动器，使用 PySide6 框架，支持插件扩展。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义。
+
+用户自定义插件（.py）和主题文件（.qss），建议放到 data/user 文件夹下，这里是给用户预留的自定义文件夹。虽然在 src 文件夹可以自定义但在更新后就会覆盖掉，但在更新时会删除 data 以外的文件和文件夹，因此不建议这么做。
+
 
 当前支持平台为 Windows 8.1+。
 
@@ -28,29 +33,34 @@ Tiny，软件大小只有 10M，内存占用也小，不过有些细节我不喜
 
 Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 
-功能列表：
 
-主体：通过 Windows 的打开文件、设置 Python 和 Java 路径后运行 .py 和 .jar。
+### 启动器
+
+#### 启动器
+
+程序的主要功能为收纳快捷方式，从而打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
+路径支持环境变量如 %UserProfile%
+图标可以填一个 exe 文件的路径，会获取它的图标。
 
 
-插件：
-符号链接管理
-文件同步
+#### 环境变量
 
+在设置->环境变量中
+C:\SDK\MinGW\   将此文件夹加入 Path
+ANDROID_HOME=C:\Android\SDK  将其加入环境变量
+这是针对所有项目的环境变量
 
-### Windows 设置
+如果要针对单个程序
+使用形如 {env: CLAUDE_CODE_NO_FLICKER=1}  ，每个 {env: } 内填入一个环境变量，用空格` `分隔多个 {env: }。
+对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 {enc: AppData=C:\data} 。
 
-你可能需要的 Windows 路径
-控制面板  C:\Windows\System32\control.exe
-
-
-### 功能
 
 #### 进程/服务管理
 
 填写规范，用 | 分隔，有空格要用 "" 包裹，有白名单，免得误操作给系统搞崩溃了。
 
+可以使用资源监视器搜索指定软件有哪些流氓进程，打开方式为 任务管理器->性能->运行新任务右边->资源监视器->句柄搜索
 
 此功能仅针对 .exe 程序，需要管理员权限。适用于百度网盘、WPS等软件的流氓进程，还有 VMware 这种关闭后有好几个服务在运行的。
 在用户启动主进程后，设置一个定时器，十秒检查一次主进程状态。
@@ -72,37 +82,16 @@ VMware：服务 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Servi
 
 
 
-#### AI
-
-为什么有 AI 功能呢？因为这个项目也是我的毕业设计，我个人是不喜欢什么都加 AI 的
-
-
-#### 快速启动
-
-启动器
-文件路径和图标路径两端不要带双引号 ""。工作目录和启动参数可以带。
-图标可以填一个 exe 文件的路径，会获取它的图标。
-
-建议使用资源监视器搜索指定软件有哪些流氓进程，路径为 C:\Windows\System32\perfmon.exe
-
-
 ### 插件
 
 #### 插件规范
 
-插件路径为 /plugin/ ，其内的每个 .py、.pyd 文件都是一个插件
-
-插件系统主要由两部分组成：
-1. PluginBase（基类） — 定义在 src/plugin.py，所有插件必须继承此类
-2. PluginManager（管理器） — 定义在 src/plugin.py，单例模式，负责扫描、加载、启用/禁用插件
+插件路径为 src/plugin/ ，用户自定义插件路径为 data/user/，其内的每个 .py、.pyd 文件都是一个插件
 
 
-必须定义
+插件系统
+PluginBase（基类） — 定义在 src/plugin.py，所有插件必须继承此类
 
-属性：
-
-
-方法：
 getAction()，控制插件返回的按钮
 
 如果有需要额外导入的 Python 库依赖，在 .py 文件中用 PluginLib 列表标明。
@@ -131,6 +120,13 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 3. 实现 getAction() 返回菜单项
 
 
+#### 工具箱
+
+
+
+#### AI
+
+为什么有 AI 功能呢？因为这个项目也是我的毕业设计，虽然后来大改了好几次，还是保留了这部分功能，不过我个人是不喜欢什么都加 AI 的。事实上本项目的 AI 功能也称得上比较难用，只不过调用起来比较方便。
 
 #### 符号链接
 
@@ -187,11 +183,42 @@ https://github.com/OpenListTeam/OpenList/releases
 /SDK/Python/
 
 
+### Windows 设置
+
+右键->添加预设项->系统 中有一些 Windows 特定功能
+
+除此之外你可能需要的 Windows 路径
+控制面板  C:\Windows\System32\control.exe
+注册表编辑器  C:\Windows\regedit.exe
+服务  C:\Windows\System32\services.msc
+PowerShell C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Windows 功能  C:\Windows\System32\OptionalFeatures.exe
+事件查看器  C:\Windows\System32\eventvwr.msc
+资源监视器  C:\Windows\System32\perfmon.exe
+系统信息  C:\Windows\System32\msinfo32.exe
+系统配置  C:\Windows\System32\msconfig.exe
+颜色管理  C:\Windows\System32\colorcpl.exe
+计算机管理  C:\Windows\System32\compmgmt.msc
+组策略  C:\Windows\System32\gpedit.msc
+文件资源管理器  C:\Windows\explorer.exe
+任务管理器  C:\Windows\System32\Taskmgr.exe
+任务计划程序  C:\Windows\System32\taskschd.msc
+系统属性  C:\Windows\System32\SystemPropertiesComputerName.exe
+性能选项  C:\Windows\System32\SystemPropertiesPerformance.exe
+Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools
+防火墙  C:\Windows\System32\WF.msc
+用户账户控制设置  C:\Windows\System32\UserAccountControlSettings.exe
+本地安全策略  C:\Windows\System32\secpol.msc
+实时字幕  C:\Windows\System32\LiveCaptions.exe
+
+
+
 ### 问题
 
 已发现但尚未解决的问题包括：
 1.
 2.
+
 
 ### 计划
 
@@ -206,12 +233,6 @@ https://github.com/OpenListTeam/OpenList/releases
 2. 图片质量比较、图片相似度比较
 3. UI 界面配色自定义
 
-
-#### 其他
-
-语言文件在 O/src/lang/ ，第一个键 "翻译"，它的值表明这个文件对应的语言。
-
-主题文件存放在 O/src/theme/ ，如果主题需要使用白色的最大化图标，将主题名加入 getMaxIcon 函数中的集合。暗色主题（Dark/Aurora_Dark/Modern_Dark）已默认加入。
 
 
 ### 感谢名单

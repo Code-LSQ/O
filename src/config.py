@@ -4,10 +4,11 @@ import json
 import tempfile
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame, QSlider
+from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QComboBox, QPushButton, QListWidget, QListWidgetItem, QAbstractSpinBox, QTextEdit, QFontComboBox, QScrollArea, QStackedWidget, QFrame, QSlider, QColorDialog
 from PySide6.QtCore import Signal, Qt, QSize
+from PySide6.QtGui import QColor
 
-from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, lang_dir, dialogBox, messageBox
+from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, user_dir, lang_dir, dialogBox, messageBox
 from src.core.input import KeyCaptureFilter
 from src.system import setAutoStart, setMenu
 
@@ -43,6 +44,7 @@ DEFAULT_CONFIG = {
         "y": None,
         "opacity": 1.0,
         "bg_image": "",
+        "colors": {},
         "tools": {}
     },
     "Edit": {
@@ -82,7 +84,6 @@ DEFAULT_CONFIG = {
             "GitHub": "https://github.com/search?q={query}"
         }
     },
-    "extra_plugin": "",
     "Plugin": {}
 }
 
@@ -299,11 +300,14 @@ class SettingsDialog(QDialog):
         layout.addLayout(button_layout)
 
     def getThemes(self):
-        """获取可用的主题列表（从src/theme目录下扫描qss文件）"""
-        themes = []
-        for file in theme_dir.iterdir():
-            if file.suffix.lower() == '.qss':
-                themes.append(file.stem)
+        """获取可用的主题列表（内置 src/theme 与用户 data/user，同名时用户优先）"""
+        themes = {}
+        for scan_dir in (theme_dir, user_dir):
+            if not scan_dir.exists():
+                continue
+            for file in scan_dir.iterdir():
+                if file.suffix.lower() == '.qss':
+                    themes[file.stem] = True
         return sorted(themes)
 
     def initOptions(self):
@@ -336,6 +340,41 @@ class SettingsDialog(QDialog):
             self.theme_combo.setCurrentIndex(idx)
         layout.addRow(tr("主题"), self.theme_combo)
 
+        # 启动器配色
+        self._colors = dict(self.config.get("Launch.colors", {}))
+        color_row = QWidget()
+        color_row_layout = QHBoxLayout(color_row)
+        color_row_layout.setContentsMargins(20, 0, 0, 0)
+        color_row_layout.setSpacing(20)
+        color_slots = [
+            ("title_co", tr("标题栏")),
+            ("group_co", tr("分组栏")),
+            ("tool_co", tr("工具栏")),
+        ]
+        for slot, label in color_slots:
+            slot_box = QWidget()
+            slot_layout = QHBoxLayout(slot_box)
+            slot_layout.setContentsMargins(0, 0, 0, 0)
+            slot_layout.setSpacing(4)
+            swatch = QPushButton()
+            swatch.setFixedSize(22, 22)
+            swatch.setToolTip(tr("点击选择颜色"))
+            color = self._colors.get(slot, "")
+            if color:
+                swatch.setStyleSheet(f"background-color: {color};")
+                swatch.setToolTip(color)
+            clear_btn = QPushButton(tr("清除"))
+            clear_btn.setFixedWidth(50)
+            clear_btn.setToolTip(tr("恢复为主题默认"))
+            swatch.clicked.connect(lambda _, s=slot, b=swatch: self._pickColor(s, b))
+            clear_btn.clicked.connect(lambda _, s=slot, b=swatch: self._clearColor(s, b))
+            slot_layout.addWidget(QLabel(label))
+            slot_layout.addWidget(swatch)
+            slot_layout.addWidget(clear_btn)
+            color_row_layout.addWidget(slot_box)
+        color_row_layout.addStretch()
+        layout.addRow(color_row)
+
         # 背景图
         self.bg_image_edit, self.bg_image_browse = filePathWidget(
             self, layout, tr("背景图"), tr("选择背景图片"),
@@ -363,9 +402,6 @@ class SettingsDialog(QDialog):
         self.font_size_spin.setValue(self.config.get("font_size", 12))
         self.font_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         layout.addRow(tr("字号"), self.font_size_spin)
-
-        self.extra_plugin_edit, self.extra_plugin_browse = filePathWidget(self, layout, tr("额外插件"), "", "", "dir")
-        self.extra_plugin_edit.setText(self.config.get("extra_plugin", ""))
 
         self.context_menu_check = QCheckBox(tr("右键菜单"))
         self.context_menu_check.setChecked(self.config.get("context_menu", False))
@@ -692,6 +728,21 @@ class SettingsDialog(QDialog):
         """处理启动器快捷键捕获"""
         self.launcher_hotkey_edit.setText(seq)
 
+    def _pickColor(self, slot, button):
+        """选择配色并更新色块"""
+        initial = QColor(self._colors.get(slot, "")) if self._colors.get(slot) else QColor()
+        color = QColorDialog.getColor(initial, self, tr("选择颜色"))
+        if color.isValid():
+            self._colors[slot] = color.name()
+            button.setStyleSheet(f"background-color: {color.name()};")
+            button.setToolTip(color.name())
+
+    def _clearColor(self, slot, button):
+        """清除配色，恢复主题默认"""
+        self._colors.pop(slot, None)
+        button.setStyleSheet("")
+        button.setToolTip(tr("点击选择颜色"))
+
     def _setDefaults(self):
         """重置快捷键为默认值"""
         default_shortcuts = DEFAULT_CONFIG["Edit"]["shortcuts"]
@@ -730,7 +781,7 @@ class SettingsDialog(QDialog):
             "Edit.shortcuts": shortcuts,
             "Launch.bg_image": self.bg_image_edit.text().strip(),
             "Launch.opacity": self.opacity_slider.value() / 100,
-            "extra_plugin": self.extra_plugin_edit.text().strip(),
+            "Launch.colors": {k: v for k, v in self._colors.items() if v},
             "Plugin": self.config.get("Plugin", {}),
             "Edit.engine": self.searchEngine()
         }

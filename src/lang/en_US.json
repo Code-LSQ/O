@@ -291,6 +291,7 @@
     "选择图标": "Select Icon",
     "图片文件": "Image File",
     "获取": "Fetch",
+    "获取图标": "Fetch Icon",
     "请先输入网址": "Please enter a URL first",
     "名称不能为空": "Name cannot be empty",
     "路径不能为空": "Path cannot be empty",
@@ -370,5 +371,12 @@
     "Windows 工具": "Windows Tools",
     "文件历史记录": "File History",
     "添加网络位置": "Add a Network Location",
-    "屏幕设置": "Display Settings"
+    "屏幕设置": "Display Settings",
+    "标题栏": "Title Bar",
+    "分组栏": "Group Bar",
+    "工具栏": "Tool Bar",
+    "清除": "Clear",
+    "点击选择颜色": "Click to choose color",
+    "恢复为主题默认": "Reset to theme default",
+    "选择颜色": "Choose Color"
 }

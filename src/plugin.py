@@ -18,7 +18,7 @@ from abc import ABC
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
-from src.util import plugin_dir, logger, Singleton
+from src.util import plugin_dir, user_dir, logger, Singleton
 
 
 PLUGIN_EXTENSION = {".py", ".pyd", ".so"}
@@ -140,7 +140,6 @@ class PluginManager(Singleton):
         self.plugins: Dict[str, PluginBase] = {}
         self._scan_cache: Dict[str, tuple] = {}
         self.enabled_plugins: Dict[str, bool] = {}
-        self.extra_plugin_dir = None
         self.scanPlugins()
     
     def _scanDir(self, scan_dir: Path):
@@ -161,8 +160,7 @@ class PluginManager(Singleton):
     def scanPlugins(self) -> List[str]:
         self._scan_cache.clear()
         self._scanDir(plugin_dir)
-        if self.extra_plugin_dir:
-            self._scanDir(Path(self.extra_plugin_dir))
+        self._scanDir(user_dir)
         return list(self._scan_cache.keys())
 
     def importPluginModule(self, module_key: str):
@@ -311,8 +309,7 @@ class PluginManager(Singleton):
         for plugin_name, plugin_data in plugin_config.items():
             if isinstance(plugin_data, dict):
                 self.enabled_plugins[plugin_name] = plugin_data.get("enabled", True)
-        
-        self.extra_plugin_dir = config.get("extra_plugin", "")
+
         available = self.scanPlugins()
         for p in available:
             if p not in self.enabled_plugins:
