@@ -6,10 +6,12 @@ from pynput import keyboard, mouse
 from PySide6.QtCore import Qt, QMetaObject, QEvent, QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication
 
+from src.system import isKeyDown
 from src.util import logger, Singleton
 
 # 需要注意，PySide6 6.10.3 与 pynput 1.8.0 冲突。
-# 如果需要全局快捷键并抑制其传给系统和其他程序， Windows 使用 win32_event_filter ，macOS 使用 darwin_intercept 。 Linux 似乎暂时没有好办法。
+# 目前本模块仅面向 Windows ，通过 win32_event_filter 统一处理全局快捷键并抑制其传给系统和其他程序。macOS 可以使用 darwin_intercept 。 Linux 似乎暂时没有好办法。
+# 低级钩子的 KEYUP 偶尔会丢失，导致按键状态集合残留，故用 GetAsyncKeyState 自愈，避免残留键造成误触发。
 
 
 def _doCopy():
@@ -55,7 +57,6 @@ class GlobalHotkeyListener(Singleton):
     _tool_hotkeys_cache = {}
     _pending_tool = None
     _pending_hotkey = None
-    _pressed_keys = set()
     _vk_pressed = set()
     _hotkey_triggered = False
     _tool_hotkeys_fired = set()
@@ -63,6 +64,10 @@ class GlobalHotkeyListener(Singleton):
     _placeholders = {"Select": ""}
     _last_tool_hotkey_time = 0
     _min_hotkey_interval = 0.3
+    _modifier_press_order = []
+
+    _MODIFIER_KEYS = {'ctrl_l', 'ctrl_r', 'ctrl', 'alt_l', 'alt_r', 'alt',
+                      'shift_l', 'shift_r', 'shift', 'cmd_l', 'cmd_r', 'cmd'}
 
     _VK_TO_NAME = {
         0x41: 'a', 0x42: 'b', 0x43: 'c', 0x44: 'd', 0x45: 'e',
@@ -84,161 +89,100 @@ class GlobalHotkeyListener(Singleton):
         0x2D: 'insert', 0x2E: 'delete',
         0x20: 'space', 0x0D: 'enter', 0x09: 'tab',
         0x08: 'backspace', 0x1B: 'esc',
+        0xBA: ';', 0xBC: ',', 0xBE: '.', 0xBF: '/',
+        0xDC: '\\', 0xDB: '[', 0xDD: ']',
+        0xBD: '-', 0xBB: '=', 0xC0: '`', 0xDE: '\'',
     }
 
     def _init(self):
         self._lock = threading.Lock()
         self._last_tool_hotkey_time = 0
         self._tool_hotkeys_fired = set()
-    
-    @staticmethod
-    def _getKeyName(key):
-        key_name = None
-        key_char = getattr(key, 'char', None)
-        key_name_attr = getattr(key, "name", None)
-        key_vk = getattr(key, 'vk', None)
-
-        if key_char is not None and isinstance(key_char, str) and len(key_char) == 1 and ord(key_char) >= 32:
-            key_name = key_char.lower()
-        elif key_name_attr is not None:
-            key_name = key_name_attr.lower()
-        elif key_vk is not None:
-            key_name = GlobalHotkeyListener._VK_TO_NAME.get(key_vk)
-
-        if not key_name:
-            key_name = str(key).lower()
-        if key_name.startswith('key.'):
-            key_name = key_name[4:]
-        elif key_name.startswith('keycode.'):
-            key_name = key_name[8:]
-
-        return key_name
 
     def start(self, main_window, hotkey_str=None, mouse_side_enabled=False, double_ctrl_enabled=False):
-        """启动全局监听器"""
+        """启动全局监听器（仅 Windows，win 过滤器为唯一按键状态源）"""
         self._stop()
         time.sleep(0.1)
         self._main_window = main_window
         
         self._vk_pressed.clear()
         self._tool_hotkeys_fired.clear()
-        with self._lock:
-            self._pressed_keys = set()
-            self._hotkey_triggered = False
-            self._modifier_press_order = []
+        self._hotkey_triggered = False
+        self._modifier_press_order = []
         last_ctrl_press_time = 0
         ctrl_was_held = False
         
         hotkey_config = self._parseHotkey(hotkey_str) if hotkey_str else None
-        
-        def onPress(key):
-            nonlocal last_ctrl_press_time, ctrl_was_held
-            try:
-                if self._is_pasting:
-                    return
-                key_name = self._getKeyName(key)
-                if not key_name:
-                    return
-                
-                with self._lock:
-                    self._pressed_keys.add(key_name)
-                    pressed_keys_copy = self._pressed_keys.copy()
-                    self._modifier_press_order.append(key_name)
-                
-                if double_ctrl_enabled and key_name in ('ctrl_l', 'ctrl_r', 'ctrl'):
-                    current_time = time.time()
-                    time_since_last_press = current_time - last_ctrl_press_time
-                    
-                    if not ctrl_was_held and time_since_last_press < 0.5:
-                        logger.info("连按Ctrl键触发启动器")
-                        QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
-                    
-                    last_ctrl_press_time = current_time
-                    ctrl_was_held = True
-                
-                if hotkey_config and not self._hotkey_triggered:
-                    with self._lock:
-                        if self._checkHotkey(pressed_keys_copy, hotkey_config):
-                            self._hotkey_triggered = True
-                            QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
-                
-                self._checkToolHotkeys(pressed_keys_copy)
-                
-            except Exception:
-                logger.exception("按键处理错误")
-        
-        def onRelease(key):
-            nonlocal ctrl_was_held
-            try:
-                key_name = self._getKeyName(key)
-                if not key_name:
-                    return
-                
-                with self._lock:
-                    self._pressed_keys.discard(key_name)
-                    self._hotkey_triggered = False
-                    if key_name in self._modifier_press_order:
-                        self._modifier_press_order = [k for k in self._modifier_press_order if k != key_name]
-                
-                if self._is_pasting:
-                    return
-                
-                if double_ctrl_enabled and key_name in ('ctrl_l', 'ctrl_r', 'ctrl'):
-                    ctrl_was_held = False
-            except Exception:
-                logger.exception("按键释放错误")
-        
-        def onClick(x, y, button, pressed):
-            if pressed and button in (mouse.Button.x1, mouse.Button.x2) and mouse_side_enabled:
-                QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
-        
+
         def keyboardWinFilter(msg, data):
+            nonlocal last_ctrl_press_time, ctrl_was_held
             WM_KEYDOWN = 0x0100
             WM_KEYUP = 0x0101
             WM_SYSKEYDOWN = 0x0104
             WM_SYSKEYUP = 0x0105
             if self._is_pasting:
                 if msg in (WM_KEYUP, WM_SYSKEYUP):
-                    self._vk_pressed.discard(data.vkCode)
+                    vk = data.vkCode
+                    self._vk_pressed.discard(vk)
+                    name = self._VK_TO_NAME.get(vk)
+                    if name in self._modifier_press_order:
+                        self._modifier_press_order = [k for k in self._modifier_press_order if k != name]
+                    self._hotkey_triggered = False
                 return
             vk = data.vkCode
+            # KEYUP 偶尔丢失会让集合残留已抬起的键，先按物理状态自愈，避免残留键造成误触发
+            self._pruneVkState(vk)
             if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
                 self._vk_pressed.add(vk)
-                pressed_names = set()
-                for vk_code in self._vk_pressed:
-                    name = self._VK_TO_NAME.get(vk_code)
-                    pressed_names.add(name if name else str(vk_code))
-                for hotkey_str, tool in self._tool_hotkeys.items():
-                    hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
-                    if hotkey_keys and self._checkHotkey(pressed_names, hotkey_keys):
-                        if hotkey_str in self._tool_hotkeys_fired:
-                            self._keyboard_listener.suppress_event()
-                            return
-                        current_time = time.time()
-                        if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
-                            self._keyboard_listener.suppress_event()
-                            return
-                        self._last_tool_hotkey_time = current_time
-                        self._tool_hotkeys_fired.add(hotkey_str)
-                        self._pending_tool = tool
-                        self._pending_hotkey = hotkey_str
-                        QMetaObject.invokeMethod(main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
+                name = self._vkName(vk)
+                if name not in self._modifier_press_order:
+                    self._modifier_press_order.append(name)
+                pressed_names = {self._vkName(vk_code) for vk_code in self._vk_pressed}
+
+                if double_ctrl_enabled and name in ('ctrl_l', 'ctrl_r', 'ctrl'):
+                    current_time = time.time()
+                    if not ctrl_was_held and current_time - last_ctrl_press_time < 0.5:
+                        logger.info("连按Ctrl键触发启动器")
+                        QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
+                    last_ctrl_press_time = current_time
+                    ctrl_was_held = True
+
+                if hotkey_config and not self._hotkey_triggered and self._isHotkeyNormalKey(hotkey_config, name):
+                    if self._checkHotkey(pressed_names, hotkey_config):
+                        self._hotkey_triggered = True
+                        QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
+
+                tool, fired_hotkey = self._matchToolHotkeys(pressed_names, name)
+                if tool and fired_hotkey:
+                    if fired_hotkey in self._tool_hotkeys_fired:
                         self._keyboard_listener.suppress_event()
+                        return
+                    current_time = time.time()
+                    if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
+                        self._keyboard_listener.suppress_event()
+                        return
+                    self._last_tool_hotkey_time = current_time
+                    self._tool_hotkeys_fired.add(fired_hotkey)
+                    self._pending_tool = tool
+                    self._pending_hotkey = fired_hotkey
+                    QMetaObject.invokeMethod(main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
+                    self._keyboard_listener.suppress_event()
             elif msg in (WM_KEYUP, WM_SYSKEYUP):
                 self._vk_pressed.discard(vk)
-                if self._tool_hotkeys_fired:
-                    pressed_up = set()
-                    for vk_code in self._vk_pressed:
-                        name = self._VK_TO_NAME.get(vk_code)
-                        pressed_up.add(name if name else str(vk_code))
-                    stale = {s for s in self._tool_hotkeys_fired
-                             if not self._checkHotkey(pressed_up, self._tool_hotkeys_cache.get(s, set()))}
-                    self._tool_hotkeys_fired -= stale
+                name = self._vkName(vk)
+                if name in self._modifier_press_order:
+                    self._modifier_press_order = [k for k in self._modifier_press_order if k != name]
+                self._hotkey_triggered = False
+                if double_ctrl_enabled and name in ('ctrl_l', 'ctrl_r', 'ctrl'):
+                    ctrl_was_held = False
+                self._clearStaleFired()
+
+        def onClick(x, y, button, pressed):
+            if pressed and button in (mouse.Button.x1, mouse.Button.x2) and mouse_side_enabled:
+                QMetaObject.invokeMethod(main_window, "_toggleWindow", Qt.ConnectionType.QueuedConnection)
 
         try:
             self._keyboard_listener = keyboard.Listener(
-                on_press=onPress,
-                on_release=onRelease,
                 suppress=False,
                 win32_event_filter=keyboardWinFilter
             )
@@ -297,10 +241,8 @@ class GlobalHotkeyListener(Singleton):
         
         self._vk_pressed.clear()
         self._tool_hotkeys_fired.clear()
-        with self._lock:
-            self._pressed_keys = set()
-            self._hotkey_triggered = False
-            self._modifier_press_order = []
+        self._hotkey_triggered = False
+        self._modifier_press_order = []
     
     def restart(self, main_window, hotkey_str=None, mouse_side_enabled=False, double_ctrl_enabled=False):
         """重启监听器"""
@@ -335,8 +277,7 @@ class GlobalHotkeyListener(Singleton):
         if not hotkey_keys:
             return False
         
-        modifier_keys = {'ctrl_l', 'ctrl_r', 'ctrl', 'alt_l', 'alt_r', 'alt', 
-                         'shift_l', 'shift_r', 'shift', 'cmd_l', 'cmd_r', 'cmd'}
+        modifier_keys = self._MODIFIER_KEYS
         
         required_modifiers = hotkey_keys & modifier_keys
         required_normal = hotkey_keys - modifier_keys
@@ -390,33 +331,51 @@ class GlobalHotkeyListener(Singleton):
                     return False
         
         return True
-    
-    def _checkToolHotkeys(self, pressed_keys=None):
-        """检查工具快捷键"""
-        if not self._tool_hotkeys or not self._main_window:
-            return
-        if self._is_pasting:
-            return
-        
-        if pressed_keys is None:
-            with self._lock:
-                pressed_keys = self._pressed_keys.copy()
 
+    @staticmethod
+    def _isHotkeyNormalKey(hotkey_keys: set, name: str) -> bool:
+        """判断 name 是否为快捷键的普通（非修饰）键"""
+        if not hotkey_keys:
+            return False
+        return name in (hotkey_keys - GlobalHotkeyListener._MODIFIER_KEYS)
+
+    def _vkName(self, vk) -> str:
+        """将虚拟键码转换为统一的按键名字"""
+        return self._VK_TO_NAME.get(vk) or str(vk)
+
+    def _pruneVkState(self, current_vk):
+        """剔除物理上已抬起、却因丢失 KEYUP 而残留的按键，当前键豁免以防 GetAsyncKeyState 延迟
+
+        剔除残留键时要同步清理按压顺序记录和已触发集合，否则自愈不完整：
+        顺序记录残留会让合法快捷键漏触发，已触发集合残留会让下一次同组合被吞掉。
+
+        已知限制：组合从未断开时重按同一键与键盘自动重复不可区分，该次触发会被吞一次。
+        """
+        for vk in list(self._vk_pressed):
+            if vk != current_vk and not isKeyDown(vk):
+                self._vk_pressed.discard(vk)
+                name = self._vkName(vk)
+                if name in self._modifier_press_order:
+                    self._modifier_press_order = [k for k in self._modifier_press_order if k != name]
+        self._clearStaleFired()
+
+    def _clearStaleFired(self):
+        """移除已不匹配当前按住状态的已触发工具快捷键"""
+        if not self._tool_hotkeys_fired:
+            return
+        pressed_up = {self._vkName(vk_code) for vk_code in self._vk_pressed}
+        stale = {s for s in self._tool_hotkeys_fired
+                 if not self._checkHotkey(pressed_up, self._tool_hotkeys_cache.get(s, set()))}
+        self._tool_hotkeys_fired -= stale
+
+    def _matchToolHotkeys(self, pressed_names: set, current_name: str):
+        """工具快捷键匹配，仅当前按下的键为快捷键的普通键时才可能触发，返回 (tool, hotkey_str) 或 (None, None)"""
         for hotkey_str, tool in self._tool_hotkeys.items():
             hotkey_keys = self._tool_hotkeys_cache.get(hotkey_str)
-            if hotkey_keys and hotkey_str not in self._tool_hotkeys_fired and self._checkHotkey(pressed_keys, hotkey_keys):
-                current_time = time.time()
-                if current_time - self._last_tool_hotkey_time < self._min_hotkey_interval:
-                    return
-                self._last_tool_hotkey_time = current_time
-                self._tool_hotkeys_fired.add(hotkey_str)
-                logger.info(f"触发工具快捷键: {hotkey_str} -> {tool.get("name", "")}")
-                self._pending_tool = tool
-                self._pending_hotkey = hotkey_str
-                
-                QMetaObject.invokeMethod(self._main_window, "runHotkey", Qt.ConnectionType.QueuedConnection)
-                break
-    
+            if hotkey_keys and self._isHotkeyNormalKey(hotkey_keys, current_name) and self._checkHotkey(pressed_names, hotkey_keys):
+                return tool, hotkey_str
+        return None, None
+
     def registerHotkey(self, hotkey_str: str, tool: dict):
         """注册工具快捷键"""
         if not hotkey_str:
@@ -477,6 +436,11 @@ def codeToKey(key):
         Qt.Key.Key_Home: "Home", Qt.Key.Key_End: "End", Qt.Key.Key_PageUp: "PageUp", Qt.Key.Key_PageDown: "PageDown",
         Qt.Key.Key_Insert: "Insert", Qt.Key.Key_Help: "Help",
         Qt.Key.Key_Pause: "Pause", Qt.Key.Key_Print: "Print",
+        Qt.Key.Key_Semicolon: ";", Qt.Key.Key_Comma: ",", Qt.Key.Key_Period: ".",
+        Qt.Key.Key_Slash: "/", Qt.Key.Key_Backslash: "\\",
+        Qt.Key.Key_BracketLeft: "[", Qt.Key.Key_BracketRight: "]",
+        Qt.Key.Key_Minus: "-", Qt.Key.Key_Equal: "=",
+        Qt.Key.Key_QuoteLeft: "`", Qt.Key.Key_Apostrophe: "'",
     }
     return key_map.get(key)
 

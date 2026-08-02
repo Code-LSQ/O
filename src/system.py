@@ -65,6 +65,10 @@ if sys.platform == "win32":
             if key:
                 winreg.CloseKey(key)
 
+    def isKeyDown(vk: int) -> bool:
+        """查询虚拟键码是否处于物理按下状态"""
+        return bool(windll.user32.GetAsyncKeyState(vk) & 0x8000)
+
     def deleteRegistry(key_handle, sub_key):
         try:
             sub_handle = winreg.OpenKey(key_handle, sub_key, 0, winreg.KEY_ALL_ACCESS)
@@ -320,6 +324,10 @@ elif sys.platform == "linux":
         "回收站": "trash://",
     }
 
+    def isKeyDown(vk: int) -> bool:
+        """查询虚拟键码是否处于物理按下状态（非 Windows 恒返回 False）"""
+        return False
+
     def autoStartDir() -> Path:
         xdg_config = os.environ.get("XDG_CONFIG_HOME", "")
         if xdg_config:
@@ -416,6 +424,10 @@ elif sys.platform == "darwin":
         "命令提示符": "Terminal",
         "回收站": os.path.expanduser("~/.Trash"),
     }
+
+    def isKeyDown(vk: int) -> bool:
+        """查询虚拟键码是否处于物理按下状态（非 Windows 恒返回 False）"""
+        return False
 
     def setAutoStart(enabled: bool) -> bool:
         plist_path = Path.home() / "Library" / "LaunchAgents" / f"com.{APP_NAME.lower()}.plist"

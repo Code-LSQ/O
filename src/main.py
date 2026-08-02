@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync
 from src.config import SettingsDialog, getConfig
 from src.system import SYSTEM_ACT, getFileIcon
 from src.plugin import getPluginManager, pluginActionMenu
@@ -177,7 +177,11 @@ class ServiceProcess:
             logger.info(f"监控中，进程仍存活: {alive}")
 
     def _cleanup(self):
-        """清理附属进程和服务"""
+        """清理附属进程和服务。
+
+        终止进程、停止服务等阻塞操作放到后台线程执行，避免冻结 GUI
+        线程导致全局快捷键无法呼出启动器。
+        """
         if self._cleaned_up:
             return
         self._cleaned_up = True
@@ -189,6 +193,10 @@ class ServiceProcess:
 
         ServiceProcess._active_pids.difference_update(self._initial_pids)
 
+        runAsync(self._cleanupWorker)
+
+    def _cleanupWorker(self):
+        """后台线程执行清理：终止目标进程并停止附属服务"""
         target_names = [n.strip().strip('"').lower() for n in self.process_names]
         targets = {}
         try:

@@ -2364,6 +2364,16 @@ class TestParseHotkey(unittest.TestCase):
         self.assertIn("cmd", result)
         self.assertIn("v", result)
 
+    def testPunctuation(self):
+        l = self._listener()
+        result = l._parseHotkey("Ctrl+;")
+        self.assertEqual(result, {"ctrl_l", ";"})
+
+    def testPunctuationMinus(self):
+        l = self._listener()
+        result = l._parseHotkey("Ctrl+-")
+        self.assertEqual(result, {"ctrl_l", "-"})
+
 
 class TestCheckHotkey(unittest.TestCase):
     def setUp(self):
@@ -2423,6 +2433,172 @@ class TestCheckHotkey(unittest.TestCase):
         pressed = {"shift_r", "a"}
         l._modifier_press_order = ["shift_r", "a"]
         self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+    def testPunctuationMatch(self):
+        l = self._makeListener()
+        hotkey = {"ctrl_l", ";"}
+        pressed = {"ctrl_l", ";"}
+        l._modifier_press_order = ["ctrl_l", ";"]
+        self.assertTrue(l._checkHotkey(pressed, hotkey))
+
+
+class TestHotkeyNormalKey(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def testNormalKeyTrue(self):
+        from src.core.input import GlobalHotkeyListener
+        self.assertTrue(GlobalHotkeyListener._isHotkeyNormalKey({"ctrl_l", "0"}, "0"))
+
+    def testModifierKeyFalse(self):
+        from src.core.input import GlobalHotkeyListener
+        self.assertFalse(GlobalHotkeyListener._isHotkeyNormalKey({"ctrl_l", "0"}, "ctrl_l"))
+
+    def testUnrelatedKeyFalse(self):
+        from src.core.input import GlobalHotkeyListener
+        self.assertFalse(GlobalHotkeyListener._isHotkeyNormalKey({"ctrl_l", "0"}, "c"))
+
+    def testEmptyHotkeyFalse(self):
+        from src.core.input import GlobalHotkeyListener
+        self.assertFalse(GlobalHotkeyListener._isHotkeyNormalKey(None, "0"))
+
+
+class TestPruneVkState(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def _listener(self):
+        from src.core.input import GlobalHotkeyListener
+        return GlobalHotkeyListener()
+
+    def testPruneRemovesStaleKeepsHeld(self):
+        l = self._listener()
+        l._vk_pressed = {0x43, 0x41, 0x58}
+        # 0x43、0x41 仍在按下，0x58 已抬起但残留
+        with patch("src.core.input.isKeyDown", side_effect=lambda vk: vk in (0x43, 0x41)):
+            l._pruneVkState(0x43)
+        self.assertEqual(l._vk_pressed, {0x43, 0x41})
+
+    def testKeepCurrentVkOnLag(self):
+        l = self._listener()
+        l._vk_pressed = {0x30, 0x41}
+        # GetAsyncKeyState 对刚按下的键可能有一拍延迟，当前键必须豁免
+        with patch("src.core.input.isKeyDown", return_value=False):
+            l._pruneVkState(0x30)
+        self.assertEqual(l._vk_pressed, {0x30})
+
+    def testPruneRemovesStaleOrder(self):
+        l = self._listener()
+        l._vk_pressed = {0x11, 0x30, 0x41}
+        l._modifier_press_order = ["ctrl_l", "0", "a"]
+        # 0x30(0) 已抬起但残留，0x11(ctrl)、0x41(a) 仍在按下
+        with patch("src.core.input.isKeyDown", side_effect=lambda vk: vk in (0x11, 0x41)):
+            l._pruneVkState(0x11)
+        self.assertEqual(l._vk_pressed, {0x11, 0x41})
+        self.assertEqual(l._modifier_press_order, ["ctrl_l", "a"])
+
+    def testPruneClearsStaleFired(self):
+        l = self._listener()
+        l._vk_pressed = {0x11, 0x30}
+        l._tool_hotkeys["Ctrl+0"] = {"name": "t"}
+        l._tool_hotkeys_cache["Ctrl+0"] = {"ctrl_l", "0"}
+        l._tool_hotkeys_fired.add("Ctrl+0")
+        # ctrl、0 均已抬起，按 x 时自愈应清掉已触发集合
+        with patch("src.core.input.isKeyDown", return_value=False):
+            l._pruneVkState(0x58)
+        self.assertEqual(l._vk_pressed, set())
+        self.assertNotIn("Ctrl+0", l._tool_hotkeys_fired)
+
+    def testPruneRestoresOrderedPress(self):
+        # 回归：0 的 KEYUP 丢失导致顺序记录残留，自愈后重按 Ctrl+0（正确顺序）应能触发
+        l = self._listener()
+        l._tool_hotkeys["Ctrl+0"] = {"name": "t"}
+        l._tool_hotkeys_cache["Ctrl+0"] = {"ctrl_l", "0"}
+        l._vk_pressed = {0x11, 0x30}
+        l._modifier_press_order = ["ctrl_l", "0"]
+        with patch("src.core.input.isKeyDown", side_effect=lambda vk: vk == 0x11):
+            l._pruneVkState(0x11)
+        self.assertEqual(l._modifier_press_order, ["ctrl_l"])
+        l._vk_pressed.add(0x30)
+        l._modifier_press_order.append("0")
+        tool, hotkey = l._matchToolHotkeys({"ctrl_l", "0"}, "0")
+        self.assertEqual(hotkey, "Ctrl+0")
+
+
+class TestMatchToolHotkeys(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def _listener(self):
+        from src.core.input import GlobalHotkeyListener
+        l = GlobalHotkeyListener()
+        l._tool_hotkeys["Ctrl+0"] = {"name": "test"}
+        l._tool_hotkeys_cache["Ctrl+0"] = {"ctrl_l", "0"}
+        l._modifier_press_order = ["ctrl_l", "0"]
+        return l
+
+    def testNormalKeyTriggers(self):
+        l = self._listener()
+        tool, hotkey = l._matchToolHotkeys({"ctrl_l", "0"}, "0")
+        self.assertEqual(hotkey, "Ctrl+0")
+        self.assertEqual(tool["name"], "test")
+
+    def testOtherKeyWithStaleNormalKeyDoesNotTrigger(self):
+        # 回归：按下 Ctrl+C 时残留 '0'，但当前键是 'c'，不应触发 Ctrl+0
+        l = self._listener()
+        tool, hotkey = l._matchToolHotkeys({"ctrl_l", "c", "0"}, "c")
+        self.assertIsNone(tool)
+        self.assertIsNone(hotkey)
+
+    def testModifierKeydownDoesNotTrigger(self):
+        l = self._listener()
+        tool, hotkey = l._matchToolHotkeys({"ctrl_l", "0"}, "ctrl_l")
+        self.assertIsNone(tool)
+        self.assertIsNone(hotkey)
+
+    def testPunctuationHotkeyTriggers(self):
+        l = self._listener()
+        l._tool_hotkeys["Ctrl+;"] = {"name": "punc"}
+        l._tool_hotkeys_cache["Ctrl+;"] = {"ctrl_l", ";"}
+        l._modifier_press_order = ["ctrl_l", ";"]
+        tool, hotkey = l._matchToolHotkeys({"ctrl_l", ";"}, ";")
+        self.assertEqual(hotkey, "Ctrl+;")
+        self.assertEqual(tool["name"], "punc")
+
+
+class TestCodeToKey(unittest.TestCase):
+    def setUp(self):
+        for p in applyMock(qt=True, util=True, pynput=True):
+            self.addCleanup(p.stop)
+
+    def testPunctuation(self):
+        from src.core.input import codeToKey, Qt
+        self.assertEqual(codeToKey(Qt.Key.Key_Semicolon), ";")
+        self.assertEqual(codeToKey(Qt.Key.Key_Comma), ",")
+        self.assertEqual(codeToKey(Qt.Key.Key_Period), ".")
+        self.assertEqual(codeToKey(Qt.Key.Key_Slash), "/")
+        self.assertEqual(codeToKey(Qt.Key.Key_Backslash), "\\")
+        self.assertEqual(codeToKey(Qt.Key.Key_BracketLeft), "[")
+        self.assertEqual(codeToKey(Qt.Key.Key_BracketRight), "]")
+        self.assertEqual(codeToKey(Qt.Key.Key_Minus), "-")
+        self.assertEqual(codeToKey(Qt.Key.Key_Equal), "=")
+        self.assertEqual(codeToKey(Qt.Key.Key_QuoteLeft), "`")
+        self.assertEqual(codeToKey(Qt.Key.Key_Apostrophe), "'")
+
+    def testPlusExcluded(self):
+        # '+' 是解析分隔符且与 '=' 共用物理键，必须不可捕获
+        from src.core.input import codeToKey, Qt
+        self.assertIsNone(codeToKey(Qt.Key.Key_Plus))
+
+    def testLettersAndDigits(self):
+        from src.core.input import codeToKey, Qt
+        self.assertEqual(codeToKey(Qt.Key.Key_A), "A")
+        self.assertEqual(codeToKey(Qt.Key.Key_0), "0")
+        self.assertEqual(codeToKey(Qt.Key.Key_F12), "F12")
+        self.assertEqual(codeToKey(Qt.Key.Key_Return), "Return")
 
 
 # Group: resolution (分辨率)
@@ -2763,8 +2939,12 @@ _register(
     [
         TestParseHotkey,
         TestCheckHotkey,
+        TestHotkeyNormalKey,
+        TestPruneVkState,
+        TestMatchToolHotkeys,
+        TestCodeToKey,
     ],
-    "输入处理 (parseHotkey, checkHotkey)",
+    "输入处理 (parseHotkey, checkHotkey, 残留自愈)",
 )
 
 _register(

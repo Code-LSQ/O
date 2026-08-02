@@ -7,36 +7,21 @@
 ### 项目简介
 
 
-文档正在完善中……如果没找到想找的内容可以过几天再来。
-
 O 是一个带了一些奇怪功能的快速启动器，使用 PySide6 框架，支持插件扩展。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义。
+
+Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
+它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。其中 Quicker 的功能应该是最强的，可惜是会员制软件。
+
+提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者个人使用的。
+
+Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
+
+O 当前支持平台为 Windows 8.1+。
 
 用户自定义插件（.py）和主题文件（.qss），建议放到 data/user 文件夹下，这里是给用户预留的自定义文件夹。虽然在 src 文件夹可以自定义但在更新后就会覆盖掉，但在更新时会删除 data 以外的文件和文件夹，因此不建议这么做。
 
 
-当前支持平台为 Windows 8.1+。
-
-Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
-
-Maye Lite，我有时候无法启动成功。
-uTools，需要安装且会自动更新，同时稍显笨重。
-Dawn Launcher，用 Electron ，速度比较慢，资源占用比较大。
-Flow Launcher，速度比较慢。
-Lucy，不支持高分辨率屏幕。
-Quicker 是会员制软件，虽然很好用但免费版翻页麻烦而且图标功能实在不便。
-Tiny，软件大小只有 10M，内存占用也小，不过有些细节我不喜欢。
-
-它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。
-
-
-提醒您，这是一个非常丑陋、抽象、无语的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者个人使用的。
-
-Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
-
-
 ### 启动器
-
-#### 启动器
 
 程序的主要功能为收纳快捷方式，从而打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
@@ -53,32 +38,31 @@ ANDROID_HOME=C:\Android\SDK  将其加入环境变量
 
 如果要针对单个程序
 使用形如 {env: CLAUDE_CODE_NO_FLICKER=1}  ，每个 {env: } 内填入一个环境变量，用空格` `分隔多个 {env: }。
-对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 {enc: AppData=C:\data} 。
+对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 {env: AppData=C:\data} 。
 
 
 #### 进程/服务管理
 
-填写规范，用 | 分隔，有空格要用 "" 包裹，有白名单，免得误操作给系统搞崩溃了。
+
+此功能仅针对 .exe 程序，需要管理员权限。适用于百度网盘、WPS等软件的流氓进程，还有 VMware 这种关闭后有好几个服务在运行的。
+
+填写格式，使用 " | " 来对各个服务、进程进行分隔，有空格要用 "" 包裹，有服务和进程白名单，免得误操作给系统搞崩溃了。
+
+这里列举一些例子，同时也欢迎各位反馈。
+VMware：服务里 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Service" ，可能还有一个托盘进程
+百度网盘：进程里填写 YunDetectService.exe
+
+如果你需要更加强大的处理流氓软件的功能，可以使用 [Sandboxie](https://github.com/sandboxie-plus/Sandboxie/releases)，可以隔离文件和进程到虚拟环境中。
 
 可以使用资源监视器搜索指定软件有哪些流氓进程，打开方式为 任务管理器->性能->运行新任务右边->资源监视器->句柄搜索
 
-此功能仅针对 .exe 程序，需要管理员权限。适用于百度网盘、WPS等软件的流氓进程，还有 VMware 这种关闭后有好几个服务在运行的。
+
+具体原理
 在用户启动主进程后，设置一个定时器，十秒检查一次主进程状态。
 
-进程管理
-检测到用户结束主进程后，结束其附属进程
+进程管理：检测到用户结束主进程后，结束其附属进程
 
-服务管理
-在启动主进程时，先检查附属服务状态，如果不是手动启用，设置其为手动启用，然后启动附属服务。检测到用户结束主进程后，停止附属服务。
-
-
-格式，使用 " | " 来对各个服务、进程进行分隔，如果服务名有空格应该用 "" 包裹
-
-这里列举一些例子，同时也欢迎各位反馈。
-VMware：服务 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Service" ，可能还有一个托盘进程
-百度网盘：进程 YunDetectService.exe
-
-如果你需要更加强大的处理流氓软件的功能，可以使用 [Sandboxie](https://github.com/sandboxie-plus/Sandboxie/releases)，可以隔离文件和进程到虚拟环境中。
+服务管理：在启动主进程时，先检查附属服务状态，如果不是手动启用，设置其为手动启用，然后启动附属服务。检测到用户结束主进程后，停止附属服务。
 
 
 
@@ -86,7 +70,7 @@ VMware：服务 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Servi
 
 #### 插件规范
 
-插件路径为 src/plugin/ ，用户自定义插件路径为 data/user/，其内的每个 .py、.pyd 文件都是一个插件
+插件路径为 plugin/ ，用户自定义插件路径为 data/user/，其内的每个 .py、.pyd 文件都是一个插件
 
 
 插件系统
@@ -124,7 +108,7 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 
 
 
-#### AI
+#### AI 扩展
 
 为什么有 AI 功能呢？因为这个项目也是我的毕业设计，虽然后来大改了好几次，还是保留了这部分功能，不过我个人是不喜欢什么都加 AI 的。事实上本项目的 AI 功能也称得上比较难用，只不过调用起来比较方便。
 
@@ -141,8 +125,15 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 
 使用说明
 
+简单来说
+源路径 C:\Users\User\.ollama
+目标路径 D:\Tool\Data\.ollama
+目标路径是一个已经存在的文件夹，末尾增加源路径的末尾，这里是 `.ollama`
+
 支持跨盘符移动，支持环境变量如 %UserProfile%
 
+
+详细说明
 源路径的文件或文件夹 C:\Users\User\.ollama，
 目标路径的文件或文件夹 C:\Tool\AppData\.ollama ，是操作完成后形成的路径，运行前，文件夹 C:\Tool\AppData\ 要存在，但内部不能存在 .ollama 同名文件或文件夹
 注意要让源路径和目标路径末尾的文件或文件夹名相同。
@@ -183,6 +174,14 @@ https://github.com/OpenListTeam/OpenList/releases
 /SDK/Python/
 
 
+#### 修改分辨率
+
+
+#### 局域网通信
+
+按理说应该用 qrcode 生成二维码的，但是考虑到程序体积的增加，就没有
+
+
 ### Windows 设置
 
 右键->添加预设项->系统 中有一些 Windows 特定功能
@@ -212,20 +211,11 @@ Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrat
 实时字幕  C:\Windows\System32\LiveCaptions.exe
 
 
-
-### 问题
-
-已发现但尚未解决的问题包括：
-1.
-2.
-
-
 ### 计划
 
-0. 在不增加新依赖的情况下尽可能扩展功能
-1. 清理代码
-2. 优化我丑陋的 UI
-
+1. 在不增加新依赖的情况下尽可能扩展功能
+2. 清理代码
+3. 优化我丑陋的 UI
 
 
 可能会做的事有
@@ -233,6 +223,9 @@ Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrat
 2. 图片质量比较、图片相似度比较
 3. UI 界面配色自定义
 
+
+已发现但暂时搁置的问题
+1. 未实现鼠标移动到窗口边缘的形状变化，降级为当前方案
 
 
 ### 感谢名单
