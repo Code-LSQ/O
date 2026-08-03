@@ -9,8 +9,6 @@ import hashlib
 import logging
 import subprocess
 import threading
-if sys.platform == "win32":
-    from ctypes import windll
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse
@@ -70,47 +68,6 @@ if arch in ("x86_64", "amd64"):
     arch = "x64"
 elif arch in ("arm64", "aarch64"):
     arch = "arm64"
-
-
-def execPython():
-    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码"""
-    script_path = sys.argv[2]
-    extra_args = sys.argv[3:]
-    logger.info(f"以 --exec 模式执行脚本: {script_path}")
-    logger.info(f"额外参数: {extra_args}")
-
-    if sys.stdin is None and sys.platform == "win32":
-        try:
-            sys.stdin = open("CONIN$", "r")
-            sys.stdout = open("CONOUT$", "w")
-            sys.stderr = open("CONOUT$", "w")
-        except OSError:
-            windll.kernel32.AllocConsole()
-            sys.stdin = open("CONIN$", "r")
-            sys.stdout = open("CONOUT$", "w")
-            sys.stderr = open("CONOUT$", "w")
-    try:
-        sys.argv = [script_path] + extra_args
-        sys.path.insert(0, os.path.dirname(os.path.abspath(script_path)))
-        with open(script_path, "r", encoding="utf-8") as f:
-            source = f.read()
-        code = compile(source, script_path, "exec")
-        exec(code, {
-            "__name__": "__main__",
-            "__file__": script_path,
-            "__builtins__": __builtins__,
-        })
-        return 0
-    except SystemExit as e:
-        code = e.code if isinstance(e.code, int) else 1
-        logger.info(f"脚本通过 sys.exit({code}) 退出: {script_path}")
-        return code
-    except Exception:
-        logger.exception(f"执行脚本失败: {script_path}")
-        return 1
-    finally:
-        if sys.stdin is not None:
-            os.system("pause")
 
 
 def compareVersions(v1: str, v2: str) -> int:
@@ -268,48 +225,6 @@ def isWin11() -> bool:
     if sys.platform == "win32":
         return sys.getwindowsversion().build >= 22000
     return False
-
-
-def isAdmin() -> bool:
-    """检测当前进程是否具有管理员/root权限"""
-    if sys.platform == "win32":
-        try:
-            return windll.shell32.IsUserAnAdmin() != 0
-        except AttributeError:
-            return False
-    elif sys.platform in ("linux", "darwin"):
-        return os.geteuid() == 0
-
-
-def runAdmin() -> bool:
-    """若当前非管理员，尝试提权并重启（Windows 使用 UAC）。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
-    if isAdmin():
-        return True
-
-    if sys.platform == "win32":
-        try:
-            script_path = os.path.abspath(sys.argv[0])
-            params = subprocess.list2cmdline([script_path] + sys.argv[1:])
-            result = windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
-            if result > 32:
-                sys.exit(0)
-            else:
-                return False
-        except Exception:
-            logger.exception("提权失败")
-            return False
-
-    elif sys.platform in ("linux", "darwin"):
-        try:
-            if Interpret:
-                cmd = ["sudo", sys.executable] + sys.argv
-            else:
-                cmd = ["sudo", sys.executable] + sys.argv[1:]
-            subprocess.run(cmd, check=True)
-            sys.exit(0)
-        except Exception:
-            logger.exception("提权失败")
-            return False
 
 
 class Singleton:
@@ -480,8 +395,12 @@ def monitor():
         cpu = process.cpu_percent(interval=None)
         if _cpu_count:
             cpu = cpu / _cpu_count
-        mem = process.memory_info().rss / (1024 * 1024)
+        if sys.platform == "win32":
+            mem = process.memory_info().private / (1024 * 1024)
+        else:
+            mem = process.memory_full_info().uss / (1024 * 1024)
         usage = f"CPU {cpu:.1f}%" + " | " + tr("内存") + f" {mem:.0f} MB"
+        logger.info(usage)
         return usage
     except Exception:
         logger.exception("获取资源占用异常")

@@ -14,11 +14,11 @@ from PySide6.QtGui import QPixmap, QImage, QIcon
 from src.util import APP_NAME, app_path, logger, icon_dir, Interpret
 
 if sys.platform == "win32":
+    # 除插件外，只在这个代码块中使用 ctypes 和 winreg
     import winreg
-    from ctypes import WINFUNCTYPE, Structure, windll, c_int, c_int32, c_uint, c_uint16, c_uint32, c_byte, c_void_p, cast, c_wchar, byref, POINTER, sizeof, HRESULT, c_ulong, memset, string_at, c_wchar_p
+    from ctypes import windll, WINFUNCTYPE, Structure, c_int, c_int32, c_uint, c_uint16, c_uint32, c_byte, c_void_p, c_wchar, c_wchar_p, c_ulong, byref, cast, POINTER, sizeof, HRESULT, memset, string_at
 
-    # 命令提示符特殊处理
-    # CLSID 统一使用 shell::: 的形式，更规范，兼容性好。已确认 ::{...} 格式有小部分不兼容
+    # 命令提示符特殊处理，CLSID 统一使用 shell::: 的形式，更规范，兼容性好。已确认 ::{...} 格式有小部分不兼容
     SYSTEM_ACT = {
         "命令提示符": "Terminal",
         "回收站": "shell:::{645FF040-5081-101B-9F08-00AA002F954E}",
@@ -34,7 +34,52 @@ if sys.platform == "win32":
         "添加网络位置": "shell:::{D4480A50-BA28-11d1-8E75-00C04FA31A86}",
         "屏幕设置": "ms-settings:display",
         }
-    
+
+    def openFile(path: str, cwd=None, args=None, operation="open"):
+        """打开文件或文件夹，不检查文件存在性，由字典映射在调用前统一检查并抛异常。
+        os.startfile(path) 不支持参数，所以使用 windll。"""
+        path = os.path.expandvars(path)
+        result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd, 1)
+        if result <= 32:
+            raise RuntimeError(f"打开文件失败 {result}")
+
+    def activateWindow(name):
+        windll.user32.SetForegroundWindow(int(name))
+
+    def isAdmin() -> bool:
+        try:
+            return windll.shell32.IsUserAnAdmin() != 0
+        except AttributeError:
+            return False
+        
+    def runAdmin() -> bool:
+        """若当前非管理员，尝试提权并重启（Windows 使用 UAC）。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
+        if isAdmin():
+            return True
+
+        try:
+            script_path = os.path.abspath(sys.argv[0])
+            params = subprocess.list2cmdline([script_path] + sys.argv[1:])
+            result = windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+            if result > 32:
+                sys.exit(0)
+            else:
+                return False
+        except Exception:
+            logger.exception("提权失败")
+            return False
+        
+    def stdConsole(mode=False):
+        if mode:
+            windll.kernel32.AllocConsole()
+        sys.stdin = open("CONIN$", "r")
+        sys.stdout = open("CONOUT$", "w")
+        sys.stderr = open("CONOUT$", "w")
+
+    def isKeyDown(vk: int) -> bool:
+        """查询虚拟键码是否处于物理按下状态"""
+        return bool(windll.user32.GetAsyncKeyState(vk) & 0x8000)
+
     def setAutoStart(enabled: bool) -> bool:
         key = None
         try:
@@ -64,10 +109,6 @@ if sys.platform == "win32":
         finally:
             if key:
                 winreg.CloseKey(key)
-
-    def isKeyDown(vk: int) -> bool:
-        """查询虚拟键码是否处于物理按下状态"""
-        return bool(windll.user32.GetAsyncKeyState(vk) & 0x8000)
 
     def deleteRegistry(key_handle, sub_key):
         try:
@@ -324,6 +365,35 @@ elif sys.platform == "linux":
         "回收站": "trash://",
     }
 
+    def openFile(path: str, cwd=None, args=None, operation="open"):
+        if args:
+            logger.warning("xdg-open 不支持参数，已忽略")
+        try:
+            subprocess.run(["xdg-open", path], cwd=cwd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"打开文件失败: {e}")
+
+    def isAdmin() -> bool:
+        return os.geteuid() == 0
+    
+    def runAdmin() -> bool:
+        """若当前非管理员，尝试提权并重启。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
+        try:
+            if Interpret:
+                cmd = ["sudo", sys.executable] + sys.argv
+            else:
+                cmd = ["sudo", sys.executable] + sys.argv[1:]
+            subprocess.run(cmd, check=True)
+            sys.exit(0)
+        except Exception:
+            logger.exception("提权失败")
+            return False
+
+    def activateWindow(name):
+        # Linux 下 Qt 的 activateWindow() 已足够，无需原生调用；
+        # Wayland 上没有任何 API 能让应用未经用户交互强制抢焦点，故留空
+        pass
+
     def isKeyDown(vk: int) -> bool:
         """查询虚拟键码是否处于物理按下状态（非 Windows 恒返回 False）"""
         return False
@@ -419,11 +489,50 @@ elif sys.platform == "linux":
 
 
 elif sys.platform == "darwin":
+    from ctypes import CDLL, util, c_void_p
 
     SYSTEM_ACT = {
         "命令提示符": "Terminal",
         "回收站": os.path.expanduser("~/.Trash"),
     }
+
+    def openFile(path: str, cwd=None, args=None, operation="open"):
+        if args:
+            logger.warning("macOS open 命令不支持参数，已忽略")
+        try:
+            subprocess.run(["open", path], cwd=cwd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"打开文件失败: {e}")
+
+    def isAdmin() -> bool:
+        return os.geteuid() == 0
+    
+    def runAdmin() -> bool:
+        """若当前非管理员，尝试提权并重启。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
+        try:
+            if Interpret:
+                cmd = ["sudo", sys.executable] + sys.argv
+            else:
+                cmd = ["sudo", sys.executable] + sys.argv[1:]
+            subprocess.run(cmd, check=True)
+            sys.exit(0)
+        except Exception:
+            logger.exception("提权失败")
+            return False
+
+    def activateWindow(name):
+        """macOS 下通过 AppKit 强制激活前台，等价于 Windows 的 SetForegroundWindow。
+        当应用处于后台时，Qt 自身的 activateWindow() 抢不到前台，故需原生调用。"""
+        try:
+            objc = CDLL(util.find_library("objc"))
+            objc.objc_getClass.restype = c_void_p
+            objc.objc_msgSend.restype = c_void_p
+            objc.sel_registerName.restype = c_void_p
+            NSApp = objc.objc_getClass(b"NSApplication")
+            shared = objc.objc_msgSend(NSApp, objc.sel_registerName(b"sharedApplication"))
+            objc.objc_msgSend(shared, objc.sel_registerName(b"activateIgnoringOtherApps:"), True)
+        except Exception:
+            logger.exception("macOS 激活应用失败")
 
     def isKeyDown(vk: int) -> bool:
         """查询虚拟键码是否处于物理按下状态（非 Windows 恒返回 False）"""

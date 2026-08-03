@@ -8,7 +8,8 @@ from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 
 from src.plugin import PluginBase
-from src.util import isAdmin, runAdmin, ManagePair, logger, checksum, messageBox, dialogBox, tr
+from src.util import ManagePair, logger, checksum, messageBox, dialogBox, tr
+from src.system import isAdmin, runAdmin
 
 SOURCE_NOT_EXISTS = "源路径不存在"
 SOURCE_SYMLINK = "源路径是符号链接"

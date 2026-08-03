@@ -4,8 +4,6 @@ import re
 import copy
 import subprocess
 import webbrowser
-if sys.platform == "win32":
-    from ctypes import windll
 from pathlib import Path
 
 from psutil import Process, process_iter, NoSuchProcess, AccessDenied
@@ -13,15 +11,96 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, isAdmin, runAdmin, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync
 from src.config import SettingsDialog, getConfig
-from src.system import SYSTEM_ACT, getFileIcon
+from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin
 from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copyWait
 from src.core.timer import TimerManager
 from src.gui.control import WindowControl, managePlugins
 
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
+
+
+def execPython():
+    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码"""
+    script_path = sys.argv[2]
+    extra_args = sys.argv[3:]
+    logger.info(f"以 --exec 模式执行脚本: {script_path}")
+    logger.info(f"额外参数: {extra_args}")
+
+    if sys.stdin is None and sys.platform == "win32":
+        from src.system import stdConsole
+        try:
+            stdConsole()
+        except OSError:
+            stdConsole(True)
+    try:
+        sys.argv = [script_path] + extra_args
+        sys.path.insert(0, os.path.dirname(os.path.abspath(script_path)))
+        with open(script_path, "r", encoding="utf-8") as f:
+            source = f.read()
+        code = compile(source, script_path, "exec")
+        exec(code, {
+            "__name__": "__main__",
+            "__file__": script_path,
+            "__builtins__": __builtins__,
+        })
+        return 0
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+        logger.info(f"脚本通过 sys.exit({code}) 退出: {script_path}")
+        return code
+    except Exception:
+        logger.exception(f"执行脚本失败: {script_path}")
+        return 1
+    finally:
+        if sys.stdin is not None:
+            os.system("pause")
+
+def runPython(path: str, cwd, args, operation):
+    if Path(path).suffix.lower() != ".py":
+        raise TypeError("仅支持 .py 文件")
+
+    run_path = getConfig().get("Launch.Runtime.Python", "")
+    if not run_path:
+        if not Interpret:
+            cmd = [sys.executable, "--exec", path]
+            if args:
+                cmd.append(args)
+            subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            return
+        run_path = sys.executable
+
+    cmd = [run_path, path]
+    if args:
+        cmd.append(args)
+    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+def runJava(path: str, cwd, args, operation):
+    if Path(path).suffix.lower() != ".jar":
+        raise TypeError("仅支持 .jar 文件")
+
+    run_path = getConfig().get("Launch.Runtime.Java", "")
+    if not run_path:
+        raise RuntimeError("未配置 Java 路径")
+
+    cmd = [run_path, '-jar', path]
+    if args:
+        cmd.append(args)
+    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+def openUrl(url, *args, **kwargs):
+    webbrowser.open(url)
+
+# 类型映射，对于 .py，.jar ，设置 CREATE_NEW_CONSOLE 是为了方便在关闭终端窗口时结束脚本或程序，否则不好结束
+TYPES = {
+    "文件": openFile,
+    "Python": runPython,
+    "Java": runJava,
+    "网址": openUrl,
+    "预设": None  # 预设类型由 runPreset 方法处理
+}
 
 
 def setApp(app: QApplication):
@@ -298,73 +377,6 @@ def validateProcessName(text: str) -> tuple:
             if "." not in part:
                 return False, part + " " + tr("缺少扩展名")
     return True, ""
-
-# 打开文件或文件夹，不用检查文件存在性，runItem 统一检查并抛异常
-def openFile(path: str, cwd=None, args=None, operation="open"):
-    if sys.platform == "win32":
-        # os.startfile(path) 不支持参数，所以使用 windll
-        path = os.path.expandvars(path)
-        result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd, 1)
-        if result <= 32:
-            raise RuntimeError(f"打开文件失败 {result}")
-    elif sys.platform == "linux":
-        if args:
-            logger.warning("xdg-open 不支持参数，已忽略")
-        try:
-            subprocess.run(["xdg-open", path], cwd=cwd, check=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"打开文件失败: {e}")
-    elif sys.platform == "darwin":
-        if args:
-            logger.warning("macOS open 命令不支持参数，已忽略")
-        try:
-            subprocess.run(["open", path], cwd=cwd, check=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"打开文件失败: {e}")
-
-def runPython(path: str, cwd, args, operation):
-    if Path(path).suffix.lower() != ".py":
-        raise TypeError("仅支持 .py 文件")
-
-    run_path = getConfig().get("Launch.Runtime.Python", "")
-    if not run_path:
-        if not Interpret:
-            cmd = [sys.executable, "--exec", path]
-            if args:
-                cmd.append(args)
-            subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
-            return
-        run_path = sys.executable
-
-    cmd = [run_path, path]
-    if args:
-        cmd.append(args)
-    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
-
-def runJava(path: str, cwd, args, operation):
-    if Path(path).suffix.lower() != ".jar":
-        raise TypeError("仅支持 .jar 文件")
-
-    run_path = getConfig().get("Launch.Runtime.Java", "")
-    if not run_path:
-        raise RuntimeError("未配置 Java 路径")
-
-    cmd = [run_path, '-jar', path]
-    if args:
-        cmd.append(args)
-    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
-
-def openUrl(url, *args, **kwargs):
-    webbrowser.open(url)
-
-# 类型映射，对于 .py，.jar ，设置 CREATE_NEW_CONSOLE 是为了方便在关闭终端窗口时结束脚本或程序，否则不好结束
-TYPES = {
-    "文件": openFile,
-    "Python": runPython,
-    "Java": runJava,
-    "网址": openUrl,
-    "预设": None  # 预设类型由 runPreset 方法处理
-}
 
 
 class DragToolButton(QToolButton):
@@ -2019,8 +2031,7 @@ class MainWindow(WindowControl, QMainWindow):
             self.show()
             self.raise_()
             self.activateWindow()
-            if sys.platform == "win32":
-                windll.user32.SetForegroundWindow(int(self.winId()))
+            activateWindow(self.winId())
 
     def keyPressEvent(self, event):
         """键盘事件"""

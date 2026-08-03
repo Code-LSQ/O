@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QApplication
 sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
 
-from src.main import MainWindow, setApp
-from src.util import APP_NAME, VERSION, OSign, logger, getDevice, execPython
+from src.main import MainWindow, execPython, setApp
+from src.util import APP_NAME, VERSION, OSign, logger, getDevice
 
 
 def exceptionHook(exc_type, value, tb):
