@@ -354,6 +354,23 @@ QListWidget::item:selected:!active, QTreeWidget::item:selected:!active {
                                 stop:0 #383838, stop:1 #2e2e2e);
 }
 QListWidget::item:focus, QTreeWidget::item:focus { outline: none; }
+QListWidget#settings_tab_list {
+    border: 1px solid #3c3c3c;
+    background: transparent;
+    outline: none;
+}
+QListWidget#settings_tab_list::item {
+    padding: 4px 8px;
+    border-bottom: 1px solid #3c3c3c;
+}
+QListWidget#settings_tab_list::item:hover {
+    background: #383838;
+}
+QListWidget#settings_tab_list::item:selected {
+    background: #424242;
+    color: inherit;
+}
+QListWidget#settings_tab_list::item:focus { outline: none; }
 QTableWidget::item:selected {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                 stop:0 #264f78, stop:1 #1e3f68);

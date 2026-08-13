@@ -46,11 +46,8 @@ class ViewMode:
         tab.is_markdown = (mode == cls.MARKDOWN)
         handler = tab.getHandler(mode)
         if mode in (cls.TEXT, cls.MARKDOWN):
-            content, total_lines, loaded_lines, truncated, encoding = \
-                readFileLimit(file_path, max_lines=50000, start_line=0)
+            content, encoding = readFile(file_path)
             tab.encoding = encoding
-            if truncated:
-                tab.setTruncated(total_lines, loaded_lines, file_path, encoding)
             handler.open(tab, content=content)
         elif mode == cls.HEX:
             handler.open(tab, file_path=file_path)
@@ -116,11 +113,8 @@ class ViewMode:
                 content = "\n".join(item["name"] for item in items) if items else ""
                 tab.encoding = "UTF-8"
             else:
-                content, total_lines, loaded_lines, truncated, encoding = \
-                    readFileLimit(tab.file_path, max_lines=50000, start_line=0)
+                content, encoding = readFile(tab.file_path)
                 tab.encoding = encoding
-                if truncated:
-                    tab.setTruncated(total_lines, loaded_lines, tab.file_path, encoding)
             new_handler.open(tab, content=content)
         else:
             new_handler.open(tab, tab.file_path, None)
@@ -144,7 +138,6 @@ class ViewMode:
         tab._current_mode = cls.TEXT
         tab.is_markdown = False
         tab._markdown_cache.clear()
-        tab._page_buffer.clear()
         gal = tab.getHandler(cls.GALLERY)
         gal.zip_image_paths = []
         gal.tar_image_paths = []
@@ -181,14 +174,13 @@ class TextMode:
         if pdf_widget:
             pdf_widget.hide()
         tab.text_edit.show()
-        tab._pagination_bar.setVisible(bool(getattr(tab, "_is_truncated", False)))
         if content is not None:
             tab.setContent(content)
         elif tab._original_content:
             original = tab._original_content
             tab._original_content = ""
             tab.setContent(original)
-        tab.text_edit.setReadOnly(bool(getattr(tab, "_is_truncated", False)))
+        tab.text_edit.setReadOnly(False)
 
     def close(self, tab):
         pass
@@ -204,7 +196,6 @@ class MarkdownMode:
     def open(self, tab, file_path=None, content=None):
         tab.image_scroll.hide()
         tab.text_edit.show()
-        tab._pagination_bar.setVisible(False)
         content_to_render = content if content is not None else tab._original_content
         tab.setContent(content_to_render)
         tab.text_edit.setReadOnly(False)
@@ -273,7 +264,6 @@ class HexMode:
             return
         tab.image_scroll.hide()
         tab.text_edit.show()
-        tab._pagination_bar.setVisible(False)
         try:
             with open(target, "rb") as f:
                 data = f.read()
@@ -1022,20 +1012,15 @@ def listArchiveImages(file_path: str) -> list:
 
 
 
-def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, encoding: str = None):
-    """读取文件，带行数限制，支持跳过行数（用于翻页）
+def readFile(file_path: str, encoding: str = None):
+    """读取整个文件，自动检测编码
     Args:
         file_path: 文件路径
-        max_lines: 最多读取行数
-        start_line: 起始行号（0-based，跳过前 start_line 行）
         encoding: 指定编码（不为 None 时跳过自动检测）
-    
+
     Returns:
-            形式为 [str, int, int, int, str]
-            content: 本次读取的内容
-            total_lines: 文件总行数
-            loaded_lines: 实际读取的行数
-            is_truncated: 1=有下一页, 0=已读完, -1=出错
+            形式为 [str, str]
+            content: 文件内容
             encoding: 实际使用的编码
     """
     try:
@@ -1046,39 +1031,19 @@ def readFileLimit(file_path: str, max_lines: int = 50000, start_line: int = 0, e
             encodings_to_try = list(ENCODING_MAP.values())
         for enc in encodings_to_try:
             try:
-                lines = []
-                total = 0
                 with open(_path, "r", encoding=enc, newline="") as f:
-                    for line in f:
-                        if total >= start_line and len(lines) < max_lines:
-                            lines.append(line.rstrip('\n').rstrip('\r'))
-                        total += 1
-                loaded = len(lines)
-                if total > start_line + loaded:
-                    truncated = 1
-                else:
-                    truncated = 0
-                return '\n'.join(lines), total, loaded, truncated, enc
+                    content = f.read()
+                return content, enc
             except (UnicodeDecodeError, UnicodeError):
                 if encoding:
                     with open(_path, "r", encoding=encoding, errors="replace", newline="") as f:
-                        lines = [line.rstrip('\n').rstrip('\r') for line in f]
-                    total = len(lines)
-                    return '\n'.join(lines), total, total, 0, encoding
+                        return f.read(), encoding
                 continue
-        lines = []
-        total = 0
         with open(_path, "r", encoding="utf-8", errors="replace", newline="") as f:
-            for line in f:
-                if total >= start_line and len(lines) < max_lines:
-                    lines.append(line.rstrip('\n').rstrip('\r'))
-                total += 1
-        loaded = len(lines)
-        truncated = 1 if total > start_line + loaded else 0
-        return '\n'.join(lines), total, loaded, truncated, "utf-8"
+            return f.read(), "utf-8"
     except Exception:
-        logger.exception("带限制读取文件失败")
-        return "", 0, 0, -1, ""
+        logger.exception("读取文件失败")
+        return "", ""
 
 
 def _base64ToImage(b64_data, mime_type):

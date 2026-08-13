@@ -2,6 +2,10 @@ import os
 import sys
 import traceback
 
+if sys.stderr is None:
+    # 无控制台环境下 sys.stderr 为 None，标准库（如 http.server 的 log_message）写 stderr 会崩溃，兜底为重定向到 devnull
+    sys.stderr = open(os.devnull, "w")
+
 from PySide6.QtWidgets import QApplication
 
 sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件

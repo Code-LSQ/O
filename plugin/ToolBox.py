@@ -1,9 +1,13 @@
 import os
 import re
 import json
+import sys
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
+
+if sys.platform == "win32":
+    import winreg
 
 from pynput import keyboard, mouse
 from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox, QWidget, QStackedWidget, QScrollArea, QSpinBox, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QMenu, QFormLayout, QFrame, QStyle, QAbstractSpinBox, QStyledItemDelegate
@@ -14,12 +18,125 @@ from src.plugin import PluginBase
 from src.main import getIcon
 from src.file import FileSelect, collectFiles
 from src.config import getConfig
-from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles
+from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles, filePathWidget
 from src.core.timer import TimerManager
 
 
 cache_file = data_dir / "MD5.json"
 copy_file = data_dir / "copy.txt"
+
+# URL 协议方案名正则，仅字母开头，可含字母数字 + - .
+URL_SCHEME_RE = r"^[a-z][a-z0-9+.\-]*$"
+# 常用协议，覆盖会劫持浏览器等系统默认处理程序，注册前需警告
+URL_RESERVED = {"http", "https", "ftp", "ftps", "file", "data", "about", "res",
+                "mailto", "tel", "sms", "javascript", "ws", "wss", "chrome", "edge"}
+
+
+class _UrlProtocol:
+    """URL 协议注册表管理，仅在 Windows 下生效，其余平台函数直接返回"""
+
+    _BASE_KEY = r"Software\Classes"
+
+    def __init__(self):
+        self._win32 = sys.platform == "win32"
+
+    def register(self, scheme: str, path: str, args: str = "") -> bool:
+        """注册 URL 协议到当前用户，命令形如 "{path}" {args} "%1" """
+        if not self._win32 or not scheme or not path:
+            return False
+        scheme = scheme.lower()
+        try:
+            root = winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER, rf"{self._BASE_KEY}\{scheme}", 0,
+                winreg.KEY_SET_VALUE
+            )
+            try:
+                winreg.SetValueEx(root, "", 0, winreg.REG_SZ, f"{scheme} URL")
+                winreg.SetValueEx(root, "URL Protocol", 0, winreg.REG_SZ, "")
+            finally:
+                winreg.CloseKey(root)
+
+            icon_key = winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER, rf"{self._BASE_KEY}\{scheme}\DefaultIcon", 0,
+                winreg.KEY_SET_VALUE
+            )
+            try:
+                winreg.SetValueEx(icon_key, "", 0, winreg.REG_SZ, f'"{path}",0')
+            finally:
+                winreg.CloseKey(icon_key)
+
+            cmd = f'"{path}"'
+            if args:
+                cmd += f" {args}"
+            cmd += ' "%1"'
+            cmd_key = winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER,
+                rf"{self._BASE_KEY}\{scheme}\shell\open\command", 0,
+                winreg.KEY_SET_VALUE
+            )
+            try:
+                winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd)
+            finally:
+                winreg.CloseKey(cmd_key)
+            logger.info(f"URL 协议已注册: {scheme}:// -> {path}")
+            return True
+        except Exception:
+            logger.exception(f"注册 URL 协议失败: {scheme}")
+            return False
+
+    def unregister(self, scheme: str) -> bool:
+        """取消注册 URL 协议，键不存在时视为成功"""
+        if not self._win32 or not scheme:
+            return False
+        scheme = scheme.lower()
+        try:
+            self._deleteKey(winreg.HKEY_CURRENT_USER, rf"{self._BASE_KEY}\{scheme}")
+            logger.info(f"URL 协议已取消注册: {scheme}://")
+            return True
+        except Exception:
+            logger.exception(f"取消注册 URL 协议失败: {scheme}")
+            return False
+
+    def isRegistered(self, scheme: str) -> bool:
+        """检查 URL 协议是否已注册"""
+        if not self._win32 or not scheme:
+            return False
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, rf"{self._BASE_KEY}\{scheme}", 0,
+                winreg.KEY_READ
+            )
+            winreg.CloseKey(key)
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception:
+            logger.exception(f"检查 URL 协议注册状态失败: {scheme}")
+            return False
+
+    def _deleteKey(self, root, key_path: str):
+        """递归删除注册表键及其子键，键不存在时静默返回"""
+        try:
+            sub = winreg.OpenKey(root, key_path, 0, winreg.KEY_ALL_ACCESS)
+        except FileNotFoundError:
+            return
+        try:
+            while True:
+                try:
+                    child = winreg.EnumKey(sub, 0)
+                    self._deleteKey(sub, child)
+                except OSError:
+                    break
+        finally:
+            winreg.CloseKey(sub)
+        try:
+            winreg.DeleteKey(root, key_path)
+        except OSError:
+            logger.exception(f"删除注册表键失败: {key_path}")
+
+
+_url_protocol = _UrlProtocol()
+
 
 class ToolBox(PluginBase):
 
@@ -40,7 +157,8 @@ class ToolBox(PluginBase):
             "duplicate.exclude": ["*.pyc", "*/__pycache__/", "*/.git/"],
             "click.interval": 3,
             "scroll.speed": 50,
-            "paste.regex_text": r"^[ \t]*\n"
+            "paste.regex_text": r"^[ \t]*\n",
+            "url_protocol": []
         }
         self._scroll_timer = None
         self._copy_mgr = None
@@ -1092,6 +1210,35 @@ class ToolBoxSettings(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._qt_list.addItem(item)
 
+        self._url_list = QListWidget()
+        self._url_list.setMaximumHeight(100)
+        self._url_list.itemDoubleClicked.connect(self._urlEdit)
+        layout.addRow("URL 协议", self._url_list)
+
+        url_btn_h = QHBoxLayout()
+        url_add = QPushButton("新建")
+        url_add.clicked.connect(self._urlAdd)
+        url_edit = QPushButton("编辑")
+        url_edit.clicked.connect(self._urlEdit)
+        url_del = QPushButton("删除")
+        url_del.clicked.connect(self._urlDel)
+        url_reg = QPushButton("注册")
+        url_reg.clicked.connect(self._urlRegister)
+        url_unreg = QPushButton("取消注册")
+        url_unreg.clicked.connect(self._urlUnregister)
+        url_btn_h.addWidget(url_add)
+        url_btn_h.addWidget(url_edit)
+        url_btn_h.addWidget(url_del)
+        url_btn_h.addWidget(url_reg)
+        url_btn_h.addWidget(url_unreg)
+        url_btn_h.addStretch()
+        layout.addRow("", url_btn_h)
+
+        for entry in self.settings.get("url_protocol", []):
+            item = QListWidgetItem(f"{entry[0]} → {entry[1]}")
+            item.setData(Qt.ItemDataRole.UserRole, list(entry))
+            self._url_list.addItem(item)
+
     def _addSearchPath(self):
         path = getFilePath(self, "选择搜索路径", mode="dir")
         if path:
@@ -1194,6 +1341,151 @@ class ToolBoxSettings(QWidget):
         self._qt_list.insertItem(a, item_b)
         self._qt_list.insertItem(b, item_a)
 
+    def _urlDialog(self, entry: list = None) -> list:
+        """URL 协议编辑对话框，确定返回 [scheme, path, args]，否则返回 None"""
+        scheme = entry[0] if entry else ""
+        path = entry[1] if entry else ""
+        args = entry[2] if entry and len(entry) > 2 else ""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑URL协议" if entry else "添加URL协议")
+        dialog.setMinimumWidth(420)
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        scheme_edit = QLineEdit(scheme)
+        form.addRow("协议名", scheme_edit)
+        path_edit, _ = filePathWidget(dialog, form, "程序路径", "选择",
+                                      "可执行文件 (*.exe);;所有文件 (*)")
+        path_edit.setText(path)
+        args_edit = QLineEdit(args)
+        args_edit.setToolTip('注册命令为 "{path}" {args} "%1"，参数可留空')
+        form.addRow("参数", args_edit)
+        layout.addLayout(form)
+        btn_h = QHBoxLayout()
+        ok = QPushButton("确定")
+        ok.clicked.connect(dialog.accept)
+        cancel = QPushButton("取消")
+        cancel.clicked.connect(dialog.reject)
+        btn_h.addStretch()
+        btn_h.addWidget(ok)
+        btn_h.addWidget(cancel)
+        layout.addLayout(btn_h)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        scheme_text = scheme_edit.text().strip().lower()
+        if not re.match(URL_SCHEME_RE, scheme_text):
+            messageBox(dialog, "警告",
+                       "协议名不合法（字母开头，仅含字母数字 + - .）", 1)
+            return None
+        path_text = path_edit.text().strip().strip('"')
+        if not path_text:
+            messageBox(dialog, "警告", "程序路径不能为空", 1)
+            return None
+        if not os.path.isfile(path_text):
+            if not messageBox(dialog, "提示",
+                              f"程序路径不存在: {path_text}\n是否仍要保存?"):
+                return None
+        return [scheme_text, path_text, args_edit.text().strip()]
+
+    def _urlFindIndex(self, scheme: str) -> int:
+        """按协议名查找列表索引，大小写不敏感，不存在返回 -1"""
+        for i in range(self._url_list.count()):
+            entry = self._url_list.item(i).data(Qt.ItemDataRole.UserRole)
+            if entry and entry[0].lower() == scheme.lower():
+                return i
+        return -1
+
+    def _urlAddItem(self, entry: list, row: int = None):
+        """构造 URL 协议列表项，row 为空则追加到末尾，否则插入指定位置"""
+        item = QListWidgetItem(f"{entry[0]} → {entry[1]}")
+        item.setData(Qt.ItemDataRole.UserRole, entry)
+        if row is None:
+            self._url_list.addItem(item)
+        else:
+            self._url_list.insertItem(row, item)
+        return item
+
+    def _urlAdd(self):
+        entry = self._urlDialog()
+        if entry is None:
+            return
+        idx = self._urlFindIndex(entry[0])
+        if idx >= 0:
+            if not messageBox(self, "警告", f"协议 {entry[0]}:// 已存在，是否覆盖?"):
+                return
+            self._url_list.takeItem(idx)
+            _url_protocol.unregister(entry[0])
+        self._urlAddItem(entry)
+
+    def _urlEdit(self):
+        current = self._url_list.currentItem()
+        if not current:
+            return
+        entry = current.data(Qt.ItemDataRole.UserRole)
+        new_entry = self._urlDialog(entry)
+        if new_entry is None:
+            return
+        old_scheme = entry[0]
+        new_scheme = new_entry[0]
+        was_registered = _url_protocol.isRegistered(old_scheme)
+        if new_scheme != old_scheme:
+            idx = self._urlFindIndex(new_scheme)
+            if idx >= 0:
+                if not messageBox(self, "警告", f"协议 {new_scheme}:// 已存在，是否覆盖?"):
+                    return
+                self._url_list.takeItem(idx)
+                _url_protocol.unregister(new_scheme)
+            if was_registered:
+                _url_protocol.unregister(old_scheme)
+        row = self._url_list.row(current)
+        self._url_list.takeItem(row)
+        self._urlAddItem(new_entry, row)
+        self._url_list.setCurrentRow(row)
+        if was_registered:
+            if old_scheme != new_scheme:
+                messageBox(self, "提示",
+                           f"已取消注册 {old_scheme}://，如需新协议请点击\"注册\"", 1)
+            elif new_entry[1] != entry[1] or new_entry[2] != entry[2]:
+                messageBox(self, "提示",
+                           "该协议已注册，路径或参数已更改，请点击\"注册\"应用新配置", 1)
+
+    def _urlDel(self):
+        current = self._url_list.currentItem()
+        if not current:
+            return
+        scheme = current.data(Qt.ItemDataRole.UserRole)[0]
+        if not messageBox(self, "确认删除", f"是否删除 {scheme}:// 并取消注册?"):
+            return
+        _url_protocol.unregister(scheme)
+        self._url_list.takeItem(self._url_list.row(current))
+
+    def _urlRegister(self):
+        current = self._url_list.currentItem()
+        if not current:
+            return
+        scheme, path, args = current.data(Qt.ItemDataRole.UserRole)
+        if scheme in URL_RESERVED:
+            if not messageBox(self, "警告",
+                              f"{scheme}:// 是常用协议，注册会覆盖系统默认处理程序，是否继续?"):
+                return
+        if not os.path.isfile(path):
+            if not messageBox(self, "提示",
+                              f"程序路径不存在: {path}\n是否仍要注册?"):
+                return
+        if _url_protocol.register(scheme, path, args):
+            messageBox(self, "提示", f"已注册 {scheme}://", 1)
+        else:
+            messageBox(self, "错误", f"注册 {scheme}:// 失败", 1)
+
+    def _urlUnregister(self):
+        current = self._url_list.currentItem()
+        if not current:
+            return
+        scheme = current.data(Qt.ItemDataRole.UserRole)[0]
+        if _url_protocol.unregister(scheme):
+            messageBox(self, "提示", f"已取消注册 {scheme}://", 1)
+        else:
+            messageBox(self, "错误", f"取消注册 {scheme}:// 失败", 1)
+
     def getSetting(self) -> dict:
         self.settings["scroll.speed"] = self.scroll_speed.value()
         self.settings["copy.target_file"] = os.path.normpath(self.copy_path_edit.text()) if self.copy_path_edit.text() else "data/copy.txt"
@@ -1214,6 +1506,10 @@ class ToolBoxSettings(QWidget):
             .replace('\\n', '\n')
             .replace('\\r', '\r')
             .replace('\\t', '\t'))
+        self.settings["url_protocol"] = [
+            self._url_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self._url_list.count())
+        ]
         return self.settings
 
 

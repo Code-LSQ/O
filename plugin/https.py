@@ -149,6 +149,11 @@ class HTTPTool:
                 except Exception:
                     logger.exception("处理器完成失败")
 
+            def log_message(self, format, *args):
+                # 覆盖默认实现，改为写入项目日志。默认写入 sys.stderr，无控制台环境（打包 exe / pythonw）下 stderr 为 None 会崩溃
+                logger.info("%s - - [%s] %s",
+                            self.address_string(), self.log_date_time_string(), format % args)
+
             def do_GET(self):
                 path = parse.unquote(self.path)
                 if path == "/":

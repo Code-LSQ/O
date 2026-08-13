@@ -332,6 +332,23 @@ QListWidget::item:selected:!active, QTreeWidget::item:selected:!active {
     background-color: #eaeaea;
 }
 QListWidget::item:focus, QTreeWidget::item:focus { outline: none; }
+QListWidget#settings_tab_list {
+    border: 1px solid #d8d8d8;
+    background: transparent;
+    outline: none;
+}
+QListWidget#settings_tab_list::item {
+    padding: 4px 8px;
+    border-bottom: 1px solid #d8d8d8;
+}
+QListWidget#settings_tab_list::item:hover {
+    background: #eaeaea;
+}
+QListWidget#settings_tab_list::item:selected {
+    background: #d8d8d8;
+    color: inherit;
+}
+QListWidget#settings_tab_list::item:focus { outline: none; }
 QTableWidget::item:selected {
     background-color: #5a5a5a;
     color: #ffffff;

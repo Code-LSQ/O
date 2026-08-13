@@ -12,33 +12,44 @@ O 是一个带了一些奇怪功能的快速启动器，使用 PySide6 框架，
 Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
 它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。其中 Quicker 的功能应该是最强的，可惜是会员制软件。
 
-提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者个人使用的。
+提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者自己使用的。并且这个项目大部分的代码是 AI 写的，不过基本经受了检查，作者正在进行逐步清理与优化。
 
 Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 
-O 当前支持平台为 Windows 8.1+。
+O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
 
 用户自定义插件（.py）和主题文件（.qss），建议放到 data/user 文件夹下，这里是给用户预留的自定义文件夹。虽然在 src 文件夹可以自定义但在更新后就会覆盖掉，但在更新时会删除 data 以外的文件和文件夹，因此不建议这么做。
 
 
 ### 启动器
 
-程序的主要功能为收纳快捷方式，从而打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
+
+![](ex/image/screen1.png)
+
+程序的主要功能为收纳快捷方式，支持打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
 路径支持环境变量如 %UserProfile%
 图标可以填一个 exe 文件的路径，会获取它的图标。
 
 
+启动参数（args），支持两个特殊占位符：`{Select}`：运行时先模拟 Ctrl+C 捕获当前选中的文本并替换进去。
+另一个是 `{env: KEY=value}` ，在下方的环境变量中介绍。
+
+管理员运行仅`文件`类型生效。
+
+呼出方式在设置中修改，支持全局快捷键、鼠标侧键（前进/后退键）、连按 Ctrl。
+
+
 #### 环境变量
 
-在设置->环境变量中
+在设置->选项->环境变量中，可以填写环境变量，程序启动时会向系统注入这些环境变量。
 C:\SDK\MinGW\   将此文件夹加入 Path
-ANDROID_HOME=C:\Android\SDK  将其加入环境变量
+ANDROID_HOME=C:\Android\SDK   将其加入环境变量
 这是针对所有项目的环境变量
 
 如果要针对单个程序
-使用形如 {env: CLAUDE_CODE_NO_FLICKER=1}  ，每个 {env: } 内填入一个环境变量，用空格` `分隔多个 {env: }。
-对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 {env: AppData=C:\data} 。
+在启动项参数中加入形如 `{env: CLAUDE_CODE_NO_FLICKER=1}`  ，每个 {env: } 内填入一个环境变量，用空格` `分隔多个 {env: }。仅在该程序运行期间临时设置环境变量，结束后恢复
+对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 `{env: AppData=C:\data}`
 
 
 #### 进程/服务管理
@@ -64,6 +75,12 @@ VMware：服务里 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Se
 
 服务管理：在启动主进程时，先检查附属服务状态，如果不是手动启用，设置其为手动启用，然后启动附属服务。检测到用户结束主进程后，停止附属服务。
 
+
+#### 其他
+
+内置的简易编辑器和文件查看器功能不完善，可以不使用。
+右键->添加预设项 中可以添加程序自身、系统、插件的一些功能。
+更新通过右键->添加预设项的更新来进行，本功能尚未测试所以更新功能可能不稳定。
 
 
 ### 插件
@@ -92,9 +109,9 @@ getAction()，控制插件返回的按钮
       }
     }
   }
-init_plugins() 会读取 enabled 字段决定是否加载，其余字段作为 plugin_configs 传入。
-save_plugin_config() 会重新构建 Plugin 字典：先取 enabled_plugins 中的状态，再合并 plugin_configs。
-Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _save_config() 中请勿直接对整个字典赋值，以免覆盖 enabled 字段。应该使用 update.() 或使用一个单独的子字段保存配置。
+插件通过 PluginBase 的 loadConfig() 读取 config["Plugin"] 下自己名字对应的配置，用 saveConfig() 写回，写回时会保留 enabled 字段。
+插件管理器通过 initConfig() 读取各插件的 enabled 字段决定是否加载，用 saveConfig() 把启用状态和插件配置一并写回。
+Plugin.plugin_name 的 enabled 字段由插件管理器控制，插件请勿直接对整个字典赋值，以免覆盖 enabled 字段。应该使用 update() 或使用一个单独的子字段保存配置。
 
 
 开发新插件
@@ -106,11 +123,27 @@ Plugin.plugin_name 有 enabled 字段，由插件管理器控制。插件在 _sa
 
 #### 工具箱
 
+搜索：全局搜索启动项，按名称/路径/备注过滤，回车直接运行
+快速文本：文本片段选择器，选中后写入剪贴板并模拟 Ctrl+V 粘贴到任意程序
+批量重命名：支持查找替换、数字排序、固定前缀、固定后缀四种模式，实时预览
+查找重复文件：按 MD5 分组找出重复文件，可移动到回收站，MD5 结果会缓存，只对变更文件增量重算
+快速粘贴：取回当前选中的文本，清理开头空行后粘贴进编辑器
+自动滑动：模拟鼠标滚轮持续向下滚动，速度可调
+自动复制：剪贴板文本变化时自动追加写入 data/copy.txt
+自动搜索：剪贴板文本变化后自动搜索文件内容，结果弹窗双击打开并跳转到对应行
+自动点击：定时模拟鼠标左键点击，运行中按数字键 1-9 实时调整间隔，Esc 停止
+URL 协议注册：把自定义协议（如 `myapp://`）注册到系统，绑定到任意程序，点击链接即可唤起
 
 
 #### AI 扩展
 
 为什么有 AI 功能呢？因为这个项目也是我的毕业设计，虽然后来大改了好几次，还是保留了这部分功能，不过我个人是不喜欢什么都加 AI 的。事实上本项目的 AI 功能也称得上比较难用，只不过调用起来比较方便。
+
+右键 AI：选中文本、文件或文件夹后调用 AI 处理，文件直接作为附件发送，结果在置顶对话框中流式显示，可复制或粘贴回编辑器。请注意，这个对话框是点击底部按钮后自动关闭的。
+AI 面板：独立置顶窗口或停靠在编辑器右侧，支持多对话管理、模型下拉选择与刷新、导出对话（Markdown/纯文本）、提示词快捷按钮、消息拖拽图片。
+OCR：拖入单张图片或整个文件夹批量识别文字，结果自动保存为 txt 并在编辑器中打开。
+支持的服务商：Claude、DeepSeek、Gemini、Ollama（本地）、OpenAI 及 OpenAI 兼容服务（DeepSeek、OpenRouter、New API、阿里云百炼、火山引擎、腾讯混元、硅基流动等）、自定义 API。
+负载均衡：可为每个配置档设置优先级和权重，请求自动分配，连续失败自动禁用。
 
 #### 符号链接
 
@@ -176,10 +209,21 @@ https://github.com/OpenListTeam/OpenList/releases
 
 #### 修改分辨率
 
+在设置页中配置分辨率列表（默认有 1280×720、1920×1080、1920×1200、2560×1440、2560×1600、3200×2000），每行一个，菜单里点一下即可切换。
+切换时会先测试显示器是否支持，再临时切换并询问是否保留：选择是则写入注册表永久生效，否则自动恢复原来的分辨率。
+
 
 #### 局域网通信
 
-按理说应该用 qrcode 生成二维码的，但是考虑到程序体积的增加，就没有
+
+在电脑上启动一个 HTTP 服务器，局域网内其他设备（尤其是手机）可以直接在浏览器访问 `http://IP:port` 使用。举例： http://192.168.8.2:8000
+
+- 文件浏览与下载：列出共享文件夹，支持中文文件名
+- 文件上传：支持网页端拖拽上传，大文件走流式上传
+- 文本消息：网页端和对话框可以互相收发文本。
+- 网页针对手机访问做了适配。
+
+按理说应该用 qrcode 生成二维码的，然后手机可以直接扫码打开网址，但是考虑到程序体积的增加，暂时没有使用此方案，后续再看。
 
 
 ### Windows 设置
@@ -235,5 +279,231 @@ Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrat
 
 ## English
 
+### About
 
+O is a fast launcher with a bunch of strange features, built on the PySide6 framework, with plugin support. O doesn't actually mean anything — it's just that the project needed a name, so it shows up here, because I'm terrible at naming things. You can think of it as `Open`, `Operation`, or `Otiose` (useless), or anything else you like.
+
+There are already plenty of wheels for launchers on Windows: Quicker, uTools, Maye Lite, Rolan, Lucy, Tiny, Flow Launcher. They're all good software, but none of them quite fit how I work, so in the end I built my own wheel. If you find this software hard to use but still need something similar, go check them out. Quicker probably has the most powerful features, but unfortunately it's subscription-based.
+
+Fair warning: this is a pretty ugly project. The author mostly adds whatever comes to mind without any plan, because this project is mainly for personal use. Also, most of the code in this project was written by AI — though it has basically been reviewed — and the author is gradually cleaning it up and optimizing it.
+
+Every project on GitHub gets someone who wants to taste the broth. Thank you for trying it out and for your contribution.
+
+O currently supports Windows 8.1+. O is portable software — no installation required, and it mostly doesn't touch the registry. To uninstall, just exit the program and delete the files. Program data (config, logs, etc.) is stored in the `data/` directory.
+
+For your own custom plugins (.py) and themes (.qss), it's recommended to put them in the `data/user` folder — that's the folder reserved for users. Although you can customize things inside the `src` folder, they'd be overwritten after an update, because updates delete everything except `data`, so it's not recommended.
+
+### Launcher
+
+![](ex/image/screen1.png)
+
+The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable. Paths support environment variables like `%UserProfile%`. For the icon, you can fill in the path of an exe file and it will extract that icon.
+
+Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in. The other is `{env: KEY=value}`, covered in the environment variables section below.
+
+Running as administrator only works for the `File` type.
+
+How you summon it is configured in Settings — global hotkey, mouse side buttons (forward/back), or double-pressing Ctrl.
+
+#### Environment Variables
+
+In Settings -> Options -> Environment Variables, you can fill in environment variables that the program injects into the system at startup.
+`C:\SDK\MinGW\`    adds this folder to Path
+`ANDROID_HOME=C:\Android\SDK`    adds it as an environment variable
+These are environment variables for all projects.
+
+To target a single program, add something like `{env: CLAUDE_CODE_NO_FLICKER=1}` to its launch arguments. Each `{env: }` holds one environment variable, with multiple `{env: }` separated by spaces ` `. The variable is set temporarily only while that program runs and is restored afterwards. For some programs, this can be used to redirect the program's data directory, e.g. `{env: AppData=C:\data}`.
+
+#### Process / Service Management
+
+This feature only applies to .exe programs and requires administrator privileges. It's meant for rogue processes from software like Baidu Netdisk and WPS, and for software like VMware that leaves several services running after you close it.
+
+Fill-in format: use " | " to separate the various services and processes. If there are spaces, wrap them in "" (quotes). There are whitelists for services and processes, so you don't accidentally crash the system.
+
+Here are some examples, and feedback is welcome.
+VMware: under services, VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Service"; there may also be a tray process.
+Baidu Netdisk: under processes, fill in YunDetectService.exe.
+
+If you need something more powerful for dealing with rogue software, you can use [Sandboxie](https://github.com/sandboxie-plus/Sandboxie/releases), which isolates files and processes in a virtual environment.
+
+You can use Resource Monitor to search which rogue processes a given software has. Open it via Task Manager -> Performance -> "Run new task" (the arrow on the right) -> Resource Monitor -> Handle search.
+
+How it works: after the user starts the main process, a timer checks the main process status every ten seconds.
+
+Process management: when it detects the user has ended the main process, it ends its attached processes.
+
+Service management: when starting the main process, it first checks the attached services' status; if not set to manual, it sets them to manual, then starts them. When it detects the user has ended the main process, it stops the attached services.
+
+#### Misc
+
+The built-in simple editor and file viewer are incomplete — feel free not to use them.
+Right-click -> Add preset items lets you add features of the program itself, the system, and plugins.
+Updates go through the "Update" item under Right-click -> Add preset items. This feature hasn't been tested yet, so updates may be unstable.
+
+### Plugins
+
+#### Plugin Spec
+
+Plugins live in `plugin/`; user plugins go in `data/user/`. Every .py and .pyd file inside is a plugin.
+
+The plugin system:
+PluginBase (base class) — defined in src/plugin.py; all plugins must inherit from it.
+
+getAction() controls the button the plugin returns.
+
+If you need extra Python library dependencies, declare them in the .py file as a `PluginLib` list.
+
+Config saving:
+Plugin config is stored under `Plugin.plugin_name` in the main config file `/data/config.json`:
+  {
+    "Plugin": {
+      "plugin_name": {
+        "enabled": true,
+        "..."
+      }
+    }
+  }
+Plugins read the config corresponding to their own name under config["Plugin"] via PluginBase's loadConfig(), and write back with saveConfig(); the enabled field is preserved on write-back.
+The plugin manager reads each plugin's enabled field via initConfig() to decide whether to load it, and uses saveConfig() to write back the enabled state together with the plugin config.
+The enabled field of Plugin.plugin_name is controlled by the plugin manager. Plugins should not assign the whole dict directly, to avoid overwriting the enabled field. Use update(), or save config in a separate sub-field.
+
+Developing a new plugin:
+1. Create a .py file in `plugin/`
+2. Define a class inheriting PluginBase and set the description attribute
+3. Implement getAction() to return a menu item
+
+#### Toolbox
+
+Search: global search over launcher items, filtered by name/path/note, press Enter to run directly.
+Quick Text: a text-snippet picker; the selected snippet is copied to the clipboard and pasted into any program via a simulated Ctrl+V.
+Batch Rename: supports four modes — find & replace, numeric ordering, fixed prefix, fixed suffix — with live preview.
+Find Duplicate Files: groups duplicate files by MD5, with an option to move them to the Recycle Bin. MD5 results are cached, only incrementally recomputed for changed files.
+Quick Paste: grabs the currently selected text, strips leading blank lines, and pastes it into the editor.
+Auto Scroll: simulates the mouse wheel scrolling down continuously, speed adjustable.
+Auto Copy: automatically appends clipboard text changes to `data/copy.txt`.
+Auto Search: automatically searches file contents when the clipboard text changes; results pop up in a dialog — double-click to open and jump to the matching line.
+Auto Click: periodically simulates a left mouse click; while running, press number keys 1-9 to adjust the interval in real time, Esc to stop.
+URL Protocol Registration: registers a custom protocol (e.g. `myapp://`) with the system and binds it to any program — clicking the link summons it.
+
+#### AI Extension
+
+Why is there an AI feature? Because this project is also my graduation project. Even though it was heavily reworked several times afterwards, this part was kept. Personally, though, I'm not a fan of shoehorning AI into everything. In fact, the AI feature here is arguably pretty hard to use — it's just convenient to call.
+
+Right-click AI: select text, a file, or a folder and call AI to process it. Files are sent directly as attachments, and results stream in an always-on-top dialog that supports copying or pasting back into the editor. Note that this dialog closes automatically after you click a button at the bottom.
+AI Panel: a standalone always-on-top window or docked to the right of the editor; supports multi-conversation management, model dropdown with refresh, conversation export (Markdown / plain text), quick-prompt buttons, and dragging images into messages.
+OCR: drag in a single image or an entire folder to batch-recognize text; results are auto-saved as txt and opened in the editor.
+Supported providers: Claude, DeepSeek, Gemini, Ollama (local), OpenAI and OpenAI-compatible services (DeepSeek, OpenRouter, New API, Alibaba Cloud Bailian, Volcano Engine, Tencent Hunyuan, SiliconFlow, etc.), and custom APIs.
+Load balancing: each profile can be given a priority and weight; requests are distributed automatically, and profiles that keep failing are auto-disabled.
+
+#### Symbolic Links
+
+This plugin is for managing symbolic links.
+
+When it's useful:
+1. The C drive is running out of space and you want to move content to the D drive.
+2. You want to keep a piece of software's data in the same folder for management.
+
+It requires administrator privileges. It's recommended to back up the folder before using it.
+Note! Do NOT use it on system folders like C:\Windows!!!
+
+Usage:
+In a nutshell:
+Source path: C:\Users\User\.ollama
+Target path: D:\Tool\Data\.ollama
+The target path is an existing folder; append the tail of the source path — here `.ollama` — to its end.
+
+Cross-drive moves and environment variables like %UserProfile% are supported.
+
+In detail:
+The source file or folder C:\Users\User\.ollama, and the target file or folder C:\Tool\AppData\.ollama is the path formed after the operation. Before running, the folder C:\Tool\AppData\ must exist, but it must not already contain a file or folder named .ollama. Note that the file/folder names at the tail of the source and target paths must be the same.
+
+The specific behavior of each button:
+
+Run — behavior: C:\Users\User\.ollama is moved into C:\Tool\AppData, forming the path C:\Tool\AppData\.ollama, then a symbolic link is created at C:\Users\User\.ollama pointing to C:\Tool\AppData\.ollama, so that accessing C:\Users\User\.ollama actually accesses C:\Tool\AppData\.ollama. Due to how symbolic links work, moving the folder is the only way to shrink the C drive or centralize files.
+
+When the C:\Tool\AppData folder exists and contains no .ollama folder, this is roughly equivalent to the cmd commands below, but with added validation and rollback.
+```
+move C:\Users\User\.ollama C:\Tool\AppData
+mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
+```
+
+Restore — behavior: deletes the symbolic link at the source path and moves the target file or folder back. If the source path is not a symbolic link, it asks whether to delete it and overwrite its contents.
+
+Test — behavior: checks all saved symbolic-link paths — whether the source path exists and whether it's a symlink, file, or folder, and likewise for the target path.
+
+#### OpenList
+
+OpenList is an open-source project; this plugin calls OpenList's API for file sync.
+You'll need to learn OpenList separately.
+https://github.com/OpenListTeam/OpenList/releases
+
+##### Exclude Rules
+
+Exclude rules are relative to the source directory, and are relative paths; `/` and `\` work the same.
+
+For example, if the current directory is C:\Code and you want to exclude C:\Code\SDK\Python, either of these works:
+\SDK\Python\
+/SDK/Python/
+
+#### Change Resolution
+
+Configure a resolution list on the settings page (defaults: 1280×720, 1920×1080, 1920×1200, 2560×1440, 2560×1600, 3200×2000), one per line; click one in the menu to switch.
+On switch, it first tests whether the display supports it, then temporarily switches and asks whether to keep it: choose yes to write it to the registry permanently, otherwise it automatically restores the previous resolution.
+
+#### LAN Communication
+
+Starts an HTTP server on the PC; other devices on the LAN (especially phones) can use it directly in a browser at `http://IP:port`. Example: http://192.168.8.2:8000
+
+- File browsing & download: lists shared folders, supports Chinese filenames.
+- File upload: supports drag-and-drop upload from the web page; large files stream.
+- Text messages: the web page and the dialog can send text back and forth.
+- The web page is adapted for phone access.
+
+Strictly speaking, a QR code should be generated with qrcode so a phone can scan and open the URL directly, but considering the increase in program size, this approach isn't used for now — maybe later.
+
+### Windows Settings
+
+Right-click -> Add preset items -> System has some Windows-specific features.
+
+Besides that, Windows paths you might need:
+Control Panel  C:\Windows\System32\control.exe
+Registry Editor  C:\Windows\regedit.exe
+Services  C:\Windows\System32\services.msc
+PowerShell C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Windows Features  C:\Windows\System32\OptionalFeatures.exe
+Event Viewer  C:\Windows\System32\eventvwr.msc
+Resource Monitor  C:\Windows\System32\perfmon.exe
+System Information  C:\Windows\System32\msinfo32.exe
+System Configuration  C:\Windows\System32\msconfig.exe
+Color Management  C:\Windows\System32\colorcpl.exe
+Computer Management  C:\Windows\System32\compmgmt.msc
+Group Policy  C:\Windows\System32\gpedit.msc
+File Explorer  C:\Windows\explorer.exe
+Task Manager  C:\Windows\System32\Taskmgr.exe
+Task Scheduler  C:\Windows\System32\taskschd.msc
+System Properties  C:\Windows\System32\SystemPropertiesComputerName.exe
+Performance Options  C:\Windows\System32\SystemPropertiesPerformance.exe
+Windows Tools  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools
+Firewall  C:\Windows\System32\WF.msc
+User Account Control Settings  C:\Windows\System32\UserAccountControlSettings.exe
+Local Security Policy  C:\Windows\System32\secpol.msc
+Live Captions  C:\Windows\System32\LiveCaptions.exe
+
+### Plan
+
+1. Expand features as much as possible without adding new dependencies
+2. Clean up the code
+3. Polish my ugly UI
+
+Things that might get done:
+1. Switch to packaging with Nuitka
+2. Image quality comparison, image similarity comparison
+3. Customizable UI color themes
+
+Known issues, shelved for now:
+1. The cursor shape change when moving to the window edge isn't implemented; degraded to the current approach
+
+### Acknowledgments
+
+[OpenList](https://github.com/OpenListTeam/OpenList)
 

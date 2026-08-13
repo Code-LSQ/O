@@ -218,6 +218,24 @@ QListWidget#toc_list::item:focus {
     outline: none;
 }
 
+QListWidget#settings_tab_list {
+    border: 1px solid #3c3c3c;
+    background: transparent;
+    outline: none;
+}
+QListWidget#settings_tab_list::item {
+    padding: 4px 8px;
+    border-bottom: 1px solid #3c3c3c;
+}
+QListWidget#settings_tab_list::item:hover {
+    background: #3c3c3c;
+}
+QListWidget#settings_tab_list::item:selected {
+    background: #333333;
+    color: inherit;
+}
+QListWidget#settings_tab_list::item:focus { outline: none; }
+
 QPushButton#min_btn, QPushButton#max_btn, QPushButton#close_btn {
     border: none;
     border-radius: 0;

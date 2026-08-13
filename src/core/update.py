@@ -5,10 +5,11 @@ import requests
 
 from src.util import root, data_dir, logger, UPDATE
 
-# GitHub API 对未认证的匿名请求存在频率限制，手动更新无需额外线程
+# GitHub API 对未认证的匿名请求存在频率限制，需要留意，手动更新无需额外线程
 
 
 UPDATE_ZIP = data_dir / "update.zip"
+UPDATE_PART = UPDATE_ZIP.with_name(UPDATE_ZIP.name + ".part")  # 下载断点续传的临时文件，需一并清理
 UPDATE_DIR = data_dir / "update"
 
 
@@ -55,7 +56,7 @@ def _flattenSingleDir(extract_dir):
     """若解压目录顶层只有一个目录且无散落文件，则将其内容上移一层。
 
     发布包为保留 O/ 顶层目录（用户手动解压时便于辨认），内部结构会嵌套一层；
-    而 update.cmd 的 xcopy 期望平铺结构，故在此归一化，使两种打包方式都能正确更新。"""
+    而 update.cmd 的复制命令期望平铺结构，故在此归一化，使两种打包方式都能正确更新。"""
     entries = list(extract_dir.iterdir()) if extract_dir.exists() else []
     dirs = [e for e in entries if e.is_dir()]
     if len(dirs) == 1 and len(dirs) == len(entries):
@@ -69,9 +70,12 @@ def _flattenSingleDir(extract_dir):
 def writeUpdateScript():
     """在 root 生成 update.cmd"""
     update_cmd = root / "update.cmd"
-    # 删除旧文件时须排除 update.cmd 自身，否则脚本在执行中途被删会导致后续 xcopy/启动失败，自删只保留在末尾一条命令
+    # 更新失败时必须有回退，不能删光旧文件后复制失败导致程序无法启动，故采用「先备份、再替换、失败还原」策略。
+    # 备份与还原都用 robocopy，因为 xcopy 无法排除目录，会把 data 递归拷进备份目录造成死循环；robocopy 的 /XD data /XF 脚本自身 可干净排除。
+    # robocopy 退出码 0-7 为成功，>=8 为失败。删除旧文件时须排除 update.cmd 自身，否则脚本在执行中途被删会导致后续复制/启动失败，自删只保留在末尾一条命令。
     content = r"""@echo off
 chcp 65001 >nul
+if exist "data\update_error.txt" del /f /q "data\update_error.txt" >nul 2>nul
 :wait
 tasklist /fi "imagename eq O.exe" 2>nul | find /i "O.exe" >nul
 if not errorlevel 1 (
@@ -79,11 +83,29 @@ if not errorlevel 1 (
     goto wait
 )
 cd /d "%~dp0"
+if not exist "data\update\O.exe" (
+    echo 更新包不完整，已中止更新 > "data\update_error.txt"
+    goto finish
+)
+if exist "data\update_backup" rmdir /s /q "data\update_backup" >nul 2>nul
+robocopy "." "data\update_backup" /E /XD data /XF "%~nx0" /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+if errorlevel 8 (
+    echo 备份旧文件失败，已中止更新 > "data\update_error.txt"
+    goto finish
+)
 for /f "delims=" %%i in ('dir /b /a-d 2^>nul') do if /i not "%%i"=="data" if /i not "%%i"=="%~nx0" del /f /q "%%i" 2>nul
 for /f "delims=" %%i in ('dir /b /ad 2^>nul') do if /i not "%%i"=="data" rmdir /s /q "%%i" 2>nul
-xcopy /s /e /y "data\update\*" "." >nul
+robocopy "data\update" "." /E /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+if errorlevel 8 (
+    echo 复制新文件失败，正在还原旧版本 > "data\update_error.txt"
+    for /f "delims=" %%i in ('dir /b /a-d 2^>nul') do if /i not "%%i"=="data" if /i not "%%i"=="%~nx0" del /f /q "%%i" 2>nul
+    for /f "delims=" %%i in ('dir /b /ad 2^>nul') do if /i not "%%i"=="data" rmdir /s /q "%%i" 2>nul
+    robocopy "data\update_backup" "." /E /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+)
 rmdir /s /q "data\update" >nul 2>nul
 if exist "data\update.zip" del /f /q "data\update.zip" >nul 2>nul
+:finish
+rmdir /s /q "data\update_backup" >nul 2>nul
 start "" "O.exe"
 del /f /q "%~f0" >nul 2>nul
 exit
@@ -98,6 +120,8 @@ def cleanTemp():
     try:
         if UPDATE_ZIP.exists():
             UPDATE_ZIP.unlink()
+        if UPDATE_PART.exists():
+            UPDATE_PART.unlink()
         if UPDATE_DIR.exists():
             shutil.rmtree(UPDATE_DIR)
     except Exception:

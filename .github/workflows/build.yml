@@ -5,18 +5,12 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build-windows:
-    strategy:
-      matrix:
-        include:
-          - arch: x64
-            os: windows-latest
-          - arch: arm64
-            os: windows-arm64
-
-    runs-on: ${{ matrix.os }}
-
+  deploy:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -27,46 +21,100 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $VER = "$env:GITHUB_REF_NAME" -replace '^v',''
+          "version=$VER" >> $env:GITHUB_OUTPUT
+
+      - name: Verify version matches
+        shell: pwsh
+        run: |
+          $CODE = Get-Content -Raw 'src/util.py'
+          $CODE_VER = [regex]::Match($CODE, 'VERSION = "([^"]+)"').Groups[1].Value
+          $TAG_VER = "$env:GITHUB_REF_NAME" -replace '^v',''
+          if ($CODE_VER -ne $TAG_VER) {
+            Write-Host "版本不一致: tag=$TAG_VER, src/util.py VERSION=$CODE_VER"
+            exit 1
+          }
+
+      - name: Run tests
         env:
-          PIP_NO_INDEX: false
+          QT_QPA_PLATFORM: offscreen
+        run: python test.py --all
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $TAG = "$env:GITHUB_REF_NAME"
+          gh release view "$TAG" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $PREV = (gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>$null)
+            $BODY = if ($PREV) { "**Full Changelog**: https://github.com/$env:GITHUB_REPOSITORY/compare/$PREV...$TAG" } else { "" }
+            gh release create "$TAG" --title "$TAG" --notes "$BODY" --latest
+          }
+
+  build-windows:
+    needs: [deploy]
+    strategy:
+      matrix:
+        include:
+          - architecture: x64
+            os: windows-latest
+          - architecture: arm64
+            os: windows-11-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Build with PyInstaller
         run: python build.py
 
       - name: Package zip
         shell: pwsh
-        run: Compress-Archive -Path ../dist/O -DestinationPath Windows_${{ matrix.arch }}.zip
+        run: Compress-Archive -Path ../dist/O -DestinationPath Windows_${{ matrix.architecture }}.zip
 
-      - name: Create Release
-        shell: pwsh
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create ${{ github.ref_name }} --generate-notes
-
-      - name: Upload Release Asset
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ github.ref_name }} Windows_*.zip --clobber
+        run: gh release upload ${{ github.ref_name }} Windows_${{ matrix.architecture }}.zip --clobber
 
-  build-linux:
-    strategy:
-      matrix:
-        include:
-          - arch: x64
-            os: ubuntu-22.04
-          - arch: arm64
-            os: ubuntu-24.04-arm
-    runs-on: ${{ matrix.os }}
+  # Linux/macOS 构建处于计划中
+  # build-linux:
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - arch: x64
+  #           os: ubuntu-22.04
+  #         - arch: arm64
+  #           os: ubuntu-24.04-arm
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - run: echo "Linux build not implemented yet"
 
-  build-macos:
-    strategy:
-      matrix:
-        include:
-          - arch: arm64
-            os: macos-14
-            openssl_workaround: 'false'
-          - arch: x64
-            os: macos-15-intel
-            openssl_workaround: 'true'
-    runs-on: ${{ matrix.os }}
+  # build-macos:
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - arch: arm64
+  #           os: macos-14
+  #           openssl_workaround: 'false'
+  #         - arch: x64
+  #           os: macos-15-intel
+  #           openssl_workaround: 'true'
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - run: echo "macOS build not implemented yet"

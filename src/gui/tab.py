@@ -3,7 +3,7 @@ import re
 import webbrowser
 from urllib import parse
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QPushButton, QPlainTextEdit, QTextEdit, QMenu
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QPlainTextEdit, QTextEdit, QMenu
 from PySide6.QtCore import Qt, Signal, QEvent, QRect, QObject
 from PySide6.QtGui import QTextCursor, QTextDocument, QPainter, QColor, QTextCharFormat, QAction, QKeySequence, QPalette, qGray
 
@@ -11,7 +11,7 @@ from src.config import getConfig, DEFAULT_CONFIG
 from src.util import logger, EXTENSION, messageBox, urlToPath, tr, inputDialog
 from src.core.timer import LRUCache
 from src.gui.syntax import createHighlighter
-from src.gui.view import ViewMode, listArchive, readFileLimit, addImageResource
+from src.gui.view import ViewMode, listArchive, addImageResource
 
 
 _LINE_ENDING_RE = re.compile(r'\r\n|\r')
@@ -768,18 +768,6 @@ class EditorTab(QWidget):
 
         self.handlers = {}
 
-        # 大文件翻页截断
-        self._is_truncated = False
-        self._page_size = 50000
-        self._current_page = 0
-        self._total_pages = 0
-        self._total_lines = 0
-        self._loaded_lines = 0
-        self._page_buffer = {}  # {page_num: modified_content}, LRU限制10页
-        self._page_buffer_max = 10
-        self._truncated_file_path = ""
-        self._truncated_encoding = "utf-8"
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -795,35 +783,6 @@ class EditorTab(QWidget):
 
         layout.addWidget(self.text_edit)
 
-        # 翻页栏
-        self._pagination_bar = QWidget()
-        self._pagination_bar.setVisible(False)
-        self._pagination_bar.setFixedHeight(36)
-        pag_layout = QHBoxLayout(self._pagination_bar)
-        pag_layout.setContentsMargins(8, 2, 8, 2)
-        pag_layout.setSpacing(6)
-
-        self._prev_page_btn = QPushButton(tr("上一页"))
-        self._prev_page_btn.setFixedWidth(80)
-        self._prev_page_btn.clicked.connect(lambda: self._goToPage(self._current_page - 1) if self._current_page > 0 else None)
-        pag_layout.addWidget(self._prev_page_btn)
-
-        self._page_label = QLabel("")
-        self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pag_layout.addWidget(self._page_label, 1)
-
-        self._next_page_btn = QPushButton(tr("下一页"))
-        self._next_page_btn.setFixedWidth(80)
-        self._next_page_btn.clicked.connect(self._onNextPage)
-        pag_layout.addWidget(self._next_page_btn)
-
-        self._load_all_btn = QPushButton(tr("加载全部"))
-        self._load_all_btn.setFixedWidth(100)
-        self._load_all_btn.clicked.connect(lambda: self.loadAllContent())
-        pag_layout.addWidget(self._load_all_btn)
-
-        layout.addWidget(self._pagination_bar)
-        
         self.image_scroll = QScrollArea()
         self.image_scroll.setWidgetResizable(True)
         self.image_scroll.hide()
@@ -858,7 +817,6 @@ class EditorTab(QWidget):
 
         self._original_content = ""
         self._markdown_cache.clear()
-        self._page_buffer.clear()
 
         if self.highlighter:
             self.highlighter.setDocument(None)
@@ -967,10 +925,7 @@ class EditorTab(QWidget):
 
     def markSaved(self):
         """标记当前内容为已保存的干净状态，更新原始内容快照"""
-        if self._is_truncated:
-            self._original_content = self._assembleContent()
-        else:
-            self._original_content = self.text_edit.toPlainText().rstrip('\n')
+        self._original_content = self.text_edit.toPlainText().rstrip('\n')
         self.is_modified = False
         self.text_edit.document().setModified(False)
 
@@ -1078,7 +1033,6 @@ class EditorTab(QWidget):
         
         self._markdown_cache.clear()
         self.is_modified = False
-        self.clearTruncated(clear_buffer=False)
 
         # QPlainTextEdit.toPlainText() 返回的内容末尾可能多出 \n（始终至少有1个段落），
         # 在 setContent/markSaved/_onTextChanged 中用 rstrip('\n') 消除影响
@@ -1127,117 +1081,6 @@ class EditorTab(QWidget):
             main_window._applyEditorSettings(self)
 
         return True
-
-    # ── 大文件翻页截断 ──────────────────────────────────────────────
-
-    def setTruncated(self, total_lines: int, loaded_lines: int,
-                      file_path: str, encoding: str):
-        self._is_truncated = True
-        self._total_lines = total_lines
-        self._loaded_lines = loaded_lines
-        self._total_pages = (total_lines + self._page_size - 1) // self._page_size
-        self._current_page = 0
-        self._page_buffer.clear()
-        self._truncated_file_path = file_path
-        self._truncated_encoding = encoding
-        self.text_edit.setReadOnly(True)
-        self._updatePages()
-        self._pagination_bar.setVisible(True)
-
-    def _pageBufferSet(self, page: int, content: str):
-        if page in self._page_buffer:
-            del self._page_buffer[page]
-        elif len(self._page_buffer) >= self._page_buffer_max:
-            self._page_buffer.pop(next(iter(self._page_buffer)))
-        self._page_buffer[page] = content
-
-    def _pageBufferGet(self, page: int):
-        return self._page_buffer.get(page)
-
-    def clearTruncated(self, clear_buffer: bool = True):
-        self._is_truncated = False
-        self._total_pages = 0
-        self._current_page = 0
-        self._total_lines = 0
-        self._loaded_lines = 0
-        if clear_buffer:
-            self._page_buffer.clear()
-        self._truncated_file_path = ""
-        self.text_edit.setReadOnly(False)
-        self._pagination_bar.setVisible(False)
-
-    def _readPage(self, page: int) -> str:
-        start_line = page * self._page_size
-        content, total, loaded, truncated, _ = readFileLimit(
-            self._truncated_file_path, max_lines=self._page_size, start_line=start_line)
-        return content
-
-    def _updatePages(self):
-        if not self._is_truncated:
-            self._page_label.setText("")
-            return
-        total = self._total_pages
-        cur = self._current_page + 1
-        self._page_label.setText(tr("第") + f" {cur} / {total} " + tr("页"))
-        self._prev_page_btn.setEnabled(cur > 1)
-        self._next_page_btn.setEnabled(cur < total)
-
-    def _onNextPage(self):
-        if self._current_page < self._total_pages - 1:
-            self._goToPage(self._current_page + 1)
-
-    def _goToPage(self, page: int):
-        if page < 0 or page >= self._total_pages:
-            return
-        # 缓存当前页的编辑内容
-        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
-        # 读取目标页
-        content = self._pageBufferGet(page)
-        if content is None:
-            content = self._readPage(page)
-        # 切换显示
-        self.text_edit.blockSignals(True)
-        self.text_edit.setPlainText(content)
-        self.text_edit.blockSignals(False)
-        self.text_edit.document().setModified(False)
-        self._current_page = page
-        self._updatePages()
-
-    def loadAllContent(self):
-        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
-        # 逐页读取未缓存的页面
-        all_parts = []
-        for p in range(self._total_pages):
-            content = self._pageBufferGet(p)
-            if content is None:
-                content = self._readPage(p)
-            all_parts.append(content)
-        full = '\n'.join(all_parts) if all_parts else ''
-        self._original_content = full
-        self.text_edit.blockSignals(True)
-        self.text_edit.setPlainText(full)
-        self.text_edit.blockSignals(False)
-        self.text_edit.setReadOnly(False)
-        self.text_edit.document().setModified(False)
-        self._is_truncated = False
-        self._page_buffer.clear()
-        self._pagination_bar.setVisible(False)
-        self.is_modified = False
-        self.file_changed.emit(False)
-
-    def _assembleContent(self) -> str:
-        """合并各页内容为完整文件（用于保存时写出）"""
-        if not self._is_truncated:
-            return self.text_edit.toPlainText()
-        # 保存当前页
-        self._pageBufferSet(self._current_page, self.text_edit.toPlainText())
-        all_parts = []
-        for p in range(self._total_pages):
-            content = self._pageBufferGet(p)
-            if content is None:
-                content = self._readPage(p)
-            all_parts.append(content)
-        return '\n'.join(all_parts) if all_parts else ''
 
     def stripEmptyLines(self):
         """去除空行"""

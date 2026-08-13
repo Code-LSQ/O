@@ -242,7 +242,8 @@ class SettingsDialog(QDialog):
 
         content_layout = QHBoxLayout()
         self.tab_list = QListWidget()
-        self.tab_list.setFixedWidth(80)
+        self.tab_list.setObjectName("settings_tab_list")
+        self.tab_list.setFixedWidth(110)
         self.tab_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.stack = QStackedWidget()
         content_layout.addWidget(self.tab_list)
@@ -284,6 +285,8 @@ class SettingsDialog(QDialog):
                     self._plugin_tabs.append(plugin)
             except Exception:
                 logger.exception(f"插件 {plugin.name} 设置页加载失败")
+
+        self.tab_list.setCurrentRow(0)
 
         # 按钮
         button_layout = QHBoxLayout()

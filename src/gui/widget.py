@@ -175,6 +175,14 @@ class UpdateDialog(QDialog):
             self._setCheckEnabled(True)
             return
 
+        if not (UPDATE_DIR / "O.exe").is_file():
+            # 校验暂存目录顶层是否有主程序，避免更新包内容错误（缺 O.exe）导致脚本删光旧文件后无法启动
+            messageBox(self, tr("错误"), tr("更新包内容不完整"), 1)
+            self._installing = False
+            self._close_btn.setEnabled(True)
+            self._setCheckEnabled(True)
+            return
+
         try:
             writeUpdateScript()
             script = str(root / "update.cmd")

@@ -3,8 +3,11 @@ __pycache__/
 *.py[cd]
 *.spec
 
-# 忽略 data 目录
+# 忽略数据目录
 data/
+
+# 忽略额外目录
+ex/
 
 # 忽略 AI Agent 文件
 AGENTS.md

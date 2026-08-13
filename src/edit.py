@@ -13,7 +13,7 @@ from src.file import FolderPanelManager, createBackup
 from src.core.md import extractToc
 from src.gui.find_re import FindReplaceDialog
 from src.gui.tab import EditorTab
-from src.gui.view import ViewMode, readFileLimit
+from src.gui.view import ViewMode, readFile
 from src.gui.control import WindowControl, MenuControl
 
 
@@ -681,7 +681,7 @@ class EditorWindow(WindowControl, QMainWindow):
             tr("已打开") + ": " + os.path.abspath(file_path), 3000)
 
     def saveFile(self) -> bool:
-        """保存当前文件（支持大文件翻页合并保存）"""
+        """保存当前文件"""
         editor = self.getEditor()
         if not editor:
             return False
@@ -698,13 +698,8 @@ class EditorWindow(WindowControl, QMainWindow):
             backup_path = createBackup(file_path, self.config)
 
         try:
-            # 大文件翻页模式下：合并各页内容再写出
-            if editor._is_truncated:
-                with open(file_path, "w", encoding=encoding) as f:
-                    f.write(editor._assembleContent())
-            else:
-                with open(file_path, "w", encoding=encoding) as f:
-                    f.write(editor.text_edit.toPlainText())
+            with open(file_path, "w", encoding=encoding) as f:
+                f.write(editor.text_edit.toPlainText())
 
             editor.markSaved()
             if self.tab_widget:
@@ -749,14 +744,9 @@ class EditorWindow(WindowControl, QMainWindow):
         actual_encoding = ENCODING_MAP.get(encoding, encoding.lower())
 
         try:
-            content, total_lines, loaded_lines, truncated, _ = \
-                readFileLimit(file_path, max_lines=50000, start_line=0, encoding=actual_encoding)
+            content, _ = readFile(file_path, encoding=actual_encoding)
             editor.setContent(content)
             editor.encoding = actual_encoding
-            if truncated > 0 and hasattr(editor, 'setTruncated'):
-                editor.setTruncated(total_lines, loaded_lines, file_path, actual_encoding)
-            elif hasattr(editor, 'clearTruncated'):
-                editor.clearTruncated()
             display = encodingName(actual_encoding)
             self.encoding_label.setText(display)
             self.statusBar().showMessage(tr("已重新打开") + ": " + file_path + " - " + display, 3000)
