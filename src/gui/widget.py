@@ -39,8 +39,17 @@ class UpdateDialog(QDialog):
         layout.addWidget(self._notes_text)
 
         self._progress = QProgressBar()
+        self._progress.setObjectName("rainbow")
+        self._progress.setFormat("")
         self._progress.hide()
-        layout.addWidget(self._progress)
+        self._progress_percent = QLabel()
+        self._progress_percent.setFixedWidth(40)
+        self._progress_percent.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._progress_percent.hide()
+        progress_layout = QHBoxLayout()
+        progress_layout.addWidget(self._progress, 1)
+        progress_layout.addWidget(self._progress_percent)
+        layout.addLayout(progress_layout)
 
         btn_layout = QHBoxLayout()
 
@@ -90,37 +99,49 @@ class UpdateDialog(QDialog):
         self._version_label.setText(tr("检查中..."))
         self._setCheckEnabled(False)
 
-        runAsync(getReleaseInfo, on_done=self._onCheckResult)
+        runAsync(getReleaseInfo, on_done=self._onCheckResult, on_error=self._onCheckError)
+
+    def _onCheckError(self, message):
+        self._checking = False
+        self._setCheckEnabled(True)
+        logger.exception(f"检查更新出错: {message}")
+        messageBox(self, tr("错误"), tr("检查更新失败"), 1)
+        self._version_label.setText(tr("检查更新失败"))
 
     def _onCheckResult(self, info):
         self._checking = False
         self._setCheckEnabled(True)
-        if info is None:
-            messageBox(self, tr("错误"), tr("检查更新失败"), 1)
-            self._version_label.setText(tr("检查更新失败"))
-            return
-
-        version = info["version"]
-        if compareVersions(version, VERSION) <= 0:
-            self._version_label.setText(tr("当前已是最新版本"))
-            return
-
-        self._release_info = info
-        self._version_label.setText(tr("发现新版本") + f" {version}")
-        body = info.get("body", "").strip()
-        if body:
-            self._notes_text.setText(body)
-            self._notes_label.show()
-            self._notes_text.show()
-
-        asset_name = f"Windows_{arch}.zip"
-        for asset in info["assets"]:
-            if asset["name"] == asset_name:
-                self._download_url = asset["browser_download_url"]
-                self._download_btn.setEnabled(True)
+        try:
+            if info is None:
+                messageBox(self, tr("错误"), tr("检查更新失败"), 1)
+                self._version_label.setText(tr("检查更新失败"))
                 return
 
-        messageBox(self, tr("警告"), tr("没有找到适用于当前平台的更新包"), 1)
+            version = info["version"]
+            if compareVersions(version, VERSION) <= 0:
+                self._version_label.setText(tr("当前已是最新版本"))
+                return
+
+            self._release_info = info
+            self._version_label.setText(tr("发现新版本") + f" {version}")
+            body = info.get("body", "").strip()
+            if body:
+                self._notes_text.setText(body)
+                self._notes_label.show()
+                self._notes_text.show()
+
+            asset_name = f"Windows_{arch}.zip"
+            for asset in info["assets"]:
+                if asset["name"] == asset_name:
+                    self._download_url = asset["browser_download_url"]
+                    self._download_btn.setEnabled(True)
+                    return
+
+            messageBox(self, tr("警告"), tr("没有找到适用于当前平台的更新包"), 1)
+        except Exception:
+            logger.exception("处理更新检查结果时出错")
+            messageBox(self, tr("错误"), tr("检查更新失败"), 1)
+            self._version_label.setText(tr("检查更新失败"))
 
     def _download(self):
         if not self._download_url:
@@ -131,6 +152,8 @@ class UpdateDialog(QDialog):
 
         self._progress.setValue(0)
         self._progress.show()
+        self._progress_percent.setText("0%")
+        self._progress_percent.show()
 
         runAsync(
             lambda report: download(self._download_url, UPDATE_ZIP, report),
@@ -143,10 +166,12 @@ class UpdateDialog(QDialog):
         if total > 0:
             self._progress.setMaximum(total)
             self._progress.setValue(current)
+            self._progress_percent.setText(f"{int(current / total * 100)}%")
 
     def _onDownloadFinished(self, success):
         self._downloading = False
         self._progress.hide()
+        self._progress_percent.hide()
         if success:
             self._download_btn.setText(tr("重启更新"))
             self._download_btn.setEnabled(True)

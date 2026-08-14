@@ -162,6 +162,10 @@ class OSignal(QObject):
 OSign = OSignal()
 
 
+# 持有异步任务中的 QThread 与 worker 引用，防止局部变量在任务完成前被垃圾回收导致 native 崩溃
+_workers = set()
+
+
 def runAsync(fn, on_done=None, on_error=None, on_progress=None):
     """在线程中执行 fn，结果在主线程回调
 
@@ -202,6 +206,14 @@ def runAsync(fn, on_done=None, on_error=None, on_progress=None):
     w.done.connect(w.deleteLater)
     w.err.connect(w.deleteLater)
     t.finished.connect(t.deleteLater)
+
+    def cleanup():
+        _workers.discard(w)
+        _workers.discard(t)
+
+    t.finished.connect(cleanup)
+    _workers.add(w)
+    _workers.add(t)
     t.start()
 
 

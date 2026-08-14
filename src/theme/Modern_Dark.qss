@@ -405,6 +405,20 @@ QProgressBar::chunk {
     border-radius: 4px;
 }
 
+/* 炫彩进度条：七色渐变，供通用进度条组件复用 */
+QProgressBar#rainbow {
+    background: #272a2f;
+    border: none;
+    border-radius: 4px;
+    height: 8px;
+}
+QProgressBar#rainbow::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #0d47a1, stop:0.2 #1976d2, stop:0.4 #42a5f5,
+                                stop:0.6 #64b5f6, stop:0.8 #4dd0e1, stop:1 #7e57c2);
+    border-radius: 4px;
+}
+
 /* ——— 滑块 ——— */
 QSlider::groove:horizontal {
     background-color: #383b40;

@@ -77,6 +77,13 @@ def release(new_version, dry_run=False):
         sys.exit("未找到 VERSION 定义")
     print(f"当前版本: {current.group(1)} -> 新版本: {new_version}")
 
+    current_ver = tuple(int(x) for x in current.group(1).split("."))
+    new_ver = tuple(int(x) for x in new_version.split("."))
+    if new_ver <= current_ver:
+        if new_ver == current_ver:
+            sys.exit(f"版本号已是 {new_version}，无需重复发布")
+        sys.exit(f"新版本号 {new_version} 不能低于当前版本 {current.group(1)}")
+
     if dry_run:
         print(f"[dry-run] 将更新 {util_path} 与 {pyproj_path} 的版本号")
         print(f"[dry-run] 将执行: git add / commit / tag / push V{new_version}")
