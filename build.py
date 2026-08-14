@@ -104,7 +104,7 @@ def release(new_version, dry_run=False):
     runGit(["git", "commit", "-m", f"V{new_version}"])
     runGit(["git", "tag", f"V{new_version}"])
     runGit(["git", "push", APP_NAME, "main", "--tags"])
-    print(f"发布完成: V{new_version}")
+    print(f"发布完成 - V{new_version}")
     return 0
 
 
