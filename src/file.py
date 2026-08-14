@@ -17,19 +17,6 @@ from src.gui.view import ViewMode, listArchive, readArchive
 
 SUPPORTED_ENCODINGS = list(ENCODING_MAP.values())
 
-# 排除规则的默认模式，
-EXCLUDE_PATTERNS = ["*.pyc", "*/__pycache__/", "*/.git/"]
-
-# QToolTip 的排除规则提示，file.py 是惰性加载，如果之后修改，可能导致翻译失效
-EXCLUDE_TIPS = [
-    tr("每行一项，支持通配符"),
-    tr("排除单个") + " /file.txt",
-    tr("排除所有") + " */file.txt",
-    tr("排除根目录下的") + " /folder/",
-    tr("排除所有") + " *.pyc",
-    tr("排除所有") + " */.git/",
-]
-
 def readEncoding(file_path: str, encoding: str = "utf-8", auto_detect: bool = True) -> Tuple[str, str]:
     """读取文件并自动检测编码
     Returns: (content, actual_encoding)
@@ -127,11 +114,16 @@ class FileSelect(QDialog):
         self.label_path = QLabel(tr("文件夹路径（每行一个，支持拖放）"))
         self.path_edit = QTextEdit()
         self.path_edit.setStyleSheet("background: #eeeeee")
-        self.label_exclude = QLabel(tr("排除规则"))
+        self.label_exclude = QLabel(r"""排除规则（每行一项，支持通配符）
+/file.txt - 排除单个 file.txt
+*/file.txt - 排除所有 file.txt
+/folder/ - 排除文件夹下的 folder 文件夹
+*.pyc - 排除所有 .pyc 文件
+*/.git/ - 排除所有 .git 文件夹""")
+        self.label_exclude.setWordWrap(True)
         self.exclude_edit = QTextEdit()
         self.exclude_edit.setStyleSheet("background: #eeeeee")
-        self.exclude_edit.setToolTip("\n".join(EXCLUDE_TIPS))
-        self.exclude_edit.setPlainText('\n'.join(EXCLUDE_PATTERNS))
+        self.exclude_edit.setPlainText("*.pyc\n*/__pycache__/\n*/.git/")
         self.path_edit.setAcceptDrops(False)
         self.exclude_edit.setAcceptDrops(False)
 
@@ -308,10 +300,6 @@ def _compileSingleRule(rule: str) -> tuple[re.Pattern, bool, bool]:
     fnmatch_pattern = fnmatch_pattern.replace("(?s:", "").rstrip(")\\Z")
 
     if is_dir:
-        # 以 */ 开头的目录规则（如 */__pycache__/）把前缀改为可选，使根目录的同名目录也能匹配。
-        # 若不处理，编译出的 .*/ 会强制要求至少一层目录前缀，根目录永远匹配不到。
-        if not root_only and pattern.startswith('*/') and fnmatch_pattern.startswith('.*/'):
-            fnmatch_pattern = "(?:.*/)?" + fnmatch_pattern[len('.*/'):]
         fnmatch_pattern = fnmatch_pattern.rstrip('$') + '/?$'
 
     try:

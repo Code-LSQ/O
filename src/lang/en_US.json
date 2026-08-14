@@ -374,9 +374,5 @@
     "清除": "Clear",
     "点击选择颜色": "Click to choose color",
     "恢复为主题默认": "Reset to theme default",
-    "选择颜色": "Choose Color",
-    "每行一项，支持通配符": "one rule per line, supports wildcards",
-    "排除单个": "exclude a single",
-    "排除所有": "exclude all",
-    "排除根目录下的": "exclude at root"
+    "选择颜色": "Choose Color"
 }

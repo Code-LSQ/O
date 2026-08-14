@@ -19,7 +19,7 @@ from PySide6.QtGui import QAction, QColor
 from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
-from src.file import filterFiles, EXCLUDE_PATTERNS, EXCLUDE_TIPS
+from src.file import filterFiles
 from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr, fileTree
 
 PluginLib = ["queue"]
@@ -278,13 +278,13 @@ class OpenListPlugin(PluginBase):
 class TaskConfig:
     """任务配置"""
 
-    def __init__(self, name="", src_path="", dst_path="", exclude_rules=None,
+    def __init__(self, name="", src_path="", dst_path="", exclude_rules="",
                  mode=MODE_BACKUP, confirm_before_sync=False, use_cloud_cache=False,
                  tar_folders="", tree_folders=""):
         self.name = name
         self.src_path = src_path          # 源目录（本地）
         self.dst_path = dst_path          # 目标目录（OpenList）
-        self.exclude_rules = exclude_rules or [] # 排除规则列表
+        self.exclude_rules = exclude_rules # 排除规则
         self.mode = mode                  # 同步模式
         self.confirm_before_sync = confirm_before_sync
         self.use_cloud_cache = use_cloud_cache
@@ -306,14 +306,11 @@ class TaskConfig:
 
     @classmethod
     def fromDict(cls, data: dict) -> 'TaskConfig':
-        raw_rules = data.get("exclude_rules", [])
-        if isinstance(raw_rules, str):
-            raw_rules = [r.strip() for r in raw_rules.splitlines() if r.strip()]
         return cls(
             name=data.get("name", ""),
             src_path=data.get("src_path", ""),
             dst_path=data.get("dst_path", ""),
-            exclude_rules=raw_rules,
+            exclude_rules=data.get("exclude_rules", ""),
             mode=data.get("mode", MODE_BACKUP),
             confirm_before_sync=data.get("confirm_before_sync", False),
             use_cloud_cache=data.get("use_cloud_cache", False),
@@ -906,14 +903,16 @@ class SyncWorker(QThread):
         src_path = self.task.src_path
 
         # 处理排除规则
-        exclude_rules = self.task.exclude_rules
+        exclude_rules_raw = []
+        if self.task.exclude_rules:
+            exclude_rules_raw = [r.strip() for r in self.task.exclude_rules.splitlines() if r.strip()]
 
         # 获取需要打包成 tar 的文件夹列表（排除这些文件夹的内容）
         tar_folders_list = []
         if self.task.tar_folders:
             tar_folders_list = [os.path.normpath(f.strip()) for f in self.task.tar_folders.splitlines() if f.strip()]
 
-        filtered_files = filterFiles(src_path, exclude_rules)
+        filtered_files = filterFiles(src_path, exclude_rules_raw)
 
         for full_path in filtered_files:
             if self._abort:
@@ -950,15 +949,17 @@ class SyncWorker(QThread):
             folder_name = os.path.basename(src_folder)
             self.log_queue.put(f"正在打包: {folder_name}")
 
-            exclude_rules = self.task.exclude_rules
+            exclude_rules_raw = []
+            if self.task.exclude_rules:
+                exclude_rules_raw = [r.strip() for r in self.task.exclude_rules.splitlines() if r.strip()]
 
             with tarfile.open(tar_path, "w") as tar:
                 parent_dir = os.path.dirname(src_folder)
                 original_cwd = os.getcwd()
                 try:
                     os.chdir(parent_dir)
-                    if exclude_rules:
-                        filtered = filterFiles(src_folder, exclude_rules)
+                    if exclude_rules_raw:
+                        filtered = filterFiles(src_folder, exclude_rules_raw)
                         for full_path in filtered:
                             rel = os.path.relpath(full_path, parent_dir).replace("\\", "/")
                             tar.add(rel)
@@ -1129,7 +1130,7 @@ class SyncWorker(QThread):
         except Exception:
             all_caches = {}
         all_caches[task_name] = remote_files
-        cache_file.write_text(json.dumps(all_caches, ensure_ascii=False, indent=2), encoding="utf-8")
+        cache_file.write_text(json.dumps(all_caches, ensure_ascii=False), encoding="utf-8")
 
     def _scanRemoteDir(self, full_path: str, rel_path: str, result: dict):
         """递归扫描远程目录"""
@@ -1315,12 +1316,18 @@ class TaskEditDialog(QDialog):
         layout.addLayout(check_layout)
 
         # 排除规则（参考 FileSelect 类的样式）
-        exclude_label = QLabel("排除规则")
+        exclude_label = QLabel("""排除规则（每行一项，支持通配符）
+/file.txt - 排除单个 file.txt
+*/file.txt - 排除所有 file.txt
+/folder/ - 排除文件夹下的 folder 文件夹
+*.pyc - 排除所有 .pyc 文件
+*/.git/ - 排除所有 .git 文件夹""")
+        exclude_label.setWordWrap(True)
         layout.addWidget(exclude_label)
 
         self.exclude_edit = QTextEdit()
         self.exclude_edit.setStyleSheet("background: #dddddd")
-        self.exclude_edit.setToolTip("\n".join(EXCLUDE_TIPS))
+        self.exclude_edit.setPlaceholderText("每行一项排除规则")
         self.exclude_edit.setMaximumHeight(100)
         layout.addWidget(self.exclude_edit)
 
@@ -1357,9 +1364,9 @@ class TaskEditDialog(QDialog):
             self.dst_edit.setText(self.task.dst_path)
             # 设置排除规则，如果没有则使用默认值
             if self.task.exclude_rules:
-                self.exclude_edit.setPlainText('\n'.join(self.task.exclude_rules))
+                self.exclude_edit.setPlainText(self.task.exclude_rules)
             else:
-                self.exclude_edit.setPlainText('\n'.join(EXCLUDE_PATTERNS))
+                self.exclude_edit.setPlainText("*.pyc\n*/__pycache__/\n*/.git/")
             # 加载 tar_folders
             if self.task.tar_folders:
                 self.tar_folders_edit.setPlainText(self.task.tar_folders)
@@ -1404,7 +1411,8 @@ class TaskEditDialog(QDialog):
 
         # 获取排除规则（每行一项）
         exclude_text = self.exclude_edit.toPlainText().strip()
-        exclude_rules = [line.strip() for line in exclude_text.splitlines() if line.strip()]
+        exclude_lines = [line.strip() for line in exclude_text.splitlines() if line.strip()]
+        exclude_rules = "\n".join(exclude_lines)
 
         # 获取 tar_folders（每行一项）
         tar_text = self.tar_folders_edit.toPlainText().strip()

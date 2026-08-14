@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo,
 
 AUTHOR = "Code-LSQ"
 APP_NAME = "O"
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
@@ -114,6 +114,8 @@ BINARY_EXTENSIONS = (
     | EXTENSION["DATABASE"]
     | EXTENSION["DISK"]
 )
+
+EXCLUDE_PATTERNS = ["*.pyc", "*/__pycache__/", "*/.git/"]
 
 ENCODING_MAP = {
     "UTF-8": "utf-8",
@@ -1147,13 +1149,13 @@ def dialog(parent, title, text, num: int = 2, center=True):
 
 
 def activateWidget(cls):
-    """防重复，已有对话框实例时显示而不创建，避免嵌套 exec()，返回该实例，否则返回 None"""
+    """防重复，已有对话框实例时显示而不创建，避免嵌套 exec()，返回 True ，否则 False"""
     for widget in QApplication.topLevelWidgets():
         if isinstance(widget, cls) and widget.isVisible():
             widget.raise_()
             widget.activateWindow()
-            return widget
-    return None
+            return True
+    return False
 
 
 # 原有的 ManagePair 类考虑的不好，增加一个 ItemManage 类，并逐步迁移。此外还需要收藏夹管理页面。

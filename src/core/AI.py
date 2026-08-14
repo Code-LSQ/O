@@ -13,29 +13,20 @@ _session = requests.Session()
 
 
 def _resolveContentImage(content_parts: List[Dict]):
-    """将 content 数组中的 file:// 图片路径转成 base64 data URI，原地修改"""
-    for part in content_parts:
+    """移除 content 数组中的图片，仅保留纯文本"""
+    i = 0
+    while i < len(content_parts):
+        part = content_parts[i]
         if not isinstance(part, dict):
+            i += 1
             continue
-        if part.get("type") != "image_url":
+        if part.get("type") == "image_url":
+            content_parts.pop(i)
             continue
-        url = part.get("url", "") or part.get("image_url", {}).get("url", "")
-        if not url.startswith("file://"):
-            continue
-        path = url[len("file://"):].lstrip("/")
-        try:
-            data, mime = imageBase64(path)
-            part["image_url"] = {"url": f"data:{mime};base64,{data}"}
-            part.pop("url", None)
-        except Exception:
-            logger.exception(f"读取图片失败: {path}")
-            part["text"] = f"[图片加载失败: {os.path.basename(path)}]"
-            part["type"] = "text"
-            part.pop("url", None)
-            part.pop("image_url", None)
+        i += 1
 
 def resolveImageUrls(messages: List[Dict]) -> List[Dict]:
-    """遍历消息列表，将所有的 file:// 图片路径转成 base64"""
+    """遍历消息列表，移除 content 中的图片，仅保留纯文本"""
     for msg in messages:
         content = msg.get("content", "")
         if isinstance(content, list):
