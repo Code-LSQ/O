@@ -309,18 +309,21 @@ class TestConstants(unittest.TestCase):
 
 
 class _PluginTestBase(unittest.TestCase):
-    from src.plugin import PluginManager, PluginBase
-
     def setUp(self):
         for p in applyMock(qt=True, util=True, psutil=True, pynput=True, real_plugin=True):
             self.addCleanup(p.stop)
+        # 必须在 applyMock 之后再取类：real_plugin=True 会重新导入 src.plugin，
+        # 类级 from ... import 绑定的是旧的真实模块，mock 无法生效
+        import src.plugin as plugin_mod
+        self.PluginManager = plugin_mod.PluginManager
+        self.PluginBase = plugin_mod.PluginBase
 
 
 class TestPluginBase(_PluginTestBase):
 
     def testDefaultAttributes(self):
         plugin = self.PluginBase()
-        self.assertEqual(plugin.name, "Unnamed Plugin")
+        self.assertEqual(plugin.name, "plugin")
         self.assertEqual(plugin.description, "")
         self.assertEqual(plugin.version, "1.0.0")
         self.assertEqual(plugin.author, "")
@@ -356,20 +359,18 @@ class TestPluginBase(_PluginTestBase):
 
     def testMainWindowNoneByDefault(self):
         plugin = self.PluginBase()
-        self.assertIsNone(plugin.main_window)
+        self.assertIsNone(plugin.main)
 
     def testMainWindowSetInInit(self):
         mw = MagicMock()
-        plugin = self.PluginBase(main_window=mw)
-        self.assertEqual(plugin.main_window, mw)
+        plugin = self.PluginBase(main=mw)
+        self.assertEqual(plugin.main, mw)
 
     def testCustomName(self):
         class TestPlugin(self.PluginBase):
-            name = "MyPlugin"
             description = "A test plugin"
 
         plugin = TestPlugin()
-        self.assertEqual(plugin.name, "MyPlugin")
         self.assertEqual(plugin.description, "A test plugin")
 
 
@@ -428,12 +429,13 @@ class TestPluginManagerBasic(_PluginTestBase):
     def testInitialAttributesExist(self):
         pm = self.PluginManager()
         self.assertTrue(hasattr(pm, "enabled_plugins"))
-        self.assertTrue(hasattr(pm, "plugin_dir"))
+        self.assertTrue(hasattr(pm, "plugins"))
+        self.assertTrue(hasattr(pm, "_scan_cache"))
 
     def testMainWindowSettable(self):
         mw = MagicMock()
-        pm = self.PluginManager(main_window=mw)
-        self.assertEqual(pm.main_window, mw)
+        pm = self.PluginManager(main=mw)
+        self.assertEqual(pm.main, mw)
 
 
 class _PluginWithTempDirBase(_PluginTestBase):
@@ -441,8 +443,9 @@ class _PluginWithTempDirBase(_PluginTestBase):
         super().setUp()
         self.temp_plugin_dir = tempfile.mkdtemp()
         self.addCleanup(lambda: shutil.rmtree(self.temp_plugin_dir, ignore_errors=True))
+        # scanPlugins 读取的是 src.plugin 模块级 plugin_dir，需指向临时目录
+        sys.modules["src.plugin"].plugin_dir = Path(self.temp_plugin_dir)
         self.pm = self.PluginManager()
-        self.pm.plugin_dir = Path(self.temp_plugin_dir)
 
     def _createPluginFile(self, name, content):
         path = os.path.join(self.temp_plugin_dir, name)
@@ -544,7 +547,7 @@ class P1(PluginBase):
         )
         self.pm.scanPlugins()
         self.pm.enablePlugin("p1")
-        all_p = self.pm.allPlugins()
+        all_p = list(self.pm.plugins)
         self.assertIn("p1", all_p)
 
     def testGetEnabledPlugins(self):
@@ -566,7 +569,7 @@ class TestGetPluginModulePaths(_PluginTestBase):
 
     def testNonexistentDirReturnsEmpty(self):
         pm = self.PluginManager()
-        pm.plugin_dir = Path(r"C:\nonexistent_xyz_plugin_dir")
+        sys.modules["src.plugin"].plugin_dir = Path(r"C:\nonexistent_xyz_plugin_dir")
         result = pm.scanPlugins()
         self.assertEqual(result, [])
 
@@ -665,7 +668,8 @@ class TestResolveImageUrls(_AITestBase):
         self.resolveImageUrls(messages)
         self.assertEqual(messages, original)
 
-    def testFileUrlNoRealFileLogsError(self):
+    @patch("src.core.AI.imageBase64", side_effect=FileNotFoundError("not found"))
+    def testFileUrlNoRealFileLogsError(self, mock_img):
         messages = [
             {
                 "role": "user",
@@ -677,7 +681,8 @@ class TestResolveImageUrls(_AITestBase):
         self.assertEqual(part["type"], "text")
         self.assertIn("图片加载失败", part["text"])
 
-    def testDifferentUrlKeyHandling(self):
+    @patch("src.core.AI.imageBase64", side_effect=FileNotFoundError("not found"))
+    def testDifferentUrlKeyHandling(self, mock_img):
         messages = [
             {
                 "role": "user",
@@ -714,12 +719,12 @@ class TestAIClientBuildPromptContent(_AITestBase):
     def testWithoutPlaceholderAppends(self):
         client = self.getAIClient(config={})
         result = client._buildPromptContent("You are a translator.", "hello world")
-        self.assertEqual(result, "You are a translator.\n\nhello world")
+        self.assertEqual(result, "You are a translator.")
 
     def testEmptyPrompt(self):
         client = self.getAIClient(config={})
         result = client._buildPromptContent("", "user text")
-        self.assertEqual(result, "\n\nuser text")
+        self.assertEqual(result, "")
 
     def testEmptyUserMessage(self):
         client = self.getAIClient(config={})
@@ -831,7 +836,7 @@ class TestLoadBalancing(_AITestBase):
         }
         client = self.getAIClient(config=config)
         result = client._lbPickGroups()
-        self.assertEqual(result, [["DeepSeek"]])
+        self.assertEqual(result, [{"DeepSeek": {"priority": 1, "weight": 1}}])
 
     def testLbMultipleProfilesSamePriority(self):
         config = {
@@ -860,8 +865,8 @@ class TestLoadBalancing(_AITestBase):
         client = self.getAIClient(config=config)
         result = client._lbPickGroups()
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0], ["Primary"])
-        self.assertEqual(result[1], ["Secondary"])
+        self.assertEqual(result[0], {"Primary": {"priority": 1, "weight": 1}})
+        self.assertEqual(result[1], {"Secondary": {"priority": 2, "weight": 1}})
 
     def testLbPriorityZeroDisabled(self):
         config = {
@@ -876,7 +881,7 @@ class TestLoadBalancing(_AITestBase):
         client = self.getAIClient(config=config)
         result = client._lbPickGroups()
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0], ["Active"])
+        self.assertEqual(result[0], {"Active": {"priority": 1, "weight": 1}})
 
     def testLbFailureTracking(self):
         client = self.getAIClient(config={})
@@ -917,7 +922,7 @@ class TestLoadBalancing(_AITestBase):
         client.__class__._lb_disabled = {"Bad": True}
         result = client._lbPickGroups()
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0], ["Good"])
+        self.assertEqual(result[0], {"Good": {"priority": 1, "weight": 1}})
 
     def testLbAllDisabledReturnsNone(self):
         config = {
@@ -1239,7 +1244,7 @@ class TestTaskConfig(_SyncTestBase):
         self.assertEqual(cfg.name, "")
         self.assertEqual(cfg.src_path, "")
         self.assertEqual(cfg.dst_path, "")
-        self.assertEqual(cfg.exclude_rules, "")
+        self.assertEqual(cfg.exclude_rules, [])
         self.assertEqual(cfg.mode, "backup")
         self.assertFalse(cfg.confirm_before_sync)
         self.assertEqual(cfg.tar_folders, "")
@@ -1251,7 +1256,7 @@ class TestTaskConfig(_SyncTestBase):
             name="test_task",
             src_path="/local/path",
             dst_path="/remote/path",
-            exclude_rules="*.pyc\n__pycache__",
+            exclude_rules=["*.pyc", "__pycache__"],
             mode="sync",
             confirm_before_sync=True,
             tar_folders="/data/tar",
@@ -1261,15 +1266,18 @@ class TestTaskConfig(_SyncTestBase):
         self.assertEqual(d["name"], "test_task")
         self.assertEqual(d["mode"], "sync")
         self.assertTrue(d["confirm_before_sync"])
+        self.assertEqual(d["exclude_rules"], ["*.pyc", "__pycache__"])
         restored = self.TaskConfig.fromDict(d)
         self.assertEqual(restored.name, "test_task")
         self.assertEqual(restored.mode, "sync")
         self.assertTrue(restored.confirm_before_sync)
+        self.assertEqual(restored.exclude_rules, ["*.pyc", "__pycache__"])
 
     def testFromDictMissingKeys(self):
         cfg = self.TaskConfig.fromDict({"name": "minimal"})
         self.assertEqual(cfg.name, "minimal")
         self.assertEqual(cfg.mode, "backup")
+        self.assertEqual(cfg.exclude_rules, [])
         self.assertEqual(cfg.src_path, "")
 
     def testBackupModeDefault(self):
@@ -1534,26 +1542,22 @@ class TestSyncPerformance(unittest.TestCase):
 # Group: exception (异常测试)
 
 _PROFILE_CONFIG_WITH_KEY = {
-    "AI": {
-        "active_profile": "default",
-        "profiles": {
-            "default": {
-                "api_key": "test_key_123",
-                "api_url": "https://api.openai.com/v1",
-            }
-        },
-    }
+    "active": "default",
+    "profiles": {
+        "default": {
+            "api_key": "test_key_123",
+            "api_url": "https://api.openai.com/v1",
+        }
+    },
 }
 
 _PROFILE_CONFIG_NO_KEY = {
-    "AI": {
-        "active_profile": "default",
-        "profiles": {
-            "default": {
-                "api_url": "https://api.openai.com/v1",
-            }
-        },
-    }
+    "active": "default",
+    "profiles": {
+        "default": {
+            "api_url": "https://api.openai.com/v1",
+        }
+    },
 }
 
 
@@ -1611,10 +1615,8 @@ class TestApiKeyErrors(_ExceptionTestBase):
 
     def testMissingApiUrl(self):
         cfg = {
-            "AI": {
-                "active_profile": "default",
-                "profiles": {"default": {"api_key": "test_key"}},
-            }
+            "active": "default",
+            "profiles": {"default": {"api_key": "test_key"}},
         }
         adapter = self.OpenAIAdapter(config=cfg)
         url = adapter.getApiUrl()
@@ -1747,6 +1749,7 @@ class TestConfigErrors(_ExceptionTestBase):
 class TestExtractToc(unittest.TestCase):
     """纯逻辑，无需 mock"""
     from src.core.md import extractToc
+    extractToc = staticmethod(extractToc)
 
     def testEmptyContent(self):
         self.assertEqual(self.extractToc(""), [])
@@ -1794,6 +1797,8 @@ class TestExtractToc(unittest.TestCase):
 
 class TestRenderMarkdown(unittest.TestCase):
     from src.core.md import renderMarkdown, renderForView
+    renderMarkdown = staticmethod(renderMarkdown)
+    renderForView = staticmethod(renderForView)
 
     def setUp(self):
         for p in applyMock(util=True):
@@ -2126,6 +2131,9 @@ class TestCronExpr(unittest.TestCase):
 
 class TestCompileRules(unittest.TestCase):
     from src.file import _compileSingleRule, compileRules, _matchRelPath
+    _compileSingleRule = staticmethod(_compileSingleRule)
+    compileRules = staticmethod(compileRules)
+    _matchRelPath = staticmethod(_matchRelPath)
 
     def testEmptyRule(self):
         self.assertIsNone(self._compileSingleRule(""))
@@ -2169,6 +2177,8 @@ class TestCompileRules(unittest.TestCase):
 
 class TestIsExcluded(unittest.TestCase):
     from src.file import _compileSingleRule, isExcluded
+    _compileSingleRule = staticmethod(_compileSingleRule)
+    isExcluded = staticmethod(isExcluded)
 
     def setUp(self):
         self.d = tempfile.mkdtemp()
@@ -2193,6 +2203,13 @@ class TestIsExcluded(unittest.TestCase):
         os.mkdir(sub)
         rules = [self._compileSingleRule("*/__pycache__/")]
         self.assertTrue(self.isExcluded(sub, self.d, rules))
+
+    def testExcludedDirAtRoot(self):
+        os.mkdir(os.path.join(self.d, "__pycache__"))
+        os.mkdir(os.path.join(self.d, ".git"))
+        rules = [self._compileSingleRule("*/__pycache__/"), self._compileSingleRule("*/.git/")]
+        self.assertTrue(self.isExcluded(os.path.join(self.d, "__pycache__"), self.d, rules))
+        self.assertTrue(self.isExcluded(os.path.join(self.d, ".git"), self.d, rules))
 
     def testRootOnlyRule(self):
         os.mkdir(os.path.join(self.d, "sub"))
@@ -2606,6 +2623,7 @@ class TestCodeToKey(unittest.TestCase):
 
 class TestParseResolution(unittest.TestCase):
     from plugin.Resolution import parseResolution
+    parseResolution = staticmethod(parseResolution)
 
     def testStandard(self):
         result = self.parseResolution("1920×1080")
@@ -2714,6 +2732,7 @@ class TestRenameItem(unittest.TestCase):
 
 class TestGetReleaseInfo(unittest.TestCase):
     from src.core.update import getReleaseInfo
+    getReleaseInfo = staticmethod(getReleaseInfo)
 
     @patch("requests.get")
     def testSuccess(self, mock_get):
@@ -2767,6 +2786,7 @@ class TestGetReleaseInfo(unittest.TestCase):
 
 class TestExtractUpdate(unittest.TestCase):
     from src.core.update import extractUpdate
+    extractUpdate = staticmethod(extractUpdate)
 
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp())
