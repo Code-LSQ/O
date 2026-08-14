@@ -18,6 +18,9 @@ Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite�
 
 Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 
+请使用压缩软件解压！！！Windows 内置的解压功能，解压 LZMA 算法的 zip 文件会报错。
+推荐使用 [7-Zip](https://sparanoid.com/lab/7z/)、[7-Zip 增强版](https://github.com/mcmilk/7-Zip-zstd/releases)、[WinRAR](https://github.com/n2far2000/winrarsc) 。
+
 O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
 
 用户自定义插件（.py）和主题文件（.qss），建议放到 data/user 文件夹下，这里是给用户预留的自定义文件夹。虽然在 src 文件夹可以自定义但在更新后就会覆盖掉，但在更新时会删除 data 以外的文件和文件夹，因此不建议这么做。
@@ -300,6 +303,9 @@ Fair warning: this is a pretty ugly project. The author mostly adds whatever com
 This project is still in development, and I'm working on polishing the user experience and features.
 
 Every project on GitHub gets someone who wants to taste the broth. Thank you for trying it out and for your contribution.
+
+Please extract with a proper archive tool!!! Windows' built-in extractor fails on zip files compressed with the LZMA algorithm.
+Recommended: [7-Zip](https://sparanoid.com/lab/7z/), [7-Zip zstd](https://github.com/mcmilk/7-Zip-zstd/releases), [WinRAR](https://github.com/n2far2000/winrarsc).
 
 O currently supports Windows 8.1+. O is portable software — no installation required, and it mostly doesn't touch the registry. To uninstall, just exit the program and delete the files. Program data (config, logs, etc.) is stored in the `data/` directory.
 

@@ -47,15 +47,6 @@ VMware的一个 Windows 10 虚拟机，在未精简的情况下占用18G到25G�
 
 
 
-压缩软件
-7-Zip： https://sparanoid.com/lab/7z/     https://github.com/mcmilk/7-Zip-zstd/releases  后面这个是增强版
-WinRAR： https://github.com/n2far2000/winrarsc
-
-为什么要放压缩软件这种基础的东西？因为之前看到有人用 2345 好压问为什么打不开。我看到小白就会爆炸（×），希望以后没人这么问（✓）。不过会上 Github 的也不至于吧……其实本文原本准备发到CSDN，由于版权问题不过审又不告诉我怎么改，就这样了。希望没人问我怎么解压。
-
-
-
-
 ## 加密备份
 
 

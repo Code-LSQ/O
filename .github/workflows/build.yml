@@ -86,7 +86,7 @@ jobs:
         shell: pwsh
         run: |
           Push-Location ../dist
-          7z a -tzip -mx=9 -m0=LZMA -mmt=on "$env:GITHUB_WORKSPACE/Windows_${{ matrix.arch }}.zip" O
+          7z a -tzip -mx=9 -m0=LZMA "$env:GITHUB_WORKSPACE/Windows_${{ matrix.arch }}.zip" O
           Pop-Location
 
       - name: Upload to release
