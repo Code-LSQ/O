@@ -63,9 +63,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - architecture: x64
+          - arch: x64
             os: windows-latest
-          - architecture: arm64
+          - arch: arm64
             os: windows-11-arm
     runs-on: ${{ matrix.os }}
     steps:
@@ -84,13 +84,16 @@ jobs:
 
       - name: Package zip
         shell: pwsh
-        run: Compress-Archive -Path ../dist/O -DestinationPath Windows_${{ matrix.architecture }}.zip
+        run: |
+          Push-Location ../dist
+          7z a -tzip -mx=9 -m0=LZMA -mmt=on "$env:GITHUB_WORKSPACE/Windows_${{ matrix.arch }}.zip" O
+          Pop-Location
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload ${{ github.ref_name }} Windows_${{ matrix.architecture }}.zip --clobber
+        run: gh release upload ${{ github.ref_name }} Windows_${{ matrix.arch }}.zip --clobber
 
   # Linux/macOS 构建处于计划中
   # build-linux:

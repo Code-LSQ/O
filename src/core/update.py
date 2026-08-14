@@ -26,6 +26,9 @@ def getReleaseInfo(url=None):
             "body": data.get("body", ""),
             "assets": data.get("assets", []),
         }
+    except requests.exceptions.Timeout:
+        logger.exception("检查更新超时")
+        raise TimeoutError("check_timeout")
     except requests.exceptions.RequestException:
         logger.exception("检查更新时发生网络错误")
     except KeyError:

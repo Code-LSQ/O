@@ -1,6 +1,6 @@
 # O
 
-## [中文](README.md#简体中文) | [English](README.md#English)
+## [简体中文](README.md#简体中文) | [English](README.md#English)
 
 ## 简体中文
 
@@ -34,7 +34,8 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 程序的主要功能为收纳快捷方式，支持打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
 
 添加启动项的方法为拖拽到界面和右键菜单添加。
-标题栏双击全屏，边缘处鼠标点击并拖动可调整大小。
+顶部标题栏双击全屏，边缘处鼠标点击并拖动可调整大小。简易编辑器调整大小则通过最右下角拖动
+如果希望通过搜索而不是点击的方式来找到启动项，右键->添加预设项->工具箱->搜索。
 
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
 路径支持环境变量如 %UserProfile%
@@ -311,7 +312,8 @@ For your own custom plugins (.py) and themes (.qss), it's recommended to put the
 The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable. Paths support environment variables like `%UserProfile%`. For the icon, you can fill in the path of an exe file and it will extract that icon.
 
 To add launcher items, drag them onto the window, or add them via the right-click menu.
-Double-click the title bar to toggle fullscreen; click and drag at the window edges to resize.
+Double-click the title bar to toggle fullscreen; click and drag at the window edges to resize. The simple editor is resized by dragging its bottom-right corner.
+If you prefer finding launcher items by searching rather than clicking, go to Right-click -> Add preset items -> Toolbox -> Search.
 
 Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in. The other is `{env: KEY=value}`, covered in the environment variables section below.
 

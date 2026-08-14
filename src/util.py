@@ -876,7 +876,7 @@ def _getDownloadSize(response: requests.Response, offset: int) -> int:
 def _setFileMtime(path: Path, last_modified: str):
     try:
         dt = datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z")
-        os.utime(path, [dt.timestamp(), dt.timestamp()])
+        os.utime(path, (dt.timestamp(), dt.timestamp()))
     except (ValueError, OSError):
         pass
 
