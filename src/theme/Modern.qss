@@ -528,14 +528,12 @@ QPushButton#min_btn, QPushButton#max_btn, QPushButton#close_btn {
     border: none;
     border-radius: 0;
     background: transparent;
-    padding: 4px 14px;
 }
 QPushButton#min_btn:hover, QPushButton#max_btn:hover {
     background: rgba(0, 0, 0, 0.1);
 }
 QPushButton#close_btn:hover {
     background: #e81123;
-    color: white;
 }
 
 QLabel#folder_header {

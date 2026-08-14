@@ -236,27 +236,10 @@ QListWidget#settings_tab_list::item:selected {
 }
 QListWidget#settings_tab_list::item:focus { outline: none; }
 
-QPushButton#min_btn {
+QPushButton#min_btn, QPushButton#max_btn, QPushButton#close_btn {
     border: none;
     border-radius: 0;
     background: transparent;
-    padding: 4px 14px;
-    font-size: 16px;
-}
-
-QPushButton#max_btn {
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    font-size: 16px;
-}
-
-QPushButton#close_btn {
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 0px 0px;
-    font-size: 16px;
 }
 
 QPushButton#min_btn:hover, QPushButton#max_btn:hover {
@@ -265,7 +248,6 @@ QPushButton#min_btn:hover, QPushButton#max_btn:hover {
 
 QPushButton#close_btn:hover {
     background: #e81123;
-    color: white;
 }
 
 QLabel#folder_header {

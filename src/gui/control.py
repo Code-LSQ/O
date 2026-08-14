@@ -1,19 +1,63 @@
 from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy, QDialog, QLabel, QListWidget, QPushButton, QHBoxLayout, QVBoxLayout
-from PySide6.QtGui import QKeySequence, QAction, QIcon, QMouseEvent
-from PySide6.QtCore import Qt, Signal, QPoint
+from PySide6.QtGui import QKeySequence, QAction, QMouseEvent, QPainter, QPen, QColor, QPalette, QPainterPath
+from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 
-from src.util import tr, ENCODING_MAP, icon_dir, messageBox, logger, UsageMonitor
+from src.util import tr, ENCODING_MAP, messageBox, logger, UsageMonitor
 from src.plugin import getPluginManager
 from src.config import DEFAULT_CONFIG, getConfig
 from src.gui.view import ViewMode
 
-def getMaxIcon(theme="Light"):
-    suffix = "-wh" if theme in {"Dark", "Aurora_Dark", "Modern_Dark"} else ""
-    # 如果主题在这个集合中，使用白色的最大化图标，否则使用黑色的
+class WindowButton(QPushButton):
+    """用 QPainter 绘制的窗口控制按钮（最小化/最大化/关闭）
 
-    max_icon = QIcon(str(icon_dir / f"max{suffix}.svg"))
-    maxed_icon = QIcon(str(icon_dir / f"maxed{suffix}.svg"))
-    return max_icon, maxed_icon
+    图标颜色从 QPalette 取色自动跟随主题，关闭按钮 hover 时背景变红
+    因此图标需要变为白色，这由 paintEvent 内检测 hover 状态实现。
+    """
+
+    def __init__(self, btn_type, parent=None):
+        super().__init__(parent)
+        self._type = btn_type
+        self._maxed = False
+
+    def setState(self, maxed: bool):
+        """设置最大化/还原状态（仅最大化按钮使用）"""
+        if self._maxed != maxed:
+            self._maxed = maxed
+            self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        center = QRectF(self.rect()).center()
+        # 关闭按钮 hover 时背景变红，图标需改为白色
+        if self._type == "close" and self.underMouse():
+            color = QColor("white")
+        else:
+            color = self.palette().color(QPalette.ColorRole.WindowText)
+        pen = QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.SquareCap, Qt.PenJoinStyle.MiterJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self._type == "minimize":
+            painter.drawLine(QPointF(center.x() - 5, center.y()), QPointF(center.x() + 5, center.y()))
+        elif self._type == "close":
+            painter.drawLine(QPointF(center.x() - 5, center.y() - 5), QPointF(center.x() + 5, center.y() + 5))
+            painter.drawLine(QPointF(center.x() - 5, center.y() + 5), QPointF(center.x() + 5, center.y() - 5))
+        elif self._maxed:
+            # 还原状态：右下大框完整 + 右上小框仅保留角框轮廓
+            # 小框左边下段、底边左段与后框重叠，画成开口折线避免交叉区叠线
+            path = QPainterPath()
+            path.addRect(QRectF(center.x() - 5, center.y() - 2.5, 7.5, 7.5))
+            path.moveTo(center.x() - 2.5, center.y() - 2.5)
+            path.lineTo(center.x() - 2.5, center.y() - 5)
+            path.lineTo(center.x() + 5, center.y() - 5)
+            path.lineTo(center.x() + 5, center.y() + 2.5)
+            path.lineTo(center.x() + 2.5, center.y() + 2.5)
+            painter.drawPath(path)
+        else:
+            # 最大化状态：单个方框
+            painter.drawRect(QRectF(center.x() - 5, center.y() - 5, 10, 10))
+        painter.end()
 
 class WindowControl:
     """窗口拖拽、调整大小和窗口按钮控制"""
@@ -159,23 +203,19 @@ class WindowControl:
             self.updateMaxBtn(True)
 
     def createWindowButton(self, container):
-        theme = getConfig().get("theme", "Light")
-        max_icon, maxed_icon = getMaxIcon(theme)
-        
-        self.min_btn = QPushButton("—")
+        self.min_btn = WindowButton("minimize")
         self.min_btn.setObjectName("min_btn")
         self.min_btn.setFixedSize(40, 32)
         self.min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.min_btn.clicked.connect(self.showMinimized)
 
-        self.max_btn = QPushButton()
+        self.max_btn = WindowButton("maximize")
         self.max_btn.setObjectName("max_btn")
-        self.max_btn.setIcon(max_icon)
         self.max_btn.setFixedSize(40, 32)
         self.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.max_btn.clicked.connect(self.toggleMax)
 
-        self.close_btn = QPushButton("×")
+        self.close_btn = WindowButton("close")
         self.close_btn.setObjectName("close_btn")
         self.close_btn.setFixedSize(40, 32)
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -187,9 +227,7 @@ class WindowControl:
 
     def updateMaxBtn(self, is_maximized: bool):
         if hasattr(self, 'max_btn'):
-            theme = getConfig().get("theme", "Light")
-            max_icon, maxed_icon = getMaxIcon(theme)
-            self.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
+            self.max_btn.setState(is_maximized)
 
     def createMonitor(self):
         self.cpu_label = QLabel(self)
@@ -198,10 +236,10 @@ class WindowControl:
         self._usage_monitor.sync()
 
     def updateIcons(self, theme: str):
-        max_icon, maxed_icon = getMaxIcon(theme)
-        if hasattr(self, 'max_btn'):
-            is_maximized = self.isMaximized()
-            self.max_btn.setIcon(maxed_icon if is_maximized else max_icon)
+        # 图标颜色从 QPalette 取色，主题切换后仅需触发重绘
+        for btn in (getattr(self, 'min_btn', None), getattr(self, 'max_btn', None), getattr(self, 'close_btn', None)):
+            if btn:
+                btn.update()
 
 
 class MenuControl:

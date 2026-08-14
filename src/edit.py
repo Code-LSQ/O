@@ -73,7 +73,7 @@ class EditorWindow(WindowControl, QMainWindow):
         super().changeEvent(event)
     
     def onToolbarDblClick(self, event):
-        """工具栏双击事件 - 最大化/还原窗口"""
+        """工具栏双击，最大化/还原窗口"""
         if event.button() == Qt.MouseButton.LeftButton:
             self.toggleMax()
     

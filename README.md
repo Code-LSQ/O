@@ -14,6 +14,8 @@ Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite�
 
 提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者自己使用的。并且这个项目大部分的代码是 AI 写的，不过基本经受了检查，作者正在进行逐步清理与优化。
 
+本项目仍处于开发阶段，正在尝试优化使用体验及功能。
+
 Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
 
 O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
@@ -30,6 +32,10 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 ![](ex/image/screen1.png)
 
 程序的主要功能为收纳快捷方式，支持打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
+
+添加启动项的方法为拖拽到界面和右键菜单添加。
+标题栏双击全屏，边缘处鼠标点击并拖动可调整大小。
+
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
 路径支持环境变量如 %UserProfile%
 图标可以填一个 exe 文件的路径，会获取它的图标。
@@ -290,6 +296,8 @@ There are already plenty of wheels for launchers on Windows: Quicker, uTools, Ma
 
 Fair warning: this is a pretty ugly project. The author mostly adds whatever comes to mind without any plan, because this project is mainly for personal use. Also, most of the code in this project was written by AI — though it has basically been reviewed — and the author is gradually cleaning it up and optimizing it.
 
+This project is still in development, and I'm working on polishing the user experience and features.
+
 Every project on GitHub gets someone who wants to taste the broth. Thank you for trying it out and for your contribution.
 
 O currently supports Windows 8.1+. O is portable software — no installation required, and it mostly doesn't touch the registry. To uninstall, just exit the program and delete the files. Program data (config, logs, etc.) is stored in the `data/` directory.
@@ -301,6 +309,9 @@ For your own custom plugins (.py) and themes (.qss), it's recommended to put the
 ![](ex/image/screen1.png)
 
 The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable. Paths support environment variables like `%UserProfile%`. For the icon, you can fill in the path of an exe file and it will extract that icon.
+
+To add launcher items, drag them onto the window, or add them via the right-click menu.
+Double-click the title bar to toggle fullscreen; click and drag at the window edges to resize.
 
 Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in. The other is `{env: KEY=value}`, covered in the environment variables section below.
 
