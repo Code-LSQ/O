@@ -6,9 +6,6 @@ __pycache__/
 # 忽略数据目录
 data/
 
-# 忽略额外目录
-ex/
-
 # 忽略 AI Agent 文件
 AGENTS.md
 CLAUDE.md
