@@ -28,7 +28,7 @@ class ResolutionPlugin(PluginBase):
 
     def loadConfig(self):
         super().loadConfig()
-        data = self.settings.get("Resolution", [])
+        data = self.settings.get("value", [])
         if data:
             self.resolutions = data
 
@@ -62,7 +62,7 @@ class ResolutionPlugin(PluginBase):
                 messageBox(self._res_edit, "警告", "至少需要一条分辨率", 1)
                 return False
             self.resolutions = resolutions
-            self.settings["Resolution"] = resolutions
+            self.settings["value"] = resolutions
         # 校验失败返回 False，SettingsDialog.accept() 遇到 False 会放弃关闭，用户修正后重新提交。不要 raise，会打乱 accept 的流程。
         return super().saveConfig(save=save)
 

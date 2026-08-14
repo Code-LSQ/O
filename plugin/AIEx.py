@@ -72,7 +72,7 @@ class AIExtendPlugin(PluginBase):
         self.settings.setdefault("stream", False)
         self.settings.setdefault("profiles", {"默认配置": {
             "api_key": "", "model": "", "api_url": "https://api.deepseek.com",
-            "custom_url": "https://api.deepseek.com", "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
+            "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
         }})
         self.settings.setdefault("dialog", "")
         self.settings.setdefault("load_balance", {"enabled": False, "profiles": {}})
@@ -386,7 +386,7 @@ class AIExtendPlugin(PluginBase):
             self._settings_endpoint_combo.setCurrentText("自定义")
 
         if self._settings_endpoint_combo.currentText() == "自定义":
-            self._settings_custom_url_edit.setText(profile.get("custom_url", ""))
+            self._settings_custom_url_edit.setText(profile.get("api_url", ""))
         else:
             for name, cls, url in AI_ADAPTER:
                 if name == self._settings_endpoint_combo.currentText():
@@ -406,7 +406,6 @@ class AIExtendPlugin(PluginBase):
         self._edit_profiles[self._edit_active] = {
             "api_key": self._settings_api_key_edit.text(),
             "api_url": api_url,
-            "custom_url": api_url,
             "model": self._settings_model_combo.currentText(),
             "temperature": self._settings_temp_spin.value(),
             "max_tokens": self._settings_max_tokens_spin.value(),
@@ -431,7 +430,7 @@ class AIExtendPlugin(PluginBase):
         if name:
             self._edit_profiles[name] = {
                 "api_key": "", "model": "", "api_url": "https://api.deepseek.com",
-                "custom_url": "https://api.deepseek.com", "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
+                "temperature": 0.7, "max_tokens": 2000, "endpoint": "DeepSeek"
             }
             self._edit_active = name
             self._settings_profile_combo.addItem(name, name)

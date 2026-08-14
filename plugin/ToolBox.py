@@ -16,9 +16,10 @@ from PySide6.QtGui import QAction, QTextCursor, QColor
 
 from src.plugin import PluginBase
 from src.main import getIcon
-from src.file import FileSelect, collectFiles
+from src.file import FileSelect, collectFiles, EXCLUDE_PATTERNS
 from src.config import getConfig
 from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles, filePathWidget
+from src.system import activateWindow
 from src.core.timer import TimerManager
 
 
@@ -147,17 +148,14 @@ class ToolBox(PluginBase):
     def __init__(self, main=None):
         super().__init__(main=main)
         self.settings = {
-            "copy.target_file": "data/copy.txt",
-            "search.paths": [],
-            "search.case_sensitive": False,
-            "search.regex": False,
-            "search.close_delay": 3,
-            "quick_text.list": [],
-            "duplicate.paths": [],
-            "duplicate.exclude": ["*.pyc", "*/__pycache__/", "*/.git/"],
-            "click.interval": 3,
-            "scroll.speed": 50,
-            "paste.regex_text": r"^[ \t]*\n",
+            "copy_path": "data/copy.txt",
+            "search": {"paths": [], "case_sensitive": False, "regex": False, "close_delay": 3},
+            "quick_text": [],
+            "duplicate_paths": [],
+            "duplicate_exclude": list(EXCLUDE_PATTERNS),
+            "click": 3,
+            "scroll": 50,
+            "paste_regex": r"^[ \t]*\n",
             "url_protocol": []
         }
         self._scroll_timer = None
@@ -209,7 +207,7 @@ class ToolBox(PluginBase):
             self._scroll_timer.stop()
             logger.info("自动滑动已停止")
         else:
-            speed = self.settings.get("scroll.speed", 50)
+            speed = self.settings.get("scroll", 50)
             self._scroll_timer.start(speed)
             logger.info(f"自动滑动已启动 (速度: {speed})")
 
@@ -219,7 +217,7 @@ class ToolBox(PluginBase):
             self._copy_mgr.setEnabled(False)
             logger.info("自动复制已停止")
         else:
-            self._copy_mgr.target_file = self.settings.get("copy.target_file", "data/copy.txt")
+            self._copy_mgr.target_file = self.settings.get("copy_path", "data/copy.txt")
             self._copy_mgr.setEnabled(True)
             logger.info("自动复制已启动")
 
@@ -229,10 +227,11 @@ class ToolBox(PluginBase):
             self._search_mgr.setEnabled(False)
             logger.info("自动搜索已停止")
         else:
-            self._search_mgr.search_paths = self.settings.get("search.paths", [])
-            self._search_mgr.case_sensitive = self.settings.get("search.case_sensitive", False)
-            self._search_mgr.regex = self.settings.get("search.regex", False)
-            self._search_mgr.close_delay = self.settings.get("search.close_delay", 3)
+            search = self.settings.get("search", {})
+            self._search_mgr.search_paths = search.get("paths", [])
+            self._search_mgr.case_sensitive = search.get("case_sensitive", False)
+            self._search_mgr.regex = search.get("regex", False)
+            self._search_mgr.close_delay = search.get("close_delay", 3)
             self._search_mgr.setEnabled(True)
             if not self._search_mgr.search_paths:
                 logger.info("自动搜索已启动（未设置搜索路径）")
@@ -245,9 +244,9 @@ class ToolBox(PluginBase):
             self._click_mgr.setEnabled(False)
             logger.info("自动点击已停止")
         else:
-            self._click_mgr.interval = self.settings.get("click.interval", 3)
+            self._click_mgr.interval = self.settings.get("click", 3)
             self._click_mgr.setEnabled(True)
-            logger.info(f"自动点击已启动（间隔: {self.settings.get('click.interval', 3)}秒）")
+            logger.info(f"自动点击已启动（间隔: {self.settings.get('click', 3)}秒）")
 
     def _batchRename(self):
         dialog = BatchRenameDialog(self.main)
@@ -258,8 +257,8 @@ class ToolBox(PluginBase):
         if not editor:
             return
 
-        default_paths = self.settings.get("duplicate.paths", [])
-        default_exclude = self.settings.get("duplicate.exclude", ["*.pyc", "*/__pycache__/", "*/.git/"])
+        default_paths = self.settings.get("duplicate_paths", [])
+        default_exclude = self.settings.get("duplicate_exclude", list(EXCLUDE_PATTERNS))
 
         def scan(paths, rules, on_progress, on_done, on_error):
             finder = DuplicateFinder(folder_path=paths[0] if paths else None, paths=paths, rules=rules)
@@ -272,8 +271,8 @@ class ToolBox(PluginBase):
         if not result:
             return
         duplicates, paths, rules = result
-        self.settings["duplicate.paths"] = paths
-        self.settings["duplicate.exclude"] = rules
+        self.settings["duplicate_paths"] = paths
+        self.settings["duplicate_exclude"] = rules
         self.saveConfig()
         self._showDupResults(editor, duplicates)
 
@@ -295,7 +294,7 @@ class ToolBox(PluginBase):
         text = re.sub(r'[\u2028\u2029\u0085\f\v]', '\n', text)
         text = text.replace('\r\n', '\n').replace('\r', '\n')
         # 统一换行符为 \n ，否则 ^\n 类正则无法处理 \r\n 或 U+2029 等变体
-        regex_text = self.settings.get("paste.regex_text", "")
+        regex_text = self.settings.get("paste_regex", "")
         if regex_text:
             try:
                 text = re.sub(regex_text, '', text, flags=re.MULTILINE)
@@ -317,10 +316,12 @@ class ToolBox(PluginBase):
         editor_widget.text_edit.paste()
 
     def _quickText(self):
-        if activateWidget(QuickTextDialog):
+        widget = activateWidget(QuickTextDialog)
+        if widget:
+            widget._focusSearch()
             return
         self.initialize()
-        items = self.settings.get("quick_text.list", [])
+        items = self.settings.get("quick_text", [])
         dialog = QuickTextDialog(items, self.main)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             text = dialog.selected_text
@@ -339,7 +340,9 @@ class ToolBox(PluginBase):
             logger.exception("全局粘贴失败")
 
     def _openSearch(self):
-        if activateWidget(SearchDialog):
+        widget = activateWidget(SearchDialog)
+        if widget:
+            widget._focusSearch()
             return
         config = getConfig()
         dialog = SearchDialog(config.get("Launch.tools", {}), self.main)
@@ -352,9 +355,9 @@ class ToolBox(PluginBase):
 
     def saveConfig(self, save=True):
         if self._tb_widget is not None:
-            old_speed = self.settings.get("scroll.speed", 50)
+            old_speed = self.settings.get("scroll", 50)
             self.settings.update(self._tb_widget.getSetting())
-            new_speed = self.settings.get("scroll.speed", 50)
+            new_speed = self.settings.get("scroll", 50)
             if self._scroll_timer and self._scroll_timer.enabled and old_speed != new_speed:
                 self._scroll_timer.stop()
                 self._scroll_timer.start(new_speed)
@@ -387,8 +390,13 @@ class SearchDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        QTimer.singleShot(0, self._focusSearch)
+
+    def _focusSearch(self):
+        self.raise_()
         self.activateWindow()
-        self.search_edit.setFocus()
+        activateWindow(self.winId())
+        self.search_edit.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
 
     def eventFilter(self, obj, event):
         if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
@@ -1117,18 +1125,18 @@ class ToolBoxSettings(QWidget):
     def initUI(self):
         layout = QFormLayout(self)
 
-        scroll_speed = self.settings.get("scroll.speed", 50)
+        scroll_speed = self.settings.get("scroll", 50)
         self.scroll_speed = QSpinBox()
         self.scroll_speed.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.scroll_speed.setRange(1, 100)
         self.scroll_speed.setValue(scroll_speed)
         layout.addRow("滑动速度", self.scroll_speed)
 
-        copy_path = self.settings.get("copy.target_file", "data/copy.txt")
+        copy_path = self.settings.get("copy_path", "data/copy.txt")
         self.copy_path_edit = QLineEdit(copy_path)
         layout.addRow("自动复制目标", self.copy_path_edit)
 
-        search_paths = self.settings.get("search.paths", [])
+        search_paths = self.settings.get("search", {}).get("paths", [])
         self.search_paths_list = QListWidget()
         self.search_paths_list.setMaximumHeight(80)
         for p in search_paths:
@@ -1145,10 +1153,10 @@ class ToolBoxSettings(QWidget):
         btn_h.addStretch()
         layout.addRow("", btn_h)
 
-        cs = self.settings.get("search.case_sensitive", False)
+        cs = self.settings.get("search", {}).get("case_sensitive", False)
         self.case_check = QCheckBox("区分大小写")
         self.case_check.setChecked(cs)
-        rx = self.settings.get("search.regex", False)
+        rx = self.settings.get("search", {}).get("regex", False)
         self.regex_check = QCheckBox("正则表达式")
         self.regex_check.setChecked(rx)
         opt_row = QHBoxLayout()
@@ -1157,7 +1165,7 @@ class ToolBoxSettings(QWidget):
         opt_row.addStretch()
         layout.addRow("搜索选项", opt_row)
 
-        delay = self.settings.get("search.close_delay", 3)
+        delay = self.settings.get("search", {}).get("close_delay", 3)
         self.close_delay = QSpinBox()
         self.close_delay.setRange(1, 60)
         self.close_delay.setSuffix(" 秒")
@@ -1165,7 +1173,7 @@ class ToolBoxSettings(QWidget):
         self.close_delay.setValue(delay)
         layout.addRow("弹窗显示时间", self.close_delay)
 
-        click_interval = self.settings.get("click.interval", 3)
+        click_interval = self.settings.get("click", 3)
         self.click_interval = QSpinBox()
         self.click_interval.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.click_interval.setRange(1, 9)
@@ -1173,7 +1181,7 @@ class ToolBoxSettings(QWidget):
         self.click_interval.setValue(click_interval)
         layout.addRow("自动点击间隔", self.click_interval)
 
-        paste_regex = self.settings.get("paste.regex_text", "")
+        paste_regex = self.settings.get("paste_regex", "")
         display_text = (paste_regex
             .replace('\n', '\\n')
             .replace('\r', '\\r')
@@ -1205,7 +1213,7 @@ class ToolBoxSettings(QWidget):
         qt_btn_h.addStretch()
         layout.addRow("", qt_btn_h)
 
-        for entry in self.settings.get("quick_text.list", []):
+        for entry in self.settings.get("quick_text", []):
             item = QListWidgetItem(entry.get("note", "") or entry.get("text", ""))
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._qt_list.addItem(item)
@@ -1487,22 +1495,24 @@ class ToolBoxSettings(QWidget):
             messageBox(self, "错误", f"取消注册 {scheme}:// 失败", 1)
 
     def getSetting(self) -> dict:
-        self.settings["scroll.speed"] = self.scroll_speed.value()
-        self.settings["copy.target_file"] = os.path.normpath(self.copy_path_edit.text()) if self.copy_path_edit.text() else "data/copy.txt"
-        self.settings["search.paths"] = [
-            os.path.normpath(self.search_paths_list.item(i).text())
-            for i in range(self.search_paths_list.count())
-        ]
-        self.settings["search.case_sensitive"] = self.case_check.isChecked()
-        self.settings["search.regex"] = self.regex_check.isChecked()
-        self.settings["search.close_delay"] = self.close_delay.value()
-        self.settings["quick_text.list"] = [
+        self.settings["scroll"] = self.scroll_speed.value()
+        self.settings["copy_path"] = os.path.normpath(self.copy_path_edit.text()) if self.copy_path_edit.text() else "data/copy.txt"
+        self.settings["search"] = {
+            "paths": [
+                os.path.normpath(self.search_paths_list.item(i).text())
+                for i in range(self.search_paths_list.count())
+            ],
+            "case_sensitive": self.case_check.isChecked(),
+            "regex": self.regex_check.isChecked(),
+            "close_delay": self.close_delay.value(),
+        }
+        self.settings["quick_text"] = [
             self._qt_list.item(i).data(Qt.ItemDataRole.UserRole)
             for i in range(self._qt_list.count())
         ]
-        self.settings["click.interval"] = self.click_interval.value()
+        self.settings["click"] = self.click_interval.value()
         raw = self.paste_regex_edit.text().strip()
-        self.settings["paste.regex_text"] = (raw
+        self.settings["paste_regex"] = (raw
             .replace('\\n', '\n')
             .replace('\\r', '\r')
             .replace('\\t', '\t'))
@@ -1792,11 +1802,13 @@ class QuickTextDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        QTimer.singleShot(0, self._focusSearch)
+
+    def _focusSearch(self):
+        self.raise_()
         self.activateWindow()
-        logger.info(f"QuickTextDialog.showEvent: 窗口可见={self.isVisible()}, "
-                     f"激活={self.isActiveWindow()}, 焦点控件={self.focusWidget()}")
-        self.search_edit.setFocus()
-        logger.info(f"QuickTextDialog.showEvent: 设焦后焦点控件={self.focusWidget()}")
+        activateWindow(self.winId())
+        self.search_edit.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
 
     def eventFilter(self, obj, event):
         if obj is self.search_edit and event.type() == QEvent.Type.KeyPress:
@@ -1808,7 +1820,6 @@ class QuickTextDialog(QDialog):
                 self._moveSelection(1)
                 return True
             elif key == Qt.Key.Key_Escape:
-                logger.info("QuickTextDialog.eventFilter: 捕获 Escape -> reject()")
                 self.reject()
                 return True
         return super().eventFilter(obj, event)

@@ -115,8 +115,6 @@ BINARY_EXTENSIONS = (
     | EXTENSION["DISK"]
 )
 
-EXCLUDE_PATTERNS = ["*.pyc", "*/__pycache__/", "*/.git/"]
-
 ENCODING_MAP = {
     "UTF-8": "utf-8",
     "UTF-8 BOM": "utf-8-sig",
@@ -1149,13 +1147,13 @@ def dialog(parent, title, text, num: int = 2, center=True):
 
 
 def activateWidget(cls):
-    """防重复，已有对话框实例时显示而不创建，避免嵌套 exec()，返回 True ，否则 False"""
+    """防重复，已有对话框实例时显示而不创建，避免嵌套 exec()，返回该实例，否则返回 None"""
     for widget in QApplication.topLevelWidgets():
         if isinstance(widget, cls) and widget.isVisible():
             widget.raise_()
             widget.activateWindow()
-            return True
-    return False
+            return widget
+    return None
 
 
 # 原有的 ManagePair 类考虑的不好，增加一个 ItemManage 类，并逐步迁移。此外还需要收藏夹管理页面。
