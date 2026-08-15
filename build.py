@@ -15,7 +15,8 @@ dist = root / ".." / "dist"
 work = root / ".." / "build"
 mainpy = str(root / "o.py")
 
-# 发行版计划，Linux 和 macOS 目前是计划中状态。
+# 自动推送发版  -  python build.py release 1.0.0
+# 发行版规划，Linux 和 macOS 目前是计划中状态。
 # Windows，两种，x64、ARM64 的 .zip。
 # Linux，两种，x64、ARM64的  .AppImage。
 # macOS，两种，x64、ARM64的 .dmg，内部是 .app。
@@ -64,43 +65,36 @@ def runGit(cmd):
         sys.exit(f"git 命令失败: {' '.join(cmd)}")
 
 
-def release(new_version, dry_run=False):
-    """发布脚本：同步版本号、提交、打 tag 并推送。用法: python build.py release 1.0.0"""
+def release(new_version):
+    """发布脚本：同步版本号、合并提交、打 tag 并推送。用法: python build.py release 1.0.0"""
     if not re.fullmatch(r"\d+\.\d+\.\d+", new_version):
         sys.exit(f"版本号格式错误: {new_version}，应为 1.0.0 形式")
 
-    util_path = root / "src/util.py"
+    py_path = root / "src/util.py"
     pyproj_path = root / "pyproject.toml"
-    util_text = util_path.read_text(encoding="utf-8")
-    current = re.search(r'(?m)^VERSION = "([^"]+)"', util_text)
-    if not current:
-        sys.exit("未找到 VERSION 定义")
-    print(f"当前版本: {current.group(1)} -> 新版本: {new_version}")
+    print(f"当前版本: {VERSION} -> 新版本: {new_version}")
 
-    current_ver = tuple(int(x) for x in current.group(1).split("."))
+    current_ver = tuple(int(x) for x in VERSION.split("."))
     new_ver = tuple(int(x) for x in new_version.split("."))
     if new_ver <= current_ver:
         if new_ver == current_ver:
             sys.exit(f"版本号已是 {new_version}，无需重复发布")
-        sys.exit(f"新版本号 {new_version} 不能低于当前版本 {current.group(1)}")
+        sys.exit(f"新版本号 {new_version} 不能低于当前版本 {VERSION}")
 
-    if dry_run:
-        print(f"[dry-run] 将更新 {util_path} 与 {pyproj_path} 的版本号")
-        print(f"[dry-run] 将执行: git add / commit / tag / push V{new_version}")
-        return 0
+    print(f"将更新 {py_path} 与 {pyproj_path} 的版本号")
+    print(f"将执行: git add / commit / tag / push V{new_version}")
+    status = subprocess.run(["git", "status", "--short"], capture_output=True, text=True, cwd=str(root))
+    print(status.stdout, end="")
+    input("回车确认发布，Ctrl+C 取消...")
 
-    # 发布前必须保证工作区干净，防止把未完成的工作混进发布提交
-    status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(root))
-    if status.stdout.strip():
-        sys.exit("工作区有未提交改动，请先提交或还原")
-
-    util_text = re.sub(r'(?m)^VERSION = "[^"]+"', f'VERSION = "{new_version}"', util_text)
-    util_path.write_text(util_text, encoding="utf-8")
+    py_text = py_path.read_text(encoding="utf-8")
+    py_text = re.sub(r'(?m)^VERSION = "[^"]+"', f'VERSION = "{new_version}"', py_text)
+    py_path.write_text(py_text, encoding="utf-8")
 
     pyproj_text = re.sub(r'(?m)^version = "[^"]+"', f'version = "{new_version}"', pyproj_path.read_text(encoding="utf-8"))
     pyproj_path.write_text(pyproj_text, encoding="utf-8")
 
-    runGit(["git", "add", "src/util.py", "pyproject.toml"])
+    runGit(["git", "add", "-A"])
     runGit(["git", "commit", "-m", f"V{new_version}"])
     runGit(["git", "tag", f"V{new_version}"])
     runGit(["git", "push", APP_NAME, "main", "--tags"])
@@ -113,11 +107,10 @@ def main():
     sub = parser.add_subparsers(dest="command")
     release_parser = sub.add_parser("release", help="同步版本号、提交、打 tag 并推送")
     release_parser.add_argument("version", help="新版本号，如 1.0.0")
-    release_parser.add_argument("--dry-run", action="store_true", help="仅预览，不修改文件与 git")
     args = parser.parse_args()
 
     if args.command == "release":
-        return release(args.version, dry_run=args.dry_run)
+        return release(args.version)
 
     if sys.platform == "win32":  # Windows
         args = [

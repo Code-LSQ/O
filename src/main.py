@@ -58,7 +58,7 @@ def execPython():
         if sys.stdin is not None:
             os.system("pause")
 
-def runPython(path: str, cwd, args, operation):
+def runPython(path: str, cwd, args, *arg, **kwargs):
     if Path(path).suffix.lower() != ".py":
         raise TypeError("仅支持 .py 文件")
 
@@ -77,7 +77,7 @@ def runPython(path: str, cwd, args, operation):
         cmd.append(args)
     subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-def runJava(path: str, cwd, args, operation):
+def runJava(path: str, cwd, args, *arg, **kwargs):
     if Path(path).suffix.lower() != ".jar":
         raise TypeError("仅支持 .jar 文件")
 
@@ -90,7 +90,7 @@ def runJava(path: str, cwd, args, operation):
         cmd.append(args)
     subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-def openUrl(url, *args, **kwargs):
+def openUrl(url, *arg, **kwargs):
     webbrowser.open(url)
 
 # 类型映射，对于 .py，.jar ，设置 CREATE_NEW_CONSOLE 是为了方便在关闭终端窗口时结束脚本或程序，否则不好结束

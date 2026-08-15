@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.util import APP_NAME, app_path, logger, icon_dir, Interpret
+from src.util import APP_NAME, app_path, logger, icon_dir, Interpret, tr
 
 if sys.platform == "win32":
     # 除插件外，只在这个代码块中使用 ctypes 和 winreg
@@ -36,12 +36,26 @@ if sys.platform == "win32":
         }
 
     def openFile(path: str, cwd=None, args=None, operation="open"):
-        """打开文件或文件夹，不检查文件存在性，由字典映射在调用前统一检查并抛异常。
+        """打开文件或文件夹，不检查文件存在性。
+        ShellExecuteW 失败时弹 Windows 原生错误框提示，不抛异常。
         os.startfile(path) 不支持参数，所以使用 windll。"""
         path = os.path.expandvars(path)
         result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd, 1)
         if result <= 32:
-            raise RuntimeError(f"打开文件失败 {result}")
+            # UAC 提权被用户取消时返回 5（SE_ERR_ACCESSDENIED），静默处理
+            if operation == "runas" and result == 5:
+                return
+            if result == 2:
+                text = "Windows " + tr("找不到文件，请确认名称是否正确，然后重试")
+            elif result == 3:
+                text = "Windows " + tr("找不到路径，请确认路径是否正确，然后重试")
+            elif result == 5:
+                text = tr("拒绝访问")
+            else:
+                text = tr("打开文件失败") + " (" + str(result) + ")"
+            # 0x40010 = MB_OK | MB_ICONERROR | MB_TOPMOST，标题用路径，与资源管理器"找不到文件"框一致
+            windll.user32.MessageBoxW(None, text + "\n\n" + path, path, 0x40010)
+            logger.error(f"打开文件失败: {path}, 错误码 {result}")
 
     def activateWindow(name):
         windll.user32.SetForegroundWindow(int(name))

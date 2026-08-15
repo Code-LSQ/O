@@ -45,7 +45,7 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 图标可以填一个 exe 文件的路径，会获取它的图标。
 
 
-启动参数（args），支持两个特殊占位符：`{Select}`：运行时先模拟 Ctrl+C 捕获当前选中的文本并替换进去。
+启动参数（args），支持两个特殊占位符：`{Select}`：运行时先模拟 Ctrl+C 捕获当前选中的文本并替换，此功能需要在设置中勾选运行后隐藏，否则无法获取选中内容。
 另一个是 `{env: KEY=value}` ，在下方的环境变量中介绍。
 
 管理员运行仅`文件`类型生效。
@@ -321,7 +321,7 @@ To add launcher items, drag them onto the window, or add them via the right-clic
 Double-click the title bar to toggle fullscreen; click and drag at the window edges to resize. The simple editor is resized by dragging its bottom-right corner.
 If you prefer finding launcher items by searching rather than clicking, go to Right-click -> Add preset items -> Toolbox -> Search.
 
-Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in. The other is `{env: KEY=value}`, covered in the environment variables section below.
+Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in, this feature requires enabling "Hide after running" in the settings; otherwise, the selected content cannot be retrieved. The other is `{env: KEY=value}`, covered in the environment variables section below.
 
 Running as administrator only works for the `File` type.
 
