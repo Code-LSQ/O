@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo,
 
 AUTHOR = "Code-LSQ"
 APP_NAME = "O"
-VERSION = "0.5.9"
+VERSION = "0.5.10"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
@@ -48,7 +48,7 @@ log_file = data_dir / "app.log"
 log_handler = RotatingFileHandler(log_file, maxBytes=1024 * 1024, backupCount=1, encoding="utf-8")
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[log_handler, logging.StreamHandler()],
 )
 logger = logging.getLogger()

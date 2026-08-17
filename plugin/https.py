@@ -2,6 +2,7 @@ import os
 import socket
 import time
 import threading
+import webbrowser
 from urllib import parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -675,6 +676,9 @@ class HTTPDialog(QDialog):
         self.port_edit.setText(str(self.tool.settings.get("port", 8000)))
         self.port_edit.setMaximumWidth(80)
         ip_port_layout.addWidget(self.port_edit)
+        self.browser_btn = QPushButton("浏览器打开")
+        self.browser_btn.clicked.connect(self._openBrowser)
+        ip_port_layout.addWidget(self.browser_btn)
         ip_port_layout.addStretch()
         info_layout.addLayout(ip_port_layout)
 
@@ -787,6 +791,11 @@ class HTTPDialog(QDialog):
             new_text = "\n".join(new_data)
             if new_text != self.recv_edit.toPlainText():
                 self.recv_edit.setPlainText(new_text)
+
+    def _openBrowser(self):
+        """用系统默认浏览器打开 HTTP 服务页面"""
+        port = self.port_edit.text().strip() or self.tool.settings.get("port", 8000)
+        webbrowser.open(f"http://{self.tool.local_ip}:{port}/")
 
     def _toggleServer(self):
         """切换服务器启动 / 停止状态"""

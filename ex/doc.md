@@ -45,6 +45,8 @@ VMware的一个 Windows 10 虚拟机，在未精简的情况下占用18G到25G�
 
 [图吧工具箱WinUI3](https://github.com/luolangaga/tubatools/releases)，使用 C# 写的图吧工具箱 WinUI3 版本，页面更美观，功能更多更全。
 
+[JSLinux](https://bellard.org/jslinux/index.html) 和 [v86](https://copy.sh/v86/)，浏览器里的 32 位 Linux 、Windows 2000 虚拟机。
+
 
 
 ## 加密备份

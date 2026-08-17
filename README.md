@@ -7,19 +7,16 @@
 ### 项目简介
 
 
-O 是一个带了一些奇怪功能的快速启动器，使用 PySide6 框架，支持插件扩展。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义。
+O 是一个带了一些奇怪功能的 Windows 快速启动器，适用于桌面杂乱的人群，使用 PySide6 框架，支持插件扩展。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义。
 
 Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
 它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。其中 Quicker 的功能应该是最强的，可惜是会员制软件。
 
 提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者自己使用的。并且这个项目大部分的代码是 AI 写的，不过基本经受了检查，作者正在进行逐步清理与优化。
 
-本项目仍处于开发阶段，正在尝试优化使用体验及功能。
+本项目仍处于开发阶段，功能稳定性仍需验证，正在尝试优化使用体验及功能。感谢您的尝试。
 
-Github 上的项目，总会有人尝尝咸淡。感谢您的尝试与奉献。
-
-请使用压缩软件解压！！！Windows 内置的解压功能，解压 LZMA 算法的 zip 文件会报错。
-推荐使用 [7-Zip](https://sparanoid.com/lab/7z/)、[7-Zip 增强版](https://github.com/mcmilk/7-Zip-zstd/releases)、[WinRAR](https://github.com/n2far2000/winrarsc) 。
+请使用压缩软件解压！！！Windows 内置的解压功能，解压 LZMA 算法的 zip 文件会报错。推荐使用 [7-Zip](https://sparanoid.com/lab/7z/)、[7-Zip 增强版](https://github.com/mcmilk/7-Zip-zstd/releases)、[WinRAR](https://github.com/n2far2000/winrarsc) 。
 
 O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
 
@@ -28,25 +25,34 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 
 [笔记](ex/doc.md) 是我的一些笔记，与软件本身关联性很低，只是不想再去开新仓库额外管理，可以看也可以忽略。其内容为软件使用、问题解决、开源项目推荐、杂谈等。
 
+如果你使用 PyQt6，这里有一个[转换脚本](ex/PySide-PyQt.py)，不过测试不充分，不保证可用性。
+
 
 ### 启动器
 
 
 ![](ex/image/screen1.png)
 
+
+![](ex/image/run.png)
+
+
+![](ex/image/config.png)
+
 程序的主要功能为收纳快捷方式，支持打开 exe、打开文件夹、设置 Python 和 Java 路径后运行 .py 和 .jar、打开网址等。
 
-添加启动项的方法为拖拽到界面和右键菜单添加。
-顶部标题栏双击全屏，边缘处鼠标点击并拖动可调整大小。简易编辑器调整大小则通过最右下角拖动
+添加启动项的方法为拖拽到界面和右键菜单添加。顶部标题栏双击全屏，边缘处鼠标点击并拖动可调整大小。简易编辑器调整大小则通过最右下角拖动
+
 如果希望通过搜索而不是点击的方式来找到启动项，右键->添加预设项->工具箱->搜索。
 
 另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
-路径支持环境变量如 %UserProfile%
+
+路径支持环境变量如 %UserProfile%。
+
 图标可以填一个 exe 文件的路径，会获取它的图标。
 
 
-启动参数（args），支持两个特殊占位符：`{Select}`：运行时先模拟 Ctrl+C 捕获当前选中的文本并替换，此功能需要在设置中勾选运行后隐藏，否则无法获取选中内容。
-另一个是 `{env: KEY=value}` ，在下方的环境变量中介绍。
+启动参数（args），支持两个特殊占位符：`{Select}`：运行时先模拟 Ctrl+C 捕获当前选中的文本并替换，此功能需要在设置中勾选运行后隐藏，否则无法获取选中内容。另一个是 `{env: KEY=value}` ，在下方的环境变量中介绍。
 
 管理员运行仅`文件`类型生效。
 
@@ -56,24 +62,35 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 #### 环境变量
 
 在设置->选项->环境变量中，可以填写环境变量，程序启动时会向系统注入这些环境变量。
+
 C:\SDK\MinGW\   将此文件夹加入 Path
+
 ANDROID_HOME=C:\Android\SDK   将其加入环境变量
+
 这是针对所有项目的环境变量
 
 如果要针对单个程序
+
 在启动项参数中加入形如 `{env: CLAUDE_CODE_NO_FLICKER=1}`  ，每个 {env: } 内填入一个环境变量，用空格` `分隔多个 {env: }。仅在该程序运行期间临时设置环境变量，结束后恢复
-对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 `{env: AppData=C:\data}`
+
+对于一些程序，可以通过此功能达到修改程序数据目录的效果，如 `{env: UserProfile=C:\data} {env: AppData=C:\data\AppData\Roaming} {env: LocalAppData=C:\data\AppData\Local}`
+
+对 WebView2 程序，可以通过 `{env: WEBVIEW2_USER_DATA_FOLDER=C:\data\WebView\desktop}` 来指定 WebView 缓存目录，不过用处不大，只能让 AppData 文件夹干净一些。
+
+由于 Electron 软件的目录机制，使用此功能可能导致无法启动。对 Electron 和其他基于 Chromium 的软件建议使用形如 `--user-data-dir=C:\data\obsidian` 的启动参数来指定数据目录。
+
 
 
 #### 进程/服务管理
-
 
 此功能仅针对 .exe 程序，需要管理员权限。适用于百度网盘、WPS等软件的流氓进程，还有 VMware 这种关闭后有好几个服务在运行的。
 
 填写格式，使用 " | " 来对各个服务、进程进行分隔，有空格要用 "" 包裹，有服务和进程白名单，免得误操作给系统搞崩溃了。
 
 这里列举一些例子，同时也欢迎各位反馈。
+
 VMware：服务里 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Service" ，可能还有一个托盘进程
+
 百度网盘：进程里填写 YunDetectService.exe
 
 如果你需要更加强大的处理流氓软件的功能，可以使用 [Sandboxie](https://github.com/sandboxie-plus/Sandboxie/releases)，可以隔离文件和进程到虚拟环境中。
@@ -82,6 +99,7 @@ VMware：服务里 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Se
 
 
 具体原理
+
 在用户启动主进程后，设置一个定时器，十秒检查一次主进程状态。
 
 进程管理：检测到用户结束主进程后，结束其附属进程
@@ -92,7 +110,9 @@ VMware：服务里 VMAuthdService | VMnetDHCP | VMUSBArbService | "VMware NAT Se
 #### 其他
 
 内置的简易编辑器和文件查看器功能不完善，可以不使用。
+
 右键->添加预设项 中可以添加程序自身、系统、插件的一些功能。
+
 更新通过右键->添加预设项的更新来进行，本功能尚未测试所以更新功能可能不稳定。
 
 
@@ -122,8 +142,11 @@ getAction()，控制插件返回的按钮
       }
     }
   }
+
 插件通过 PluginBase 的 loadConfig() 读取 config["Plugin"] 下自己名字对应的配置，用 saveConfig() 写回，写回时会保留 enabled 字段。
+
 插件管理器通过 initConfig() 读取各插件的 enabled 字段决定是否加载，用 saveConfig() 把启用状态和插件配置一并写回。
+
 Plugin.plugin_name 的 enabled 字段由插件管理器控制，插件请勿直接对整个字典赋值，以免覆盖 enabled 字段。应该使用 update() 或使用一个单独的子字段保存配置。
 
 
@@ -137,64 +160,126 @@ Plugin.plugin_name 的 enabled 字段由插件管理器控制，插件请勿直�
 #### 工具箱
 
 搜索：全局搜索启动项，按名称/路径/备注过滤，回车直接运行
+
+![](ex/image/search.png)
+
+
 快速文本：文本片段选择器，选中后写入剪贴板并模拟 Ctrl+V 粘贴到任意程序
+
 批量重命名：支持查找替换、数字排序、固定前缀、固定后缀四种模式，实时预览
-查找重复文件：按 MD5 分组找出重复文件，可移动到回收站，MD5 结果会缓存，只对变更文件增量重算
+
+查找重复文件：按 MD5 分组找出重复文件，可移动到回收站。
+
 快速粘贴：取回当前选中的文本，清理开头空行后粘贴进编辑器
+
 自动滑动：模拟鼠标滚轮持续向下滚动，速度可调
-自动复制：剪贴板文本变化时自动追加写入 data/copy.txt
-自动搜索：剪贴板文本变化后自动搜索文件内容，结果弹窗双击打开并跳转到对应行
+
+自动复制：剪贴板文本变化时自动向指定文件追加写入 data/copy.txt
+
+自动搜索：剪贴板文本变化后自动搜索文件内容，搜索到时右下角弹窗，双击打开并跳转到对应行
+
 自动点击：定时模拟鼠标左键点击，运行中按数字键 1-9 实时调整间隔，Esc 停止
+
 URL 协议注册：把自定义协议（如 `myapp://`）注册到系统，绑定到任意程序，点击链接即可唤起
+
+
+
+#### 局域网通信
+
+![](ex/image/httpse.png)
+
+在电脑上启动一个 HTTP 服务器，局域网内其他设备（尤其是手机）可以直接在浏览器访问 `http://IP:port` 使用。举例： http://192.168.8.2:8000
+
+- 文件浏览与下载：列出共享文件夹，支持中文文件名
+- 文件上传：支持网页端拖拽上传，大文件走流式上传
+- 文本消息：网页端和对话框可以互相收发文本。
+- 网页针对手机访问做了适配。
+
+按理说应该用 qrcode 生成二维码的，然后手机可以直接扫码打开网址，但是考虑到程序体积的增加，暂时没有使用此方案，后续再看是否有必要。
+
+
+
+#### OpenList
+
+需要额外学习 OpenList 的使用。
+
+[OpenList](https://github.com/OpenListTeam/OpenList/releases) 是一个开源项目，此插件调用 OpenList 的 API 进行文件同步。
+
+
+文件排除规则是相对于源目录的，是相对路径，/ 和 \ 效果相同
+
+举例，当前目录是 C:\Code ，想排除 C:\Code\SDK\Python
+
+下面两种写法都可以
+
+\SDK\Python\
+
+/SDK/Python/
+
+
+打包成 tar 的文件夹，将指定文件夹打包成 tar 再上传，文件夹本身不上传，这个功能是专门针对大量小文件的。
+
+
+文件树文件夹，将指定文件夹的目录结构打包成 txt 文件后上传，文件夹本身不上传。
+目录结构类似 Windows 的 tree 命令。
 
 
 #### AI 扩展
 
-为什么有 AI 功能呢？因为这个项目也是我的毕业设计，虽然后来大改了好几次，还是保留了这部分功能，不过我个人是不喜欢什么都加 AI 的。事实上本项目的 AI 功能也称得上比较难用，只不过调用起来比较方便。
+为什么有 AI 功能呢？因为这个项目之前是我的毕业设计，虽然后来大改了好几次，基本看不出原样了，但还是保留了这部分功能，不过我个人是不喜欢什么都加 AI 的。事实上本项目的 AI 功能也称得上比较难用，只不过调用起来比较方便。
 
 右键 AI：选中文本、文件或文件夹后调用 AI 处理，文件直接作为附件发送，结果在置顶对话框中流式显示，可复制或粘贴回编辑器。请注意，这个对话框是点击底部按钮后自动关闭的。
+
 AI 面板：独立置顶窗口或停靠在编辑器右侧，支持多对话管理、模型下拉选择与刷新、导出对话（Markdown/纯文本）、提示词快捷按钮、消息拖拽图片。
+
 OCR：拖入单张图片或整个文件夹批量识别文字，结果自动保存为 txt 并在编辑器中打开。
+
 支持的服务商：Claude、DeepSeek、Gemini、Ollama（本地）、OpenAI 及 OpenAI 兼容服务（DeepSeek、OpenRouter、New API、阿里云百炼、火山引擎、腾讯混元、硅基流动等）、自定义 API。
+
 负载均衡：可为每个配置档设置优先级和权重，请求自动分配，连续失败自动禁用。
+
+
 
 #### 符号链接
 
-此插件用于管理符号链接。
+此插件用于管理符号链接。支持跨盘符移动，支持环境变量如 %UserProfile%
 
 适用情况
 1. C 盘空间紧张，要移动内容到 D 盘。
 2. 想把软件数据放在同一个文件夹进行管理。
 
-需要使用管理员权限。使用前建议备份一下文件夹。
-注意！请不要对 C:\Windows 等系统文件夹使用！！！
+需要使用管理员权限。使用前建议备份一下文件夹。注意！请不要对 C:\Windows 等系统文件夹使用！！！
 
-使用说明
 
-简单来说
-源路径 C:\Users\User\.ollama
-目标路径 D:\Tool\Data\.ollama
+简略说明
+
+源路径 C:\Users\User\.ollama，目标路径 D:\Tool\Data\.ollama
+
 目标路径是一个已经存在的文件夹，末尾增加源路径的末尾，这里是 `.ollama`
-
-支持跨盘符移动，支持环境变量如 %UserProfile%
 
 
 详细说明
+
 源路径的文件或文件夹 C:\Users\User\.ollama，
-目标路径的文件或文件夹 C:\Tool\AppData\.ollama ，是操作完成后形成的路径，运行前，文件夹 C:\Tool\AppData\ 要存在，但内部不能存在 .ollama 同名文件或文件夹
+
+目标路径的文件或文件夹 D:\Tool\AppData\.ollama ，是操作完成后形成的路径，运行前，文件夹 D:\Tool\AppData\ 要存在，但内部不能存在 .ollama 同名文件或文件夹
+
 注意要让源路径和目标路径末尾的文件或文件夹名相同。
 
 
 几个按钮的具体行为如下
 
 运行具体行为
-C:\Users\User\.ollama 会被移动到 C:\Tool\AppData  内部，形成 C:\Tool\AppData\.ollama 的路径，然后在 C:\Users\User\.ollama 创建一个指向 C:\Tool\AppData\.ollama 的符号链接，从而达到访问 C:\Users\User\.ollama 实际上是访问 C:\Tool\AppData\.ollama 的效果。
+
+C:\Users\User\.ollama 会被移动到 D:\Tool\AppData  内部，形成 D:\Tool\AppData\.ollama 的路径，然后在 C:\Users\User\.ollama 创建一个指向 D:\Tool\AppData\.ollama 的符号链接，从而达到访问 C:\Users\User\.ollama 实际上是访问 D:\Tool\AppData\.ollama 的效果。
+
 符号链接的原理导致移动文件夹才能达到减小 C 盘或统一管理文件的目的。
 
-在 C:\Tool\AppData 文件夹存在且内部没有 .ollama 文件夹的情况下，大致等效于下方的 cmd 命令。不过增加了校验和回退。
+在 D:\Tool\AppData 文件夹存在且内部没有 .ollama 文件夹的情况下，大致等效于下方的 cmd 命令。不过增加了校验和回退。
+
 ```
-move C:\Users\User\.ollama C:\Tool\AppData
-mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
+move C:\Users\User\.ollama D:\Tool\AppData
+mklink /D C:\Users\User\.ollama D:\Tool\AppData\.ollama
 ```
 
 
@@ -204,39 +289,11 @@ mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
 
 
 
-#### OpenList
-
-OpenList 是一个开源项目，此插件调用 OpenList 的 API 进行文件同步。
-需要额外学习 OpenList 的使用。
-https://github.com/OpenListTeam/OpenList/releases
-
-##### 排除规则
-
-排除规则是相对于源目录的，是相对路径，/ 和 \ 效果相同
-
-举例，当前目录是 C:\Code ，想排除 C:\Code\SDK\Python
-下面两种写法都可以
-\SDK\Python\
-/SDK/Python/
-
-
 #### 修改分辨率
 
 在设置页中配置分辨率列表（默认有 1280×720、1920×1080、1920×1200、2560×1440、2560×1600、3200×2000），每行一个，菜单里点一下即可切换。
 切换时会先测试显示器是否支持，再临时切换并询问是否保留：选择是则写入注册表永久生效，否则自动恢复原来的分辨率。
 
-
-#### 局域网通信
-
-
-在电脑上启动一个 HTTP 服务器，局域网内其他设备（尤其是手机）可以直接在浏览器访问 `http://IP:port` 使用。举例： http://192.168.8.2:8000
-
-- 文件浏览与下载：列出共享文件夹，支持中文文件名
-- 文件上传：支持网页端拖拽上传，大文件走流式上传
-- 文本消息：网页端和对话框可以互相收发文本。
-- 网页针对手机访问做了适配。
-
-按理说应该用 qrcode 生成二维码的，然后手机可以直接扫码打开网址，但是考虑到程序体积的增加，暂时没有使用此方案，后续再看。
 
 
 ### Windows 设置
@@ -244,28 +301,51 @@ https://github.com/OpenListTeam/OpenList/releases
 右键->添加预设项->系统 中有一些 Windows 特定功能
 
 除此之外你可能需要的 Windows 路径
+
 控制面板  C:\Windows\System32\control.exe
+
 注册表编辑器  C:\Windows\regedit.exe
+
 服务  C:\Windows\System32\services.msc
+
 PowerShell C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+
 Windows 功能  C:\Windows\System32\OptionalFeatures.exe
+
 事件查看器  C:\Windows\System32\eventvwr.msc
+
 资源监视器  C:\Windows\System32\perfmon.exe
+
 系统信息  C:\Windows\System32\msinfo32.exe
+
 系统配置  C:\Windows\System32\msconfig.exe
+
 颜色管理  C:\Windows\System32\colorcpl.exe
+
 计算机管理  C:\Windows\System32\compmgmt.msc
+
 组策略  C:\Windows\System32\gpedit.msc
+
 文件资源管理器  C:\Windows\explorer.exe
+
 任务管理器  C:\Windows\System32\Taskmgr.exe
+
 任务计划程序  C:\Windows\System32\taskschd.msc
+
 系统属性  C:\Windows\System32\SystemPropertiesComputerName.exe
+
 性能选项  C:\Windows\System32\SystemPropertiesPerformance.exe
+
 Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools
+
 防火墙  C:\Windows\System32\WF.msc
+
 用户账户控制设置  C:\Windows\System32\UserAccountControlSettings.exe
+
 本地安全策略  C:\Windows\System32\secpol.msc
+
 实时字幕  C:\Windows\System32\LiveCaptions.exe
+
 
 
 ### 计划
@@ -300,9 +380,7 @@ There are already plenty of wheels for launchers on Windows: Quicker, uTools, Ma
 
 Fair warning: this is a pretty ugly project. The author mostly adds whatever comes to mind without any plan, because this project is mainly for personal use. Also, most of the code in this project was written by AI — though it has basically been reviewed — and the author is gradually cleaning it up and optimizing it.
 
-This project is still in development, and I'm working on polishing the user experience and features.
-
-Every project on GitHub gets someone who wants to taste the broth. Thank you for trying it out and for your contribution.
+This project is still in development, and its stability has yet to be fully verified. I'm working on polishing the user experience and features. Thank you for trying it out.
 
 Please extract with a proper archive tool!!! Windows' built-in extractor fails on zip files compressed with the LZMA algorithm.
 Recommended: [7-Zip](https://sparanoid.com/lab/7z/), [7-Zip zstd](https://github.com/mcmilk/7-Zip-zstd/releases), [WinRAR](https://github.com/n2far2000/winrarsc).
@@ -311,9 +389,19 @@ O currently supports Windows 8.1+. O is portable software — no installation re
 
 For your own custom plugins (.py) and themes (.qss), it's recommended to put them in the `data/user` folder — that's the folder reserved for users. Although you can customize things inside the `src` folder, they'd be overwritten after an update, because updates delete everything except `data`, so it's not recommended.
 
+[Notes](ex/doc.md) are some of my notes — barely related to the software itself, I just didn't want to spin up another repo to manage them. You can read them or ignore them. They cover software usage, problem solving, open-source project recommendations, and miscellaneous thoughts.
+
+If you use PyQt6, there's a [conversion script](ex/PySide-PyQt.py) here, though it hasn't been thoroughly tested, so no guarantees.
+
 ### Launcher
 
 ![](ex/image/screen1.png)
+
+
+![](ex/image/run.png)
+
+
+![](ex/image/config.png)
 
 The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable. Paths support environment variables like `%UserProfile%`. For the icon, you can fill in the path of an exe file and it will extract that icon.
 
@@ -334,7 +422,13 @@ In Settings -> Options -> Environment Variables, you can fill in environment var
 `ANDROID_HOME=C:\Android\SDK`    adds it as an environment variable
 These are environment variables for all projects.
 
-To target a single program, add something like `{env: CLAUDE_CODE_NO_FLICKER=1}` to its launch arguments. Each `{env: }` holds one environment variable, with multiple `{env: }` separated by spaces ` `. The variable is set temporarily only while that program runs and is restored afterwards. For some programs, this can be used to redirect the program's data directory, e.g. `{env: AppData=C:\data}`.
+To target a single program, add something like `{env: CLAUDE_CODE_NO_FLICKER=1}` to its launch arguments. Each `{env: }` holds one environment variable, with multiple `{env: }` separated by spaces ` `. The variable is set temporarily only while that program runs and is restored afterwards.
+
+For some programs, this feature can be used to redirect the program's data directory, e.g. `{env: UserProfile=C:\data} {env: AppData=C:\data\AppData\Roaming} {env: LocalAppData=C:\data\AppData\Local}`.
+
+For WebView2 programs, you can use `{env: WEBVIEW2_USER_DATA_FOLDER=C:\data\WebView\desktop}` to specify the WebView cache directory, though it's not very useful — it just keeps the AppData folder a bit cleaner.
+
+Due to how Electron apps handle their directory structure, this feature can prevent them from starting. For Electron and other Chromium-based software, it's recommended to specify the data directory with a launch argument like `--user-data-dir=C:\data\obsidian` instead.
 
 #### Process / Service Management
 
@@ -399,13 +493,46 @@ Developing a new plugin:
 Search: global search over launcher items, filtered by name/path/note, press Enter to run directly.
 Quick Text: a text-snippet picker; the selected snippet is copied to the clipboard and pasted into any program via a simulated Ctrl+V.
 Batch Rename: supports four modes — find & replace, numeric ordering, fixed prefix, fixed suffix — with live preview.
-Find Duplicate Files: groups duplicate files by MD5, with an option to move them to the Recycle Bin. MD5 results are cached, only incrementally recomputed for changed files.
+Find Duplicate Files: groups duplicate files by MD5, with an option to move them to the Recycle Bin.
 Quick Paste: grabs the currently selected text, strips leading blank lines, and pastes it into the editor.
 Auto Scroll: simulates the mouse wheel scrolling down continuously, speed adjustable.
 Auto Copy: automatically appends clipboard text changes to `data/copy.txt`.
 Auto Search: automatically searches file contents when the clipboard text changes; results pop up in a dialog — double-click to open and jump to the matching line.
 Auto Click: periodically simulates a left mouse click; while running, press number keys 1-9 to adjust the interval in real time, Esc to stop.
 URL Protocol Registration: registers a custom protocol (e.g. `myapp://`) with the system and binds it to any program — clicking the link summons it.
+
+#### LAN Communication
+
+![](ex/image/httpse.png)
+
+Starts an HTTP server on the PC; other devices on the LAN (especially phones) can use it directly in a browser at `http://IP:port`. Example: http://192.168.8.2:8000
+
+- File browsing & download: lists shared folders, supports Chinese filenames.
+- File upload: supports drag-and-drop upload from the web page; large files stream.
+- Text messages: the web page and the dialog can send text back and forth.
+- The web page is adapted for phone access.
+
+Strictly speaking, a QR code should be generated with qrcode so a phone can scan and open the URL directly, but considering the increase in program size, this approach isn't used for now — maybe later.
+
+
+#### OpenList
+
+You'll need to learn OpenList separately.
+
+[OpenList](https://github.com/OpenListTeam/OpenList/releases) is an open-source project; this plugin calls OpenList's API for file sync.
+
+
+Exclude rules are relative to the source directory, and are relative paths; `/` and `\` work the same.
+
+For example, if the current directory is C:\Code and you want to exclude C:\Code\SDK\Python, either of these works:
+\SDK\Python\
+/SDK/Python/
+
+
+Folders packed as tar: the specified folder is packed into a tar archive and uploaded — the folder itself isn't uploaded. This feature is aimed at large numbers of small files.
+
+File tree folders: the directory structure of the specified folder is packed into a txt file and uploaded — the folder itself isn't uploaded. The structure resembles the output of the Windows `tree` command.
+
 
 #### AI Extension
 
@@ -437,51 +564,28 @@ The target path is an existing folder; append the tail of the source path — he
 Cross-drive moves and environment variables like %UserProfile% are supported.
 
 In detail:
-The source file or folder C:\Users\User\.ollama, and the target file or folder C:\Tool\AppData\.ollama is the path formed after the operation. Before running, the folder C:\Tool\AppData\ must exist, but it must not already contain a file or folder named .ollama. Note that the file/folder names at the tail of the source and target paths must be the same.
+The source file or folder C:\Users\User\.ollama, and the target file or folder D:\Tool\AppData\.ollama is the path formed after the operation. Before running, the folder D:\Tool\AppData\ must exist, but it must not already contain a file or folder named .ollama. Note that the file/folder names at the tail of the source and target paths must be the same.
 
 The specific behavior of each button:
 
-Run — behavior: C:\Users\User\.ollama is moved into C:\Tool\AppData, forming the path C:\Tool\AppData\.ollama, then a symbolic link is created at C:\Users\User\.ollama pointing to C:\Tool\AppData\.ollama, so that accessing C:\Users\User\.ollama actually accesses C:\Tool\AppData\.ollama. Due to how symbolic links work, moving the folder is the only way to shrink the C drive or centralize files.
+Run — behavior: C:\Users\User\.ollama is moved into D:\Tool\AppData, forming the path D:\Tool\AppData\.ollama, then a symbolic link is created at C:\Users\User\.ollama pointing to D:\Tool\AppData\.ollama, so that accessing C:\Users\User\.ollama actually accesses D:\Tool\AppData\.ollama. Due to how symbolic links work, moving the folder is the only way to shrink the C drive or centralize files.
 
-When the C:\Tool\AppData folder exists and contains no .ollama folder, this is roughly equivalent to the cmd commands below, but with added validation and rollback.
+When the D:\Tool\AppData folder exists and contains no .ollama folder, this is roughly equivalent to the cmd commands below, but with added validation and rollback.
 ```
-move C:\Users\User\.ollama C:\Tool\AppData
-mklink /D C:\Users\User\.ollama C:\Tool\AppData\.ollama
+move C:\Users\User\.ollama D:\Tool\AppData
+mklink /D C:\Users\User\.ollama D:\Tool\AppData\.ollama
 ```
 
 Restore — behavior: deletes the symbolic link at the source path and moves the target file or folder back. If the source path is not a symbolic link, it asks whether to delete it and overwrite its contents.
 
 Test — behavior: checks all saved symbolic-link paths — whether the source path exists and whether it's a symlink, file, or folder, and likewise for the target path.
 
-#### OpenList
-
-OpenList is an open-source project; this plugin calls OpenList's API for file sync.
-You'll need to learn OpenList separately.
-https://github.com/OpenListTeam/OpenList/releases
-
-##### Exclude Rules
-
-Exclude rules are relative to the source directory, and are relative paths; `/` and `\` work the same.
-
-For example, if the current directory is C:\Code and you want to exclude C:\Code\SDK\Python, either of these works:
-\SDK\Python\
-/SDK/Python/
 
 #### Change Resolution
 
 Configure a resolution list on the settings page (defaults: 1280×720, 1920×1080, 1920×1200, 2560×1440, 2560×1600, 3200×2000), one per line; click one in the menu to switch.
 On switch, it first tests whether the display supports it, then temporarily switches and asks whether to keep it: choose yes to write it to the registry permanently, otherwise it automatically restores the previous resolution.
 
-#### LAN Communication
-
-Starts an HTTP server on the PC; other devices on the LAN (especially phones) can use it directly in a browser at `http://IP:port`. Example: http://192.168.8.2:8000
-
-- File browsing & download: lists shared folders, supports Chinese filenames.
-- File upload: supports drag-and-drop upload from the web page; large files stream.
-- Text messages: the web page and the dialog can send text back and forth.
-- The web page is adapted for phone access.
-
-Strictly speaking, a QR code should be generated with qrcode so a phone can scan and open the URL directly, but considering the increase in program size, this approach isn't used for now — maybe later.
 
 ### Windows Settings
 

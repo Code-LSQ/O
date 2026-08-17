@@ -1331,19 +1331,16 @@ class TaskEditDialog(QDialog):
 
         self.tar_folders_edit = QTextEdit()
         self.tar_folders_edit.setStyleSheet("background: #dddddd")
-        self.tar_folders_edit.setPlaceholderText("每行一个文件夹路径")
         self.tar_folders_edit.setMaximumHeight(60)
         layout.addWidget(self.tar_folders_edit)
 
         # 上传文件树的文件夹
-        tree_label = QLabel("""上传文件树的文件夹（每行一项，绝对路径）
-生成文件夹的树形结构文本文件并上传到目标目录根目录""")
-        tree_label.setWordWrap(True)
+        tree_label = QLabel("文件树文件夹")
         layout.addWidget(tree_label)
 
         self.tree_folders_edit = QTextEdit()
         self.tree_folders_edit.setStyleSheet("background: #dddddd")
-        self.tree_folders_edit.setPlaceholderText("每行一个文件夹路径")
+        self.tree_folders_edit.setToolTip("每行一项，绝对路径\n生成文件夹的树形结构文本文件并上传到目标目录根目录")
         self.tree_folders_edit.setMaximumHeight(60)
         layout.addWidget(self.tree_folders_edit)
 

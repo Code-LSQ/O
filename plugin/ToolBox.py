@@ -376,7 +376,7 @@ class SearchDialog(QDialog):
         self._tools = tools
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setFixedSize(500, 420)
+        self.setFixedSize(500, 400)
         self._setupUI()
         self._populate()
         self.search_edit.setFocus()
@@ -424,7 +424,7 @@ class SearchDialog(QDialog):
 
         self.search_edit = QLineEdit()
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.setFixedHeight(42)
+        self.search_edit.setFixedHeight(38)
         self.search_edit.setStyleSheet("border-radius: 0;")
         self.search_edit.textChanged.connect(self._filter)
         self.search_edit.returnPressed.connect(self._acceptCurrent)
@@ -1788,7 +1788,7 @@ class QuickTextDialog(QDialog):
         self.selected_text = ""
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setFixedSize(550, 450)
+        self.setFixedSize(500, 490)
         self._setupUI()
         self._populate()
         self.search_edit.setFocus()
@@ -1840,7 +1840,7 @@ class QuickTextDialog(QDialog):
 
         self.search_edit = QLineEdit()
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.setFixedHeight(42)
+        self.search_edit.setFixedHeight(38)
         self.search_edit.setStyleSheet("border-radius: 0;")
         self.search_edit.textChanged.connect(self._filter)
         self.search_edit.returnPressed.connect(self._acceptCurrent)

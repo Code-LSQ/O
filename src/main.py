@@ -554,6 +554,7 @@ class EditTool(QDialog):
         """类型改变时更新UI"""
         tool_type = self.type_combo.currentData()
         is_file = tool_type == "文件"
+        self.run_as_admin_cb.setVisible(is_file)
         self._service_label.setVisible(is_file)
         self.service_edit.setVisible(is_file)
         self._process_label.setVisible(is_file)

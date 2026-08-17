@@ -551,7 +551,7 @@ class SettingsDialog(QDialog):
         self.temp_paths_edit.setStyleSheet("background: #dddddd")
         Temp_Path = self.config.get("Launch.Runtime.Temp_Path", [])
         self.temp_paths_edit.setPlainText("\n".join(Temp_Path))
-        self.temp_paths_edit.setMinimumHeight(80)
+        self.temp_paths_edit.setMinimumHeight(120)
         layout.addRow(tr("环境变量"), self.temp_paths_edit)
 
         self._launcher_config = launcher_config
