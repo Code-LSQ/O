@@ -5,7 +5,10 @@ import traceback
 from PySide6.QtWidgets import QApplication
 
 sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
+if getattr(sys, "frozen", False) or "__compiled__" in globals():
+    sys.path.insert(0, os.path.dirname(sys.executable))
+else:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
 
 # 无控制台环境下（GUI 程序）标准流可能为 None，argparse 打印帮助/版本、http.server 的 log_message 写 stderr 都会崩溃，统一重定向到 devnull
 if sys.stdout is None:
@@ -60,6 +63,7 @@ def main():
     action = parseArgs()
 
     logger.info(f"{APP_NAME} V{VERSION} 启动")
+    logger.info(sys.executable)
 
     # os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=freetype"   # 解决 Qt6 中文锯齿，已改为在 setApp 中使用 PreferNoHinting 策略解决
     # os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"   # 静默 Qt 字体数据库调试日志

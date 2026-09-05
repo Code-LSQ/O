@@ -176,13 +176,13 @@ def main():
             f"--company-name={AUTHOR}",
             f"--windows-icon-from-ico={logo_ico}",
             f"--file-description={APP_NAME}",
-            # f"--include-data-dir={src}=src",
-            f"--include-data-file={README}=README.md",
             f"--copyright=Copyright(C) 2026 {AUTHOR}",
+            # f"--include-data-dir={src}=src",
             "--include-plugin-directory=src",
             "--include-data-dir=src/icon=src/icon",
             "--include-data-dir=src/lang=src/lang",
             "--include-data-dir=src/theme=src/theme",
+            "--include-data-file=README.md=README.md",
             "--enable-plugin=pyside6",
             "--show-modules",
             # "--show-progress",
@@ -200,6 +200,8 @@ def main():
     elif sys.platform == "darwin":  # macOS
         pass
 
+    for dep in pluginLib():
+        args.append(f"--include-module={dep}")
     print(args)
     subprocess.run(args)
 

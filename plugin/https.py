@@ -14,6 +14,8 @@ from PySide6.QtGui import QAction
 from src.util import logger, getFilePath, messageBox
 from src.plugin import PluginBase
 
+PluginLib = ["http.server"]
+
 MAX_RECV_DATA = 1000
 MAX_MULTIPART_BYTES = 64 * 1024 * 1024
 MAX_STREAM_BYTES = 16 * 1024 * 1024 * 1024
