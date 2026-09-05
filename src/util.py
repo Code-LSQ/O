@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo,
 
 AUTHOR = "Code-LSQ"
 APP_NAME = "O"
-VERSION = "0.5.11"
+VERSION = "0.6.0"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 

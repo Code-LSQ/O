@@ -82,18 +82,18 @@ jobs:
       - name: Build
         run: python build.py
 
-      - name: Package zip
+      - name: Package
         shell: pwsh
         run: |
           Push-Location ../dist
-          7z a -mx=9 "$env:GITHUB_WORKSPACE/Windows_${{ matrix.arch }}.zip" O
+          7z a -mx=9 "$env:GITHUB_WORKSPACE/Windows_${{ matrix.arch }}.7z" O
           Pop-Location
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload ${{ github.ref_name }} Windows_${{ matrix.arch }}.zip --clobber
+        run: gh release upload ${{ github.ref_name }} Windows_${{ matrix.arch }}.7z --clobber
 
   # Linux/macOS 构建处于计划中
   # build-linux:

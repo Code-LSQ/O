@@ -95,7 +95,6 @@ def install():
         args.append(f"--hidden-import={dep}")
 
     print(args)
-
     return PyInstaller.__main__.run(args)
 
 
@@ -168,7 +167,7 @@ def main():
             "--msvc=latest",    # "--mingw64",
             "--windows-console-mode=attach",
             "--mode=standalone",
-            "--jobs=2",
+            "--jobs=4",
             "--remove-output",
             f"--main={mainpy}",
             f"--output-dir={output}",
@@ -178,11 +177,12 @@ def main():
             f"--windows-icon-from-ico={logo_ico}",
             f"--file-description={APP_NAME}",
             # f"--include-data-dir={src}=src",
-            f"--include-data-dir=src/icon=src/icon",
-            f"--include-data-dir=src/lang=src/lang",
-            f"--include-data-dir=src/theme=src/theme",
             f"--include-data-file={README}=README.md",
             f"--copyright=Copyright(C) 2026 {AUTHOR}",
+            "--include-plugin-directory=src",
+            "--include-data-dir=src/icon=src/icon",
+            "--include-data-dir=src/lang=src/lang",
+            "--include-data-dir=src/theme=src/theme",
             "--enable-plugin=pyside6",
             "--show-modules",
             # "--show-progress",
