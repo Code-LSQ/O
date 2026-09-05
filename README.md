@@ -29,6 +29,8 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 
 如果你使用 PyQt6，这里有一个[转换脚本](ex/PySide-PyQt.py)，不过测试不充分，不保证可用性。
 
+如果你想要源码运行并有一个便携免安装的 Python 环境，[点这里](https://github.com/Code-LSQ/O/releases/download/V0.6.4/Python-3.13.13-embed-x64.7z)。此为嵌入式 Python ，如果不清楚请不要下载，这里是部分说明 - [Python](ex/doc.md#便携版-Python)。
+
 
 ### 启动器
 
@@ -391,6 +393,9 @@ For your own custom plugins (.py) and themes (.qss), it's recommended to put the
 [Notes](ex/doc.md) are some of my notes — barely related to the software itself, I just didn't want to spin up another repo to manage them. You can read them or ignore them. They cover software usage, problem solving, open-source project recommendations, and miscellaneous thoughts.
 
 If you use PyQt6, there's a [conversion script](ex/PySide-PyQt.py) here, though it hasn't been thoroughly tested, so no guarantees.
+
+If you want to run the source code and have a portable, no-installation-required Python environment, click [here](https://github.com/Code-LSQ/O/releases/download/V0.6.4/Python-3.13.13-embed-x64.7z). This is an embedded Python package; please do not download it if you are not sure. For more details, see the instructions here - [Python](ex/doc.md#便携版-Python).
+
 
 ### Launcher
 

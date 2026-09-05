@@ -122,6 +122,36 @@ FileGee，个人用户免费使用，其选项中有压缩为zip和添加密码�
 
 ## 杂类
 
+
+### 便携版 Python
+
+便携版 Python 的优点是占用体积更小，且方便复制和迁移，几乎不写注册表。安装版 Python 如果直接复制文件夹会有一些问题，比如找不到 pip 缓存路径，而便携版 Python 可以直接复制。但是便携版 Python 也会有一些麻烦的地方，比如不手动添加环境变量就要用绝对路径调用等。
+
+制作：在官网下载 Python Embeddable，即嵌入式 Python，例如 python-3.6.0-embed-amd64.zip。解压，找到 ._pth 文件，用文本编辑器打开，去掉 import site 前面的 # ，这是为了在安装 pip 以后，python 能够连接到 pip。
+
+安装 pip：下载 get-pip.py 文件，或者 Visual Studio Code 的文件里就有，可以搜到。使用绝对路径调用 python.exe 运行脚本。
+
+如果不加入环境变量，每次使用 python 和 pip 都要通过绝对路径调用，如 C:\SDK\Python\python.exe，注意调用 pip 要加上 -m ，C:\SDK\Python\python.exe -m pip。
+
+如果你在 `O` 中配置 Python 环境并通过它启动 cmd ，可以直接使用 python 和 pip，因为 `O` 会向子进程注入 Python 和 Python\Scripts 这两个环境变量。
+
+
+
+部分问题
+
+运行程序可能会报错 `No module named 'config'`。在代码开头加上 `sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))` 即可解决。问题源于嵌入式 Python 通过 python._pth 文件控制模块搜索路径，默认不会自动将当前目录或脚本目录加入 sys.path。
+
+
+嵌入式 Python 为了体积精简，移除了部分标准库模块，常见缺失的包括：tkinter（GUI）、idlelib（IDLE 编辑器）、ensurepip（pip 引导工具）、distutils（部分打包工具）、msilib（Windows Installer 相关）
+
+Nuitka 无法在嵌入式 Python 中使用，因为精简掉了部分文件。
+
+有的第三方库安装需要 setuptools 和 wheel ，这两个库一般是随 Python 一起安装的，嵌入版 Python 需要自行安装。
+
+不要在意这种黄色警告 - WARNING: The script markdown_py.exe is installed in 'C:\SDK\Python\Scripts' which is not on PATH.
+
+
+
 ### 压缩软件
 
 推荐使用 [7-Zip](https://sparanoid.com/lab/7z/)、[7-Zip 增强版](https://github.com/mcmilk/7-Zip-zstd/releases)、[WinRAR](https://github.com/n2far2000/winrarsc) 。
