@@ -66,7 +66,7 @@ if sys.platform == "win32":
             return windll.shell32.IsUserAnAdmin() != 0
         except AttributeError:
             return False
-        
+
     def runAdmin() -> bool:
         """若当前非管理员，尝试提权并重启（Windows 使用 UAC）。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
         if isAdmin():
@@ -75,7 +75,11 @@ if sys.platform == "win32":
         try:
             script_path = os.path.abspath(sys.argv[0])
             params = subprocess.list2cmdline([script_path] + sys.argv[1:])
-            result = windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+            if Interpret:
+                result = windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+            else:
+                result = windll.shell32.ShellExecuteW(None, "runas", app_path, params, None, 1)
+
             if result > 32:
                 sys.exit(0)
             else:
@@ -83,7 +87,7 @@ if sys.platform == "win32":
         except Exception:
             logger.exception("提权失败")
             return False
-        
+
     def stdConsole(mode=False):
         if mode:
             windll.kernel32.AllocConsole()
@@ -390,14 +394,14 @@ elif sys.platform == "linux":
 
     def isAdmin() -> bool:
         return os.geteuid() == 0
-    
+
     def runAdmin() -> bool:
         """若当前非管理员，尝试提权并重启。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
         try:
             if Interpret:
                 cmd = ["sudo", sys.executable] + sys.argv
             else:
-                cmd = ["sudo", sys.executable] + sys.argv[1:]
+                cmd = ["sudo", app_path] + sys.argv[1:]
             subprocess.run(cmd, check=True)
             sys.exit(0)
         except Exception:
@@ -521,14 +525,14 @@ elif sys.platform == "darwin":
 
     def isAdmin() -> bool:
         return os.geteuid() == 0
-    
+
     def runAdmin() -> bool:
         """若当前非管理员，尝试提权并重启。提权成功后本进程会退出，不会返回；若失败则返回 False。"""
         try:
             if Interpret:
                 cmd = ["sudo", sys.executable] + sys.argv
             else:
-                cmd = ["sudo", sys.executable] + sys.argv[1:]
+                cmd = ["sudo", app_path] + sys.argv[1:]
             subprocess.run(cmd, check=True)
             sys.exit(0)
         except Exception:

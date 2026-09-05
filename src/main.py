@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync
+from src.util import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
 from src.config import SettingsDialog, getConfig
 from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin
 from src.plugin import getPluginManager, pluginActionMenu
@@ -64,7 +64,7 @@ def runPython(path: str, cwd, args, *arg, **kwargs):
     run_path = getConfig().get("Launch.Runtime.Python", "")
     if not run_path:
         if not Interpret:
-            cmd = [sys.executable, "--exec", path]
+            cmd = [app_path, "--exec", path]
             if args:
                 cmd.append(args)
             subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
@@ -1739,7 +1739,7 @@ class MainWindow(WindowControl, QMainWindow):
     def _checkUpdate(self):
         """检查更新"""
         if Interpret:
-            messageBox(self, tr("提示"), tr("开发模式下不支持更新"), 1)
+            messageBox(self, tr("提示"), tr("源码模式下不支持更新"), 1)
             return
         from src.gui.widget import UpdateDialog
         UpdateDialog.checkAndUpdate(self)

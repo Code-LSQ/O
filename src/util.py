@@ -22,14 +22,14 @@ from PySide6.QtCore import Qt, Signal, QObject, QLocale, QUrl, QTimer, QSysInfo,
 
 AUTHOR = "Code-LSQ"
 APP_NAME = "O"
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
 if getattr(sys, "frozen", False) or "__compiled__" in globals():
     Interpret = False
-    app_path = sys.executable
-    root = Path(sys.executable).parent
+    app_path = sys.argv[0]
+    root = Path(sys.argv[0]).parent
 else:
     Interpret = True
     app_path = os.path.abspath(sys.argv[0])
@@ -391,7 +391,7 @@ def restartApplication(parent=None):
     if Interpret:
         QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
     else:
-        QTimer.singleShot(100, lambda: os.execv(sys.executable, [sys.executable] + sys.argv[1:]))
+        QTimer.singleShot(100, lambda: os.execv(app_path, [app_path] + sys.argv[1:]))
 
 
 process = Process()

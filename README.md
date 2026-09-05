@@ -356,9 +356,7 @@ Windows 工具  C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrat
 
 
 可能会做的事有
-1. 改用 Nuitka 打包
-2. 图片质量比较、图片相似度比较
-3. UI 界面配色自定义
+1. 图片质量比较、图片相似度比较
 
 
 已发现但暂时搁置的问题
@@ -619,9 +617,7 @@ Live Captions  C:\Windows\System32\LiveCaptions.exe
 3. Polish my ugly UI
 
 Things that might get done:
-1. Switch to packaging with Nuitka
-2. Image quality comparison, image similarity comparison
-3. Customizable UI color themes
+1. Image quality comparison, image similarity comparison
 
 Known issues, shelved for now:
 1. The cursor shape change when moving to the window edge isn't implemented; degraded to the current approach

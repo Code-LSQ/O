@@ -5,8 +5,9 @@ import traceback
 from PySide6.QtWidgets import QApplication
 
 sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
+# Nuitka 打包后 sys.executable 指向虚拟的 ./python.exe 而不是实际的 ./o.exe，使用 sys.argv[0] ，源码运行用 sys.executable
 if getattr(sys, "frozen", False) or "__compiled__" in globals():
-    sys.path.insert(0, os.path.dirname(sys.executable))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))
 else:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
 

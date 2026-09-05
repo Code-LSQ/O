@@ -17,10 +17,10 @@ README = root / "README.md"
 output = root / ".." / "dist"
 
 # 自动推送发版  -  python build.py release 1.0.0
-# 发行版规划，Linux 和 macOS 目前是计划中状态。
-# Windows，两种，x64、ARM64 的 .zip。
-# Linux，两种，x64、ARM64的  .AppImage。
-# macOS，两种，x64、ARM64的 .dmg，内部是 .app。
+# 发行版规划如下，Linux 和 macOS 目前是计划中状态。使用 Nuitka 构建，兼容 PyInstaller 打包
+# Windows，两种，x64、ARM64 的 .zip
+# Linux，两种，x64、ARM64的  .AppImage
+# macOS，两种，x64、ARM64的 .dmg，内部是 .app
 
 
 def pluginLib():
