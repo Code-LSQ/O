@@ -9,14 +9,14 @@
 
 O 是一个带了一些奇怪功能的 Windows 快速启动器，适用于桌面杂乱的人群，使用 PySide6 框架，支持插件扩展。O 其实没有任何含义，仅仅是项目需要一个名字，所以在这里出现，因为我是取名废。你可以理解为 `Open`（开放），`Operation`（操作） 或 `Otiose`（无用）或者其他任何含义。
 
+时间是人最宝贵的资源之一，本项目的主旨是提高效率、减少无用操作和重复劳动。
+
 Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite、Rolan、Lucy、Tiny、Flow Launcher。
 它们都是好软件，不过我都有点用不习惯，最后造了一个自己的轮子。如果你认为这个软件很不好用但又需要类似软件，可以去看看。其中 Quicker 的功能应该是最强的，可惜是会员制软件。
 
 提醒您，这是一个比较丑陋的项目，作者大部分时间毫无计划地想到什么加什么，因为这个项目主要是给作者自己使用的。并且这个项目大部分的代码是 AI 写的，不过基本经受了检查，作者正在进行逐步清理与优化。
 
 本项目仍处于开发阶段，功能稳定性仍需验证，正在尝试优化使用体验及功能。感谢您的尝试。
-
-请使用压缩软件解压！！！Windows 内置的解压功能，解压 LZMA 算法的 zip 文件会报错。推荐使用 [7-Zip](https://sparanoid.com/lab/7z/)、[7-Zip 增强版](https://github.com/mcmilk/7-Zip-zstd/releases)、[WinRAR](https://github.com/n2far2000/winrarsc) 。
 
 O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
 
@@ -381,9 +381,6 @@ There are already plenty of wheels for launchers on Windows: Quicker, uTools, Ma
 Fair warning: this is a pretty ugly project. The author mostly adds whatever comes to mind without any plan, because this project is mainly for personal use. Also, most of the code in this project was written by AI — though it has basically been reviewed — and the author is gradually cleaning it up and optimizing it.
 
 This project is still in development, and its stability has yet to be fully verified. I'm working on polishing the user experience and features. Thank you for trying it out.
-
-Please extract with a proper archive tool!!! Windows' built-in extractor fails on zip files compressed with the LZMA algorithm.
-Recommended: [7-Zip](https://sparanoid.com/lab/7z/), [7-Zip zstd](https://github.com/mcmilk/7-Zip-zstd/releases), [WinRAR](https://github.com/n2far2000/winrarsc).
 
 O currently supports Windows 8.1+. O is portable software — no installation required, and it mostly doesn't touch the registry. To uninstall, just exit the program and delete the files. Program data (config, logs, etc.) is stored in the `data/` directory.
 

@@ -22,10 +22,9 @@ from src.gui.control import WindowControl, managePlugins
 # 全局快捷键是 hotkey，编辑器快捷键是 shortcut。在程序中只提供一种全局快捷键，即通过启动器的快捷键间接调用，减少复杂性。提供的快捷键页面后续也分成两种。
 
 
-def execPython():
-    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码"""
-    script_path = sys.argv[2]
-    extra_args = sys.argv[3:]
+def execPython(script_path, extra_args=None):
+    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码。"""
+    extra_args = extra_args or []
     logger.info(f"以 --exec 模式执行脚本: {script_path}")
     logger.info(f"额外参数: {extra_args}")
 
@@ -743,7 +742,7 @@ def buildColorOverride(colors: dict) -> str:
 class MainWindow(WindowControl, QMainWindow):
     """启动器主窗口"""
     
-    def __init__(self, app: QApplication=None, file_path=None):
+    def __init__(self, app: QApplication=None, content=None):
         super().__init__(fallback_size=(600, 400))
 
         self.app = app
@@ -766,8 +765,12 @@ class MainWindow(WindowControl, QMainWindow):
         self._loadGeometry()
         self.refreshTool()
 
-        if file_path:
-            QTimer.singleShot(0, lambda: self._openEditor(file_path))
+        # content 为命令行传入的目标列表（拖拽/右键关联/手动），延迟到事件循环启动后逐个打开
+        if content:
+            def openTargets():
+                for target in content:
+                    self._openEditor(target)
+            QTimer.singleShot(0, openTargets)
         
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)

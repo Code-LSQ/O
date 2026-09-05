@@ -1,19 +1,20 @@
 import os
 import re
 import sys
+import shutil
 import argparse
 import subprocess
-
-import PyInstaller.__main__
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.util import APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
+from src.util import AUTHOR, APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
 
-dist = root / ".." / "dist"
-work = root / ".." / "build"
-mainpy = str(root / "o.py")
+mainpy = root / "o.py"
+src = root / "src"
+plugin = root / "plugin"
+README = root / "README.md"
+output = root / ".." / "dist"
 
 # 自动推送发版  -  python build.py release 1.0.0
 # 发行版规划，Linux 和 macOS 目前是计划中状态。
@@ -56,6 +57,48 @@ def pluginLib():
     return deps
 
 
+def install():
+
+    dist = root / ".." / "dist"
+    work = root / ".." / "build"
+
+    try:
+        import PyInstaller.__main__
+    except ImportError:
+        print("未安装 PyInstaller")
+        return False
+
+    if sys.platform == "win32":  # Windows
+        args = [
+            str(mainpy),
+            "--onedir",
+            "--noconfirm",
+            "--contents-directory=.",
+            f"--name={APP_NAME}",
+            f"--icon={logo_ico}",
+            f"--specpath={root}",
+            f"--distpath={dist}",
+            f"--workpath={work}",
+            "--add-data=README.md;.",
+            "--add-data=src;src",
+            "--add-data=plugin;plugin",
+            "--hidden-import=shiboken6",
+            "--exclude-module=tkinter",
+            "--exclude-module=unittest",
+            "--windowed",
+        ]
+
+    else:
+        return False
+    
+    for dep in pluginLib():
+        args.append(f"--hidden-import={dep}")
+
+    print(args)
+
+    return PyInstaller.__main__.run(args)
+
+
 def runGit(cmd):
     """执行 git 命令，先打印命令，失败时打印错误并退出"""
     print(f"> {' '.join(cmd)}")
@@ -70,7 +113,7 @@ def release(new_version):
     if not re.fullmatch(r"\d+\.\d+\.\d+", new_version):
         sys.exit(f"版本号格式错误: {new_version}，应为 1.0.0 形式")
 
-    py_path = root / "src/util.py"
+    py_path = src / "util.py"
     pyproj_path = root / "pyproject.toml"
     print(f"当前版本: {VERSION} -> 新版本: {new_version}")
 
@@ -103,81 +146,67 @@ def release(new_version):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="O 构建/发布工具")
+    parser = argparse.ArgumentParser(description="O 构建/发布工具，使用 Nuitka 构建")
     sub = parser.add_subparsers(dest="command")
     release_parser = sub.add_parser("release", help="同步版本号、提交、打 tag 并推送")
     release_parser.add_argument("version", help="新版本号，如 1.0.0")
+    release_parser.set_defaults(func=lambda args: release(args.version))
+
+    pyinstall_parser = sub.add_parser("pyinstall", help="使用 PyInstaller 打包，不保证可用性与兼容性")
+    pyinstall_parser.set_defaults(func=lambda args: install())
+
     args = parser.parse_args()
 
-    if args.command == "release":
-        return release(args.version)
+    if hasattr(args, "func"):
+        return args.func(args)
 
     if sys.platform == "win32":  # Windows
         args = [
-            mainpy,
-            "--onedir",
-            "--noconfirm",
-            "--contents-directory=.",
-            f"--name={APP_NAME}",
-            f"--icon={logo_ico}",
-            f"--specpath={root}",
-            f"--distpath={dist}",
-            f"--workpath={work}",
-            "--add-data=README.md;.",
-            "--add-data=src;src",
-            "--add-data=plugin;plugin",
-            "--hidden-import=shiboken6",
-            "--exclude-module=tkinter",
-            "--exclude-module=unittest",
-            "--windowed",
+            sys.executable,
+            "-m",
+            "nuitka",
+            "--msvc=latest",    # "--mingw64",
+            "--windows-console-mode=attach",
+            "--mode=standalone",
+            "--jobs=2",
+            "--remove-output",
+            f"--main={mainpy}",
+            f"--output-dir={output}",
+            f"--file-version={VERSION}",
+            f"--product-name={APP_NAME}",
+            f"--company-name={AUTHOR}",
+            f"--windows-icon-from-ico={logo_ico}",
+            f"--file-description={APP_NAME}",
+            # f"--include-data-dir={src}=src",
+            f"--include-data-dir=src/icon=src/icon",
+            f"--include-data-dir=src/lang=src/lang",
+            f"--include-data-dir=src/theme=src/theme",
+            f"--include-data-file={README}=README.md",
+            f"--copyright=Copyright(C) 2026 {AUTHOR}",
+            "--enable-plugin=pyside6",
+            "--show-modules",
+            # "--show-progress",
+            # "--show-memory",
+            # "--show-scons",
+            "--include-module=shiboken6",
+            "--nofollow-import-to=tkinter",
+            "--nofollow-import-to=unittest",
+            "--assume-yes-for-downloads",
         ]
 
     elif sys.platform == "linux":  # Linux
-        args = [
-            mainpy,
-            "--onedir",
-            "--noconfirm",
-            "--contents-directory=.",
-            f"--name={APP_NAME}",
-            f"--icon={logo_png}",
-            f"--specpath={root}",
-            f"--distpath={dist}",
-            f"--workpath={work}",
-            "--add-data=README.md:.",
-            "--add-data=src:src",
-            "--add-data=plugin:plugin",
-            "--hidden-import=shiboken6",
-            "--exclude-module=tkinter",
-            "--exclude-module=unittest",
-            "--windowed",
-        ]
+        pass
 
     elif sys.platform == "darwin":  # macOS
-        args = [
-            mainpy,
-            "--onedir",
-            "--noconfirm",
-            "--contents-directory=.",
-            f"--name={APP_NAME}",
-            f"--icon={logo_icn}",
-            f"--specpath={root}",
-            f"--distpath={dist}",
-            f"--workpath={work}",
-            "--add-data=README.md:.",
-            "--add-data=src:src",
-            "--add-data=plugin:plugin",
-            "--hidden-import=shiboken6",
-            "--exclude-module=tkinter",
-            "--exclude-module=unittest",
-            "--windowed",
-        ]
-
-    for dep in pluginLib():
-        args.append(f"--hidden-import={dep}")
+        pass
 
     print(args)
+    subprocess.run(args)
 
-    return PyInstaller.__main__.run(args)
+    dist = output / "o.dist"
+    o_path = output / APP_NAME
+    os.rename(dist, o_path)
+    shutil.copytree(plugin, o_path / "plugin")
 
 
 if __name__ == "__main__":
