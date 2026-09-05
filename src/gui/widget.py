@@ -152,7 +152,7 @@ class UpdateDialog(QDialog):
             # 待 Release 说明显示后再居中，否则窗口变高会向下延伸偏离屏幕中央
             self._centerWindow()
 
-            asset_name = f"Windows_{arch}.7z"
+            asset_name = f"Windows_{arch}.zip"
             for asset in info["assets"]:
                 if asset["name"] == asset_name:
                     self._download_url = asset["browser_download_url"]

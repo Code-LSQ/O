@@ -18,6 +18,8 @@ Windows 上的启动器已经有很多轮子了，Quicker、uTools、Maye Lite�
 
 本项目仍处于开发阶段，功能稳定性仍需验证，正在尝试优化使用体验及功能。感谢您的尝试。
 
+请使用压缩软件解压！！！Windows 内置的解压功能，解压 LZMA 算法的 zip 文件会报错。如果你不知道该用什么，可以参考[压缩软件](ex/doc.md#压缩软件)。
+
 O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大部分时候不写注册表，卸载只要退出程序后删除文件即可。程序的数据（配置、日志等）存放在 `data/` 目录。
 
 用户自定义插件（.py）和主题文件（.qss），建议放到 data/user 文件夹下，这里是给用户预留的自定义文件夹。虽然在 src 文件夹可以自定义但在更新后就会覆盖掉，但在更新时会删除 data 以外的文件和文件夹，因此不建议这么做。
@@ -379,6 +381,8 @@ There are already plenty of wheels for launchers on Windows: Quicker, uTools, Ma
 Fair warning: this is a pretty ugly project. The author mostly adds whatever comes to mind without any plan, because this project is mainly for personal use. Also, most of the code in this project was written by AI — though it has basically been reviewed — and the author is gradually cleaning it up and optimizing it.
 
 This project is still in development, and its stability has yet to be fully verified. I'm working on polishing the user experience and features. Thank you for trying it out.
+
+Please use a third-party archiver to extract the release package!!! Windows built-in extraction does not support ZIP files compressed with the LZMA algorithm and will produce errors. If you don't know which one to use, refer to [Compression Software](ex/doc.md#压缩软件).
 
 O currently supports Windows 8.1+. O is portable software — no installation required, and it mostly doesn't touch the registry. To uninstall, just exit the program and delete the files. Program data (config, logs, etc.) is stored in the `data/` directory.
 
