@@ -1,11 +1,11 @@
 from ctypes import WinDLL, wintypes, byref, sizeof, Structure
 from typing import Optional, Tuple
 
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QWidget, QTextEdit, QMenu
+from PySide6.QtWidgets import QApplication, QMessageBox, QVBoxLayout, QLabel, QWidget, QTextEdit, QMenu
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import logger, messageBox
+from src.util import logger, messageBox, tr
 
 CDS_UPDATEREGISTRY = 0x01
 CDS_TEST = 0x00000002
@@ -99,8 +99,34 @@ class ResolutionPlugin(PluginBase):
         self._confirmResolution(w, h)
 
     def _confirmResolution(self, w, h):
-        msg = f"分辨率已临时更改为 {w}×{h}\n是否保留此分辨率？"
-        if messageBox(self.main, "分辨率已更改", msg, 2):
+        """显示分辨率确认弹窗，根据新分辨率计算尺寸"""
+
+        # 强制刷新屏幕/DPI 信息，否则 screen() 返回旧 DPI 的数据
+        QApplication.processEvents()
+
+        msg_box = QMessageBox(self.main)
+        if self.main:
+            sheet = self.main.styleSheet()
+            if sheet:
+                msg_box.setStyleSheet(sheet)
+        msg_box.setWindowTitle("分辨率已更改")
+        msg_box.setText(f"分辨率已临时更改为 {w}×{h}\n是否保留此分辨率？")
+        msg_box.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        msg_box.button(QMessageBox.StandardButton.Ok).setText(tr("确定"))
+        msg_box.button(QMessageBox.StandardButton.Cancel).setText(tr("取消"))
+
+        # 根据新屏幕尺寸计算弹窗大小，上限 350×150
+        screen = msg_box.screen()
+        if screen:
+            geo = screen.availableGeometry()
+            msg_box.setFixedSize(
+                min(350, int(geo.width() * 0.4)),
+                min(150, int(geo.height() * 0.3))
+            )
+
+        if msg_box.exec() == QMessageBox.StandardButton.Ok:
             applyResolution(w, h, permanent=True)
             logger.info(f"分辨率已永久更改为 {w}×{h}")
         else:

@@ -574,6 +574,7 @@ class RenameItem:
 class BatchRenameDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Window)
         self.folder_path = ""
         self.rename_items: list[RenameItem] = []
         self._preview_timer = QTimer()
@@ -753,7 +754,7 @@ class BatchRenameDialog(QDialog):
             self.applyPreview()
 
     def applyPreview(self):
-        self._preview_timer.start(150)
+        self._preview_timer.start(1000)
 
     def _doPreview(self):
         if not self.rename_items:
