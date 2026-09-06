@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QToolBar, QToolButton, QMenu, QWidget, QSizePolicy
 from PySide6.QtGui import QKeySequence, QAction, QMouseEvent, QPainter, QPen, QColor, QPalette, QPainterPath
 from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 
-from src.util import tr, ENCODING_MAP, messageBox, logger, UsageMonitor
+from src.api import tr, ENCODING_MAP, messageBox, logger, UsageMonitor
 from src.plugin import getPluginManager
 from src.config import DEFAULT_CONFIG, getConfig
 from src.gui.view import ViewMode

@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, Signal, QEvent, QRect, QObject
 from PySide6.QtGui import QTextCursor, QTextDocument, QPainter, QColor, QTextCharFormat, QAction, QKeySequence, QPalette, qGray
 
 from src.config import getConfig, DEFAULT_CONFIG
-from src.util import logger, EXTENSION, messageBox, urlToPath, tr, inputDialog
+from src.api import logger, EXTENSION, messageBox, urlToPath, tr, inputDialog
 from src.core.timer import LRUCache
 from src.gui.syntax import createHighlighter
 from src.gui.view import ViewMode, listArchive, addImageResource

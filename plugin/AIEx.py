@@ -6,7 +6,7 @@ from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QPixmap, QCursor
 from PySide6.QtCore import Qt, Signal, QThread, QTimer, QByteArray
 
 from src.plugin import PluginBase
-from src.util import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp, FileDrop, imageBase64, EXTENSION, urlToPath
+from src.api import data_dir, logger, getFilePath, messageBox, inputDialog, tr, dialogBox, getTimestamp, FileDrop, imageBase64, EXTENSION, urlToPath
 from src.core.AI import AI_ADAPTER, getAIClient, resolveImageUrls, getAdapterEndpoint, getAdapterUrl, OllamaAdapter
 
 AI_dir = data_dir / "AI"

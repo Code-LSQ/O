@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QTextBrowser
 from PySide6.QtCore import Qt, QTimer, QObject, QByteArray, QBuffer, QSize
 from PySide6.QtGui import QPixmap, QImage, QImageReader, QTextCursor, QTextDocument
 
-from src.util import logger, EXTENSION, tr, fileType, sortKey, ENCODING_MAP
+from src.api import logger, EXTENSION, tr, fileType, sortKey, ENCODING_MAP
 from src.core.md import renderForView
 
 

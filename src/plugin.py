@@ -18,7 +18,7 @@ from abc import ABC
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
-from src.util import plugin_dir, user_dir, logger, Singleton
+from src.api import plugin_dir, user_dir, logger, Singleton
 
 
 PLUGIN_EXTENSION = {".py", ".pyd", ".so"}

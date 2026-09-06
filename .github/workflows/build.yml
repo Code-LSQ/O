@@ -32,11 +32,11 @@ jobs:
       - name: Verify version matches
         shell: pwsh
         run: |
-          $CODE = Get-Content -Raw 'src/util.py'
+          $CODE = Get-Content -Raw 'src/api.py'
           $CODE_VER = [regex]::Match($CODE, 'VERSION = "([^"]+)"').Groups[1].Value
           $TAG_VER = "$env:GITHUB_REF_NAME" -replace '^v',''
           if ($CODE_VER -ne $TAG_VER) {
-            Write-Host "版本不一致: tag=$TAG_VER, src/util.py VERSION=$CODE_VER"
+            Write-Host "版本不一致: tag=$TAG_VER, src/api.py VERSION=$CODE_VER"
             exit 1
           }
 

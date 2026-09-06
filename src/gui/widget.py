@@ -4,7 +4,7 @@ import subprocess
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QTextBrowser, QLabel, QPushButton, QProgressBar, QDialog, QApplication
 from PySide6.QtCore import Qt, QTimer
 
-from src.util import logger, tr, messageBox, arch, root, VERSION, download, compareVersions, runAsync
+from src.api import logger, tr, messageBox, arch, root, VERSION, download, compareVersions, runAsync
 from src.core.update import getReleaseInfo, extractUpdate, writeUpdateScript, cleanTemp, UPDATE_ZIP, UPDATE_DIR
 from src.core.md import renderMarkdown
 

@@ -20,7 +20,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QThread
 
 from src.plugin import PluginBase
 from src.file import filterFiles, EXCLUDE_PATTERNS, EXCLUDE_TIPS
-from src.util import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr, fileTree
+from src.api import logger, formatFileSize, data_dir, folderLastModified, parseMtime, getFilePath, messageBox, dialogBox, tr, fileTree
 
 PluginLib = ["queue"]
 

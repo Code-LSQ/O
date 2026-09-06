@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence
 
 from src.config import getConfig
-from src.util import logger, dialogBox, messageBox, dictDialog, tr
+from src.api import logger, dialogBox, messageBox, dictDialog, tr
 
 class FindReplaceDialog(QDialog):
     """查找替换对话框"""

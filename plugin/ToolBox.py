@@ -18,7 +18,7 @@ from src.plugin import PluginBase
 from src.main import getIcon
 from src.file import FileSelect, collectFiles, EXCLUDE_PATTERNS
 from src.config import getConfig
-from src.util import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles, filePathWidget
+from src.api import logger, root, data_dir, tr, messageBox, getFilePath, FileDrop, fileHash, showFile, ClipboardMonitor, formatFileSize, activateWidget, searchFiles, filePathWidget
 from src.system import activateWindow
 from src.core.timer import TimerManager
 

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QL
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 
-from src.util import logger, getFilePath, messageBox
+from src.api import logger, getFilePath, messageBox
 from src.plugin import PluginBase
 
 PluginLib = ["http.server"]

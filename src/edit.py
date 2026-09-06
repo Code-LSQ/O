@@ -7,7 +7,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QTe
 from PySide6.QtCore import Qt, QTimer
 
 from src.config import SettingsDialog, getConfig
-from src.util import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, showFile, ENCODING_MAP
+from src.api import root, logger, tr, encodingName, APP_NAME, getFilePath, urlToPath, restartApplication, messageBox, inputDialog, showFile, ENCODING_MAP
 from src.system import setMenu, isMenuRegister
 from src.file import FolderPanelManager, createBackup
 from src.core.md import extractToc

@@ -3,7 +3,7 @@ import shutil
 
 import requests
 
-from src.util import root, data_dir, logger, UPDATE
+from src.api import root, data_dir, logger, UPDATE
 
 # GitHub API 对未认证的匿名请求存在频率限制，需要留意，手动更新无需额外线程
 

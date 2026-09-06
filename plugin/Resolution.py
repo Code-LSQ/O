@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QVBoxLayout, QLabel, QW
 from PySide6.QtGui import QAction
 
 from src.plugin import PluginBase
-from src.util import logger, messageBox, tr
+from src.api import logger, messageBox, tr
 
 CDS_UPDATEREGISTRY = 0x01
 CDS_TEST = 0x00000002

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBox
 from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QColor
 
-from src.util import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, user_dir, lang_dir, dialogBox, messageBox
+from src.api import config_file, logger, Singleton, tr, systemLanguage, convertPath, filePathWidget, theme_dir, user_dir, lang_dir, dialogBox, messageBox
 from src.core.input import KeyCaptureFilter
 from src.system import setAutoStart, setMenu
 

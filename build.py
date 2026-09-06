@@ -8,7 +8,7 @@ import subprocess
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.util import AUTHOR, APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
+from src.api import AUTHOR, APP_NAME, VERSION, root, logo_ico, logo_png, logo_icn
 
 mainpy = root / "o.py"
 src = root / "src"
@@ -112,7 +112,7 @@ def release(new_version):
     if not re.fullmatch(r"\d+\.\d+\.\d+", new_version):
         sys.exit(f"版本号格式错误: {new_version}，应为 1.0.0 形式")
 
-    py_path = src / "util.py"
+    py_path = src / "api.py"
     pyproj_path = root / "pyproject.toml"
     print(f"当前版本: {VERSION} -> 新版本: {new_version}")
 

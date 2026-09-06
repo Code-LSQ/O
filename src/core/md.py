@@ -7,7 +7,7 @@ from typing import Optional, Tuple, List, Dict
 
 import markdown
 
-from src.util import logger
+from src.api import logger
 
 
 _MARKDOWN_EXTENSIONS = [

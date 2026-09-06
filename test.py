@@ -1,7 +1,7 @@
 """测试模块，始终详细输出
 
 用法:
-    --util                    仅 util 测试
+    --api                    仅 api 测试
     --plugin                  仅 plugin 测试
     --ai                      仅 AI adapter 测试
     --sync                    仅 sync 测试
@@ -22,7 +22,7 @@
     - 继承 Base TestCase 的子类如需额外初始化，必须先调用 super().setUp()，确保基类 mock 已就位。
 新增分组:
     1. 在 _GROUP_REGISTRY 注册 (group_name, test_class_list)
-    2. 按需调用 applyMock(qt=True, util=True, ...) 注入依赖
+    2. 按需调用 applyMock(qt=True, api=True, ...) 注入依赖
     3. main() 自动注册 --group_name CLI 参数
 
 """
@@ -51,7 +51,7 @@ from PySide6.QtTest import QTest
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.util import logger
+from src.api import logger
 
 # Mock 基础设施 — 统一工厂
 
@@ -143,11 +143,11 @@ def _makeQtCore():
 
 
 def _makeUtil():
-    """Create src.util mock module (auto-fills missing attrs via MagicMock)"""
-    mod = MagicMock(name="src.util")
+    """Create src.api mock module (auto-fills missing attrs via MagicMock)"""
+    mod = MagicMock(name="src.api")
     for k, v in _SHARED_UTIL_ATTRS.items():
         setattr(mod, k, v)
-    return {"src.util": mod}
+    return {"src.api": mod}
 
 
 def _makeFile():
@@ -182,7 +182,7 @@ def applyMock(
     mouse=False,
     requests_mod=False,
     markdown=False,
-    util=False,
+    api=False,
     real_logger_util=False,
     file_mod=False,
     config=False,
@@ -229,15 +229,15 @@ def applyMock(
         p.start()
         patchers.append(p)
 
-    if util:
+    if api:
         if real_logger_util:
             import importlib
 
-            real_util = importlib.import_module("src.util")
+            real_util = importlib.import_module("src.api")
             attrs = dict(_SHARED_UTIL_ATTRS)
             attrs["logger"] = real_util.logger
             attrs["getTimestamp"] = MagicMock(return_value="2025-01-01 00:00:00")
-            p = patch.dict("sys.modules", {"src.util": _makeModule("src.util", **attrs)})
+            p = patch.dict("sys.modules", {"src.api": _makeModule("src.api", **attrs)})
         else:
             p = patch.dict("sys.modules", _makeUtil())
         p.start()
@@ -265,44 +265,44 @@ def applyMock(
     return patchers
 
 
-# Group: util (12 tests)
+# Group: api (12 tests)
 
 
 class TestEncodingMap(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(util=True):
+        for p in applyMock(api=True):
             self.addCleanup(p.stop)
 
     def testEncodingMapContainsCommon(self):
-        encodings = sys.modules["src.util"].ENCODING_MAP
+        encodings = sys.modules["src.api"].ENCODING_MAP
         self.assertIn("UTF-8", encodings)
         self.assertIn("GBK", encodings)
         self.assertEqual(encodings["UTF-8"], "utf-8")
 
     def testEncodingMapValuesAreStrings(self):
-        for key, val in sys.modules["src.util"].ENCODING_MAP.items():
+        for key, val in sys.modules["src.api"].ENCODING_MAP.items():
             self.assertIsInstance(key, str)
             self.assertIsInstance(val, str)
 
 
 class TestFileExtensions(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(util=True):
+        for p in applyMock(api=True):
             self.addCleanup(p.stop)
 
     def testTextExtensionsContainCommon(self):
-        exts = sys.modules["src.util"].TEXT_EXTENSIONS
+        exts = sys.modules["src.api"].TEXT_EXTENSIONS
         for ext in [".txt", ".md", ".py", ".json"]:
             self.assertIn(ext, exts)
 
 
 class TestConstants(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(util=True):
+        for p in applyMock(api=True):
             self.addCleanup(p.stop)
 
     def testAppName(self):
-        self.assertEqual(sys.modules["src.util"].APP_NAME, "O")
+        self.assertEqual(sys.modules["src.api"].APP_NAME, "O")
 
 
 # Group: plugin (48 tests)
@@ -310,7 +310,7 @@ class TestConstants(unittest.TestCase):
 
 class _PluginTestBase(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, psutil=True, pynput=True, real_plugin=True):
+        for p in applyMock(qt=True, api=True, psutil=True, pynput=True, real_plugin=True):
             self.addCleanup(p.stop)
         # 必须在 applyMock 之后再取类：real_plugin=True 会重新导入 src.plugin，
         # 类级 from ... import 绑定的是旧的真实模块，mock 无法生效
@@ -638,7 +638,7 @@ class P1(PluginBase):
 class _AITestBase(unittest.TestCase):
     def setUp(self):
         for p in applyMock(
-            qt=True, util=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
+            qt=True, api=True, pynput=True, keyboard=True, mouse=True, config=True, file_mod=True
         ):
             self.addCleanup(p.stop)
 
@@ -1214,7 +1214,7 @@ class TestAIClientBuildFileMessage(_AITestBase):
 class _SyncTestBase(unittest.TestCase):
     def setUp(self):
         for p in applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+            qt=True, api=True, psutil=True, requests_mod=True, file_mod=True
         ):
             self.addCleanup(p.stop)
 
@@ -1471,7 +1471,7 @@ class TestLazyInitPerformance(unittest.TestCase):
 
     def setUp(self):
         for p in applyMock(
-            qt=True, util=True, psutil=True, requests_mod=True, file_mod=True
+            qt=True, api=True, psutil=True, requests_mod=True, file_mod=True
         ):
             self.addCleanup(p.stop)
 
@@ -1489,7 +1489,7 @@ class TestSyncPerformance(unittest.TestCase):
 
     def setUp(self):
         for p in applyMock(
-            qt=True, psutil=True, pynput=True, markdown=True, util=True, real_logger_util=True
+            qt=True, psutil=True, pynput=True, markdown=True, api=True, real_logger_util=True
         ):
             self.addCleanup(p.stop)
         self.local_dir = tempfile.mkdtemp()
@@ -1569,7 +1569,7 @@ class _ExceptionTestBase(unittest.TestCase):
             pynput=True,
             keyboard=True,
             mouse=True,
-            util=True,
+            api=True,
             config=True,
             file_mod=True,
         ):
@@ -1801,7 +1801,7 @@ class TestRenderMarkdown(unittest.TestCase):
     renderForView = staticmethod(renderForView)
 
     def setUp(self):
-        for p in applyMock(util=True):
+        for p in applyMock(api=True):
             self.addCleanup(p.stop)
 
     def testEmptyString(self):
@@ -1876,7 +1876,7 @@ class TestLRUCache(unittest.TestCase):
     from src.core.timer import LRUCache
 
     def setUp(self):
-        for p in applyMock(qt=True, util=True):
+        for p in applyMock(qt=True, api=True):
             self.addCleanup(p.stop)
 
     def testSetAndGet(self):
@@ -1947,7 +1947,7 @@ class TestWeakCallbackSet(unittest.TestCase):
     from src.core.timer import WeakCallbackSet
 
     def setUp(self):
-        for p in applyMock(qt=True, util=True):
+        for p in applyMock(qt=True, api=True):
             self.addCleanup(p.stop)
 
     def testAddAndIterate(self):
@@ -2224,7 +2224,7 @@ class TestIsExcluded(unittest.TestCase):
 
 class TestConfigAccess(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True):
+        for p in applyMock(qt=True, api=True):
             self.addCleanup(p.stop)
         from src.config import ConfigManager
         ConfigManager._instance = None
@@ -2277,7 +2277,7 @@ class TestConfigAccess(unittest.TestCase):
 
 class TestConfigRecentFav(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True):
+        for p in applyMock(qt=True, api=True):
             self.addCleanup(p.stop)
         from src.config import ConfigManager
         ConfigManager._instance = None
@@ -2325,7 +2325,7 @@ class TestConfigRecentFav(unittest.TestCase):
 
 class TestParseHotkey(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def _listener(self):
@@ -2394,7 +2394,7 @@ class TestParseHotkey(unittest.TestCase):
 
 class TestCheckHotkey(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def _makeListener(self):
@@ -2461,7 +2461,7 @@ class TestCheckHotkey(unittest.TestCase):
 
 class TestHotkeyNormalKey(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def testNormalKeyTrue(self):
@@ -2483,7 +2483,7 @@ class TestHotkeyNormalKey(unittest.TestCase):
 
 class TestPruneVkState(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def _listener(self):
@@ -2546,7 +2546,7 @@ class TestPruneVkState(unittest.TestCase):
 
 class TestMatchToolHotkeys(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def _listener(self):
@@ -2588,7 +2588,7 @@ class TestMatchToolHotkeys(unittest.TestCase):
 
 class TestCodeToKey(unittest.TestCase):
     def setUp(self):
-        for p in applyMock(qt=True, util=True, pynput=True):
+        for p in applyMock(qt=True, api=True, pynput=True):
             self.addCleanup(p.stop)
 
     def testPunctuation(self):
@@ -2849,7 +2849,7 @@ def _register(group_name, test_classes, description=""):
 
 # Register all test groups
 _register(
-    "util",
+    "api",
     [
         TestEncodingMap,
         TestFileExtensions,

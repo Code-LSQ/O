@@ -5,11 +5,7 @@ import traceback
 from PySide6.QtWidgets import QApplication
 
 sys.dont_write_bytecode = True   # 禁止生成 .pyc 文件
-# Nuitka 打包后 sys.executable 指向虚拟的 ./python.exe 而不是实际的 ./o.exe，使用 sys.argv[0] ，源码运行用 sys.executable
-if getattr(sys, "frozen", False) or "__compiled__" in globals():
-    sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))
-else:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # 兼容嵌入版 Python
+sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))   # 兼容嵌入式 Python ，编译环境下无 .py 可以不用管，不过保险起见还是保持
 
 # 无控制台环境下（GUI 程序）标准流可能为 None，argparse 打印帮助/版本、http.server 的 log_message 写 stderr 都会崩溃，统一重定向到 devnull
 if sys.stdout is None:
@@ -17,8 +13,8 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w")
 
+from src.api import APP_NAME, VERSION, OSign, logger, getDevice
 from src.main import MainWindow, execPython, setApp
-from src.util import APP_NAME, VERSION, OSign, logger, getDevice
 
 
 def exceptionHook(exc_type, value, tb):

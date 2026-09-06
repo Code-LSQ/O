@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QMetaObject, QEvent, QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication
 
 from src.system import isKeyDown
-from src.util import logger, Singleton
+from src.api import logger, Singleton
 
 # 需要注意，PySide6 6.10.3 与 pynput 1.8.0 冲突。
 # 目前本模块仅面向 Windows ，通过 win32_event_filter 统一处理全局快捷键并抑制其传给系统和其他程序。macOS 可以使用 darwin_intercept 。 Linux 似乎暂时没有好办法。

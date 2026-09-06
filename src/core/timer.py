@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 from PySide6.QtCore import QTimer
 
-from src.util import Singleton, logger
+from src.api import Singleton, logger
 
 # 负责计时、定时任务的模块
 

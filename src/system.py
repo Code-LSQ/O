@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.util import APP_NAME, app_path, logger, icon_dir, Interpret, tr
+from src.api import APP_NAME, app_path, logger, icon_dir, Interpret, tr
 
 if sys.platform == "win32":
     # 除插件外，只在这个代码块中使用 ctypes 和 winreg
@@ -73,11 +73,11 @@ if sys.platform == "win32":
             return True
 
         try:
-            script_path = os.path.abspath(sys.argv[0])
-            params = subprocess.list2cmdline([script_path] + sys.argv[1:])
             if Interpret:
+                params = subprocess.list2cmdline([app_path] + sys.argv[1:])
                 result = windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
             else:
+                params = subprocess.list2cmdline(sys.argv[1:])
                 result = windll.shell32.ShellExecuteW(None, "runas", app_path, params, None, 1)
 
             if result > 32:
