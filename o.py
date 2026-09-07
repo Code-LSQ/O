@@ -13,7 +13,7 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w")
 
-from src.api import APP_NAME, VERSION, OSign, logger, getDevice
+from src.api import APP_NAME, VERSION, app_path, root, logger, getDevice, OSign
 from src.main import MainWindow, execPython, setApp
 
 
@@ -59,8 +59,10 @@ def main():
 
     action = parseArgs()
 
-    logger.info(f"{APP_NAME} V{VERSION} 启动")
+    logger.info(APP_NAME + " V " + VERSION)
     logger.info(sys.executable)
+    logger.info(app_path)
+    logger.info(root)
 
     # os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=freetype"   # 解决 Qt6 中文锯齿，已改为在 setApp 中使用 PreferNoHinting 策略解决
     # os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"   # 静默 Qt 字体数据库调试日志

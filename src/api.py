@@ -1,4 +1,4 @@
-"""API 和工具模块，不导入本地模块，防止循环依赖"""
+"""API 和工具模块，防止循环依赖，不导入本地模块。定义程序的桌面端、移动端、浏览器扩展之间的通信接口协议，也负责与其他程序交互。"""
 import os
 import sys
 import re
@@ -27,15 +27,11 @@ VERSION = "0.6.4"
 REPOSITORY = f"https://github.com/{AUTHOR}/{APP_NAME}"
 UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
-app_path = os.path.abspath(sys.argv[0])
-# Nuitka 构建后 sys.executable 指向虚拟的 ./python.exe 而不是实际的 ./o.exe，使用 sys.argv[0] 指向 ./o.exe。源码运行用 sys.executable 指向 Python 解释器，用 sys.argv[0] 指向 o.py
+Interpret = not (getattr(sys, "frozen", False) or "__compiled__" in globals())
 
-if getattr(sys, "frozen", False) or "__compiled__" in globals():
-    Interpret = False
-    root = Path(sys.argv[0]).parent
-else:
-    Interpret = True
-    root = Path(__file__).resolve().parent.parent
+# Nuitka 构建后 sys.executable 指向虚拟的 ./python.exe 而不是实际的 ./o.exe，使用 sys.argv[0] 指向 ./o.exe。源码运行用 sys.executable 指向 Python 解释器，用 sys.argv[0] 指向 o.py
+app_path = os.path.abspath(sys.argv[0])
+root = Path(sys.argv[0]).parent
 
 plugin_dir = root / "plugin"
 data_dir = root / "data"
@@ -1497,13 +1493,7 @@ def _findMatches(line, search_text, case_sensitive, regex):
 """
 此部分处于计划中
 
-API
-决定 程序间 的交互，也与其他程序交互
-
-
-定义程序的桌面端与移动端、桌面端与浏览器扩展、移动端与浏览器扩展之间的通信接口协议。需要能够发送、接收消息、接受文件同步。
-
-与 plugin/https.py 的关系
+HTTP 部分与 plugin/https.py 的关系
     两者独立并存，职责不同：
     - plugin/https.py：网页版局域网文件浏览/上传，面向浏览器直接访问。
     - 本模块 src/api.py：程序化 API（HTTP REST + WebSocket），
