@@ -18,6 +18,13 @@ if sys.platform == "win32":
     import winreg
     from ctypes import windll, WINFUNCTYPE, Structure, c_int, c_int32, c_uint, c_uint16, c_uint32, c_byte, c_void_p, c_wchar, c_wchar_p, c_ulong, byref, cast, POINTER, sizeof, HRESULT, memset, string_at
 
+    # 控制运行方式，或者叫终端、控制台。Windows 上的下拉框为无控制台、Windows Terminal、cmd、PowerShell，至于右键的终端打开和 SYSTEM_ACT 的 Terminal 则为默认终端
+    Terminal = {
+        "Windows Terminal": (["wt"], 0),
+        "cmd": (["cmd", "/k"], subprocess.CREATE_NEW_CONSOLE),
+        "PowerShell": (["powershell", "-NoExit", "-Command"], subprocess.CREATE_NEW_CONSOLE),
+    }
+
     # 命令提示符特殊处理，CLSID 统一使用 shell::: 的形式，更规范，兼容性好。已确认 ::{...} 格式有小部分不兼容
     SYSTEM_ACT = {
         "命令提示符": "Terminal",
@@ -431,10 +438,11 @@ elif sys.platform == "linux":
 
         if enabled:
             autostart_dir.mkdir(parents=True, exist_ok=True)
+            exec_cmd = f'"{sys.executable}" "{app_path}"' if Interpret else f'"{app_path}"'
             desktop_content = f"""[Desktop Entry]
     Type=Application
     Name={APP_NAME}
-    Exec={app_path}
+    Exec={exec_cmd}
     Hidden=false
     NoDisplay=false
     X-GNOME-Autostart-enabled=true
@@ -562,6 +570,10 @@ elif sys.platform == "darwin":
 
         if enabled:
             plist_path.parent.mkdir(parents=True, exist_ok=True)
+            if Interpret:
+                program_args = f"<string>{sys.executable}</string>\n            <string>{app_path}</string>"
+            else:
+                program_args = f"<string>{app_path}</string>"
             plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
@@ -570,7 +582,7 @@ elif sys.platform == "darwin":
         <string>com.{APP_NAME.lower()}</string>
         <key>ProgramArguments</key>
         <array>
-            <string>{app_path}</string>
+            {program_args}
         </array>
         <key>RunAtLoad</key>
         <true/>

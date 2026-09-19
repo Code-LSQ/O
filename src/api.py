@@ -86,7 +86,7 @@ def compareVersions(v1: str, v2: str) -> int:
 EXTENSION = {
     "TXET": {".txt", ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".xml", ".html", ".css", ".scss", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".rb", ".php", ".sql", ".gitignore", ".env"},
     "Markdown": {".md", ".markdown", ".mkdn"},
-    "IMAGE": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif", ".psd", ".ai", ".heic", ".avif"},
+    "IMAGE": {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svg", ".tiff", ".tif", ".psd", ".ai", ".heic", ".avif"},
     "ZIP": {".zip", ".jar", ".apk", ".cbz", ".hap"},
     "TAR": {".tar", ".tgz", ".tbz2", ".txz"},
     "ARCHIVE": {".gz", ".bz2", ".xz", ".zst", ".7z", ".rar"},
@@ -140,12 +140,14 @@ def service(services: list, action, timeout):
                     cmd = ["sc", "config", service, "start=", "demand"]
                 else:
                     cmd = ["net", action, service]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW)
             elif sys.platform == "linux":
                 cmd = ["systemctl", action, service]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             elif sys.platform == "darwin":
                 cmd = ["launchctl", action, service]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if result.returncode == 0:
                 logger.info(f"{service} {action} 成功")
             else:

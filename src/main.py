@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.api import AUTHOR, APP_NAME, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
+from src.api import AUTHOR, APP_NAME, EXTENSION, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
 from src.config import SettingsDialog, getConfig
 from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin
 from src.plugin import getPluginManager, pluginActionMenu
@@ -330,8 +330,8 @@ def filterList(items: list, whitelist: set, kind: str) -> list:
     return safe
 
 
-def validateServiceName(text: str) -> tuple:
-    """校验服务名格式，返回 (是否合法, 错误信息)"""
+def validateNameList(text: str, require_extension=False) -> tuple:
+    """校验名称列表格式（| 分隔），返回 (是否合法, 错误信息)"""
     if not text.strip():
         return True, ""
     parts = [s.strip() for s in text.split("|") if s.strip()]
@@ -344,36 +344,14 @@ def validateServiceName(text: str) -> tuple:
                 return False, part + " " + tr("引号内容为空")
             if not re.match(r"^[a-zA-Z0-9 _.\-]+$", inner):
                 return False, inner + " " + tr("包含不合法字符")
-        else:
-            if '"' in part:
-                return False, part + " " + tr("引号位置不正确")
-            if not re.match(r"^[a-zA-Z0-9.\-_]+$", part):
-                return False, part + " " + tr("包含不合法字符")
-    return True, ""
-
-
-def validateProcessName(text: str) -> tuple:
-    """校验进程名格式，返回 (是否合法, 错误信息)"""
-    if not text.strip():
-        return True, ""
-    parts = [s.strip() for s in text.split("|") if s.strip()]
-    for part in parts:
-        if part.startswith('"'):
-            if not part.endswith('"'):
-                return False, part + " " + tr("引号未闭合")
-            inner = part[1:-1]
-            if not inner:
-                return False, part + " " + tr("引号内容为空")
-            if not re.match(r"^[a-zA-Z0-9 _.\-]+$", inner):
-                return False, inner + " " + tr("包含不合法字符")
-            if "." not in inner:
+            if require_extension and "." not in inner:
                 return False, inner + " " + tr("缺少扩展名")
         else:
             if '"' in part:
                 return False, part + " " + tr("引号位置不正确")
             if not re.match(r"^[a-zA-Z0-9.\-_]+$", part):
                 return False, part + " " + tr("包含不合法字符")
-            if "." not in part:
+            if require_extension and "." not in part:
                 return False, part + " " + tr("缺少扩展名")
     return True, ""
 
@@ -504,7 +482,8 @@ class EditTool(QDialog):
         form_layout.addRow(tr("快捷键"), hotkey_layout)
 
         # 图标
-        self.icon_edit, _ = filePathWidget(self, form_layout, tr("图标"), tr("选择图标"), tr("图片文件") + " (*.png *.jpg *.jpeg *.bmp *.ico *.gif);;" + tr("所有文件") + " (*)")
+        img_exts = " ".join(f"*{e}" for e in sorted(EXTENSION["IMAGE"]))
+        self.icon_edit, _ = filePathWidget(self, form_layout, tr("图标"), tr("选择图标"), tr("图片文件") + f" ({img_exts});;" + tr("所有文件") + " (*)")
 
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -650,12 +629,12 @@ class EditTool(QDialog):
         svc_text = self.service_edit.text()
         proc_text = self.process_edit.text()
 
-        valid, msg = validateServiceName(svc_text)
+        valid, msg = validateNameList(svc_text)
         if not valid:
             messageBox(self, tr("格式错误"), msg, 1)
             return False
 
-        valid, msg = validateProcessName(proc_text)
+        valid, msg = validateNameList(proc_text, require_extension=True)
         if not valid:
             messageBox(self, tr("格式错误"), msg, 1)
             return False
@@ -713,7 +692,10 @@ def getIcon(tool, icon_size=32):
     if icon_path:
         icon_path = convertPath(icon_path, "absolute")
         if os.path.isfile(icon_path):
-            icon = QIcon(icon_path)
+            if Path(icon_path).suffix.lower() in EXTENSION["IMAGE"]:
+                icon = QIcon(icon_path)
+            else:
+                icon = getFileIcon(icon_path, icon_size)
     elif path:
         try:
             icon = getFileIcon(path, icon_size)
@@ -1687,6 +1669,9 @@ class MainWindow(WindowControl, QMainWindow):
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
         cwd = os.path.expandvars(tool.get("cwd", ""))
+        # 未配置工作目录时，默认使用文件所在目录；需展开环境变量，否则 cwd 会保留 %...% 字面量
+        if path and not cwd:
+            cwd = os.path.expandvars(str(Path(path).parent))
         args = argsPlaceholder(tool.get("args", ""))
 
         if not path and tool_type != "预设":

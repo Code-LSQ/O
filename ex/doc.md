@@ -4,7 +4,7 @@
 [Sandboxie-Plus](https://github.com/sandboxie-plus/Sandboxie/releases)，这个开源沙盒软件可以说是轻量级的虚拟机了。
 文档地址： https://sandboxie-plus.github.io/sandboxie-docs/zh-CN/    https://github.com/sandboxie-plus/sandboxie-docs/blob/main/README_zh-CN.md
 
-官方介绍：Sandboxie 是一款基于沙箱的 Windows 隔离软件，可以让你在无需担心文件或注册表被未授权更改的情况下，运行不受信任的应用程序。
+官方介绍：Sandboxie 是一款基于沙盒的 Windows 隔离软件，可以让你在无需担心文件或注册表被未授权更改的情况下，运行不受信任的应用程序。
 
 VMware是硬件级别的虚拟，Sandboxie-Plus是操作系统级别的虚拟。Sandboxie-Plus可以将用户所做的更改都隔离到一个虚拟环境中，与VMware不同的是，它只虚拟出运行程序需要用到的文件。
 
