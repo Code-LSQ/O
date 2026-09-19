@@ -12,6 +12,11 @@
     "contextMenus",
     "declarativeNetRequest"
   ],
+  "icons": {
+  "16": "Logo16.png",
+  "32": "Logo32.png",
+  "128": "Logo128.png"
+  },
   "options_ui": {
     "page": "src/option.html",
     "open_in_tab": true
@@ -23,6 +28,10 @@
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "./src/popup.html",
-    "default_icon": "Logo.png"
+    "default_icon": {
+      "16": "Logo16.png",
+      "32": "Logo32.png",
+      "128": "Logo128.png"
+    }
   }
 }
