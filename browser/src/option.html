@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>设置 - O</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #1f2937;
+        --text-dim: #9ca3af;
+        --switch-on: #22c55e;
+        --switch-off: #d1d5db;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+        padding: 24px 16px 40px;
+      }
+      .container { max-width: 640px; margin: 0 auto; }
+      h1 { font-size: 18px; margin-bottom: 16px; }
+      .section-title { font-size: 13px; color: var(--text-dim); margin: 24px 0 8px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .row:last-child { border-bottom: none; }
+      .row .info { flex: 1; min-width: 0; }
+      .row .name { font-weight: 600; }
+      .row .desc { color: var(--text-dim); font-size: 12px; }
+      .switch { position: relative; flex: none; }
+      .switch input { display: none; }
+      .switch .slider {
+        display: block;
+        width: 38px;
+        height: 20px;
+        border-radius: 10px;
+        background: var(--switch-off);
+        transition: background 0.15s;
+        cursor: pointer;
+      }
+      .switch .slider::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 0.15s;
+      }
+      .switch input:checked + .slider { background: var(--switch-on); }
+      .switch input:checked + .slider::after { transform: translateX(18px); }
+      .settings-btn {
+        flex: none;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        font-size: 12px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      .settings-btn:hover { background: #f0f1f4; }
+      .settings-panel {
+        padding: 4px 16px 12px;
+        background: #fafbfc;
+        border-top: 1px solid var(--border);
+      }
+      .field {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+      }
+      .field .label { flex: 1; min-width: 0; font-size: 13px; }
+      .field .hint {
+        flex: 1;
+        min-width: 0;
+        color: var(--text-dim);
+        font-size: 12px;
+      }
+      .field .input,
+      .field .select {
+        width: 180px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 13px;
+        background: #fff;
+        color: var(--text);
+      }
+      .field .input:focus,
+      .field .select:focus { outline: none; border-color: #94a3b8; }
+      .rule-list { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+      .rule-hint { color: var(--text-dim); font-size: 12px; }
+      .rule-row { display: flex; align-items: center; gap: 6px; }
+      .rule-input {
+        flex: 1;
+        min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 13px;
+        background: #fff;
+        color: var(--text);
+      }
+      .rule-input:focus { outline: none; border-color: #94a3b8; }
+      .rule-input.invalid { border-color: #ef4444; }
+      .rule-arrow { flex: none; color: var(--text-dim); }
+      .rule-del,
+      .rule-add {
+        flex: none;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        font-size: 12px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      .rule-del:hover,
+      .rule-add:hover { background: #f0f1f4; }
+      .empty { padding: 24px 16px; text-align: center; color: var(--text-dim); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>设置</h1>
+      <div class="section-title">功能模块</div>
+      <div class="card" id="modules"></div>
+    </div>
+    <script type="module" src="./option.ts"></script>
+  </body>
+</html>

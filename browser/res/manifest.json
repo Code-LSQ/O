@@ -1,0 +1,28 @@
+{
+  "name": "O",
+  "author": "",
+  "version": "0.5.0",
+  "manifest_version": 3,
+  "description": "效率工具扩展",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "management",
+    "webRequest",
+    "contextMenus",
+    "declarativeNetRequest"
+  ],
+  "options_ui": {
+    "page": "src/option.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "./src/popup.html",
+    "default_icon": "Logo.png"
+  }
+}
