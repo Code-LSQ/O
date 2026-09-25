@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   build: {
-    outDir: '../../dist/browser',
     rollupOptions: {
       input: {
         popup: './src/popup.html',

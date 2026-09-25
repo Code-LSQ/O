@@ -2,10 +2,24 @@
 __pycache__/
 *.py[cd]
 *.spec
+*.cxx
 
+build/
+dist/
 node_modules/
-data/
+oh_modules/
 
 # 忽略 AI Agent 文件
 AGENTS.md
 CLAUDE.md
+
+data/
+
+.preview/
+.test/
+.hvigor/
+.appanalyzer/
+.clangd/
+.idea/
+
+harmony/
