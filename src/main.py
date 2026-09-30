@@ -2,7 +2,6 @@ import os
 import sys
 import re
 import copy
-import subprocess
 import webbrowser
 from pathlib import Path
 
@@ -13,7 +12,7 @@ from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMim
 
 from src.api import AUTHOR, APP_NAME, EXTENSION, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
 from src.config import SettingsDialog, getConfig
-from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin
+from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin, Terminal, runTerminal
 from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copyWait
 from src.core.timer import TimerManager
@@ -57,26 +56,20 @@ def execPython(script_path, extra_args=None):
         if sys.stdin is not None:
             os.system("pause")
 
-def runPython(path: str, cwd, args, *arg, **kwargs):
+def runPython(path: str, cwd, args, mode="cmd", *arg, **kwargs):
     if Path(path).suffix.lower() != ".py":
         raise TypeError("仅支持 .py 文件")
 
     run_path = getConfig().get("Launch.Runtime.Python", "")
     if not run_path:
         if not Interpret:
-            cmd = [app_path, "--exec", path]
-            if args:
-                cmd.append(args)
-            subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            runTerminal(mode, [app_path, "--exec", path], cwd, args)
             return
         run_path = sys.executable
 
-    cmd = [run_path, path]
-    if args:
-        cmd.append(args)
-    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+    runTerminal(mode, [run_path, path], cwd, args)
 
-def runJava(path: str, cwd, args, *arg, **kwargs):
+def runJava(path: str, cwd, args, mode="cmd", *arg, **kwargs):
     if Path(path).suffix.lower() != ".jar":
         raise TypeError("仅支持 .jar 文件")
 
@@ -84,15 +77,12 @@ def runJava(path: str, cwd, args, *arg, **kwargs):
     if not run_path:
         raise RuntimeError("未配置 Java 路径")
 
-    cmd = [run_path, '-jar', path]
-    if args:
-        cmd.append(args)
-    subprocess.Popen(cmd, cwd=cwd or None, creationflags=subprocess.CREATE_NEW_CONSOLE)
+    runTerminal(mode, [run_path, '-jar', path], cwd, args)
 
 def openUrl(url, *arg, **kwargs):
     webbrowser.open(url)
 
-# 类型映射，对于 .py，.jar ，设置 CREATE_NEW_CONSOLE 是为了方便在关闭终端窗口时结束脚本或程序，否则不好结束
+# 类型映射，对于 .py，.jar ，带终端启动便于关闭窗口时结束脚本或程序，否则不好结束；/c 自动关闭终端
 TYPES = {
     "文件": openFile,
     "Python": runPython,
@@ -396,6 +386,7 @@ class EditTool(QDialog):
         self.setWindowTitle(tr("编辑") if self.tool_data else tr("新建"))
         self.setWindowFlags(Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self._mode_fixed = False
         self._setupUI()
         self._loadData()
         QTimer.singleShot(0, self._doCenter)
@@ -454,16 +445,6 @@ class EditTool(QDialog):
         self.args_edit = QLineEdit()
         form_layout.addRow(tr("启动参数"), self.args_edit)
 
-        # 附属服务（仅文件类型显示）
-        self.service_edit = QLineEdit()
-        self._service_label = QLabel(tr("服务"))
-        form_layout.addRow(self._service_label, self.service_edit)
-
-        # 附属进程（仅文件类型显示）
-        self.process_edit = QLineEdit()
-        self._process_label = QLabel(tr("进程"))
-        form_layout.addRow(self._process_label, self.process_edit)
-
         # 备注
         self.note_edit = QLineEdit()
         self.note_edit.setMaximumHeight(60)
@@ -484,6 +465,23 @@ class EditTool(QDialog):
         # 图标
         img_exts = " ".join(f"*{e}" for e in sorted(EXTENSION["IMAGE"]))
         self.icon_edit, _ = filePathWidget(self, form_layout, tr("图标"), tr("选择图标"), tr("图片文件") + f" ({img_exts});;" + tr("所有文件") + " (*)")
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("None", None)
+        for key in Terminal:
+            self.mode_combo.addItem(key, key)
+        self._mode_label = QLabel(tr("运行方式"))
+        form_layout.addRow(self._mode_label, self.mode_combo)
+
+        # 附属服务（仅文件类型显示）
+        self.service_edit = QLineEdit()
+        self._service_label = QLabel(tr("服务"))
+        form_layout.addRow(self._service_label, self.service_edit)
+
+        # 附属进程（仅文件类型显示）
+        self.process_edit = QLineEdit()
+        self._process_label = QLabel(tr("进程"))
+        form_layout.addRow(self._process_label, self.process_edit)
 
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -513,6 +511,13 @@ class EditTool(QDialog):
             if index >= 0:
                 self.type_combo.setCurrentIndex(index)
 
+        # 优先用存储值，否则按类型默认
+        if "mode" in self.tool_data:
+            self._mode_fixed = True
+            idx = self.mode_combo.findData(self.tool_data.get("mode"))
+            if idx >= 0:
+                self.mode_combo.setCurrentIndex(idx)
+
         # URL类型使用url字段，其他类型使用path字段
         if tool_type == "网址":
             self.path_edit.setText(self.tool_data.get("url", ""))
@@ -537,6 +542,18 @@ class EditTool(QDialog):
         self.service_edit.setVisible(is_file)
         self._process_label.setVisible(is_file)
         self.process_edit.setVisible(is_file)
+
+        # 运行方式：网址/预设类型不适用；未锁定存储值时按类型跟随默认（文件无控制台，Python/Java 用 cmd）
+        is_url = tool_type == "网址"
+        show_mode = not is_url and tool_type != "预设"
+        self._mode_label.setVisible(show_mode)
+        self.mode_combo.setVisible(show_mode)
+        if not self._mode_fixed and show_mode:
+            if tool_type in ("Python", "Java"):
+                idx = self.mode_combo.findData("cmd")
+                self.mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            else:
+                self.mode_combo.setCurrentIndex(0)
 
         if tool_type == "网址":
             self._path_label.setText("URL")
@@ -606,6 +623,12 @@ class EditTool(QDialog):
         
         # 过滤空值
         data = {k: v for k, v in data.items() if v}
+        # 运行方式仅在适用类型且与类型默认不同时写入，否则回退到默认
+        if tool_type in ("文件", "Python", "Java"):
+            mode = self.mode_combo.currentData()
+            default = "cmd" if tool_type in ("Python", "Java") else None
+            if mode != default:
+                data["mode"] = mode
         
         return data
     
@@ -1668,8 +1691,18 @@ class MainWindow(WindowControl, QMainWindow):
 
         tool_type = tool.get("type", "文件")
         path = tool.get("path") or tool.get("url")
+
+        # 工具缺失 mode 字段时按类型回退（文件无控制台，Python/Java 用 cmd）
+        # mode 决定 args 交给谁解释：shell 会解释元字符与环境变量，None 走 ShellExecuteW 则不会，
+        # 因此同一份参数在不同运行方式下可能行为不同，详见 src/system.py 的 splitArgs
+        if "mode" in tool:
+            mode = tool.get("mode")
+        else:
+            mode = "cmd" if tool_type in ("Python", "Java") else None
+
         cwd = os.path.expandvars(tool.get("cwd", ""))
-        # 未配置工作目录时，默认使用文件所在目录；需展开环境变量，否则 cwd 会保留 %...% 字面量
+        # 未配置工作目录时，默认使用文件所在目录；默认和配置均需展开环境变量
+        # CreateProcessW 文档明确 lpCurrentDirectory 主要供启动器（shell）指定初始工作目录，故不应留空继承 O 自身目录
         if path and not cwd:
             cwd = os.path.expandvars(str(Path(path).parent))
         args = argsPlaceholder(tool.get("args", ""))
@@ -1693,22 +1726,18 @@ class MainWindow(WindowControl, QMainWindow):
             if getConfig().get("Launch.run_hide", False):
                 self.hide()
             operation = "runas" if tool.get("run_as_admin") and tool_type == "文件" else "open"
+            service_str = tool.get("service", "").strip()
+            process_str = tool.get("process", "").strip()
+
             if tool_type == "预设":
                 self.runPreset(tool)
-            elif tool_type == "文件" and path and Path(path).suffix.lower() == '.exe':
-                service_str = tool.get("service", "").strip()
-                process_str = tool.get("process", "").strip()
-                if service_str or process_str:
-                    self._runService(tool, path, cwd, args, service_str, process_str)
-                else:
-                    action = TYPES.get(tool_type)
-                    if action:
-                        action(path, cwd, args, operation)
-
+            elif tool_type == "文件" and path and Path(path).suffix.lower() == '.exe' and (service_str or process_str):
+                self._runService(tool, path, cwd, args, service_str, process_str)
             else:
+                # 统一传 mode，由各函数内部处理（openFile/runPython/runJava 用，openUrl 忽略）
                 action = TYPES.get(tool_type)
                 if action:
-                    action(path, cwd, args, operation)
+                    action(path, cwd, args, mode, operation)
             logger.info(f"启动工具: {tool.get('name', '')} ({tool_type})")
 
         except Exception as e:
@@ -1726,7 +1755,7 @@ class MainWindow(WindowControl, QMainWindow):
         if Interpret:
             messageBox(self, tr("提示"), tr("源码模式下不支持更新"), 1)
             return
-        from src.gui.widget import UpdateDialog
+        from src.update import UpdateDialog
         UpdateDialog.checkAndUpdate(self)
 
     def runPreset(self, tool: dict):

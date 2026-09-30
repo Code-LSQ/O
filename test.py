@@ -2731,7 +2731,7 @@ class TestRenameItem(unittest.TestCase):
 
 
 class TestGetReleaseInfo(unittest.TestCase):
-    from src.core.update import getReleaseInfo
+    from src.update import getReleaseInfo
     getReleaseInfo = staticmethod(getReleaseInfo)
 
     @patch("requests.get")
@@ -2785,7 +2785,7 @@ class TestGetReleaseInfo(unittest.TestCase):
 
 
 class TestExtractUpdate(unittest.TestCase):
-    from src.core.update import extractUpdate
+    from src.update import extractUpdate
     extractUpdate = staticmethod(extractUpdate)
 
     def setUp(self):

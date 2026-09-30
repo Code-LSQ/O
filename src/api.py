@@ -638,7 +638,7 @@ def openTerminal(path):
 
     try:
         if sys.platform == "win32":
-            subprocess.Popen(["cmd", "/k", "cd", "/d", path], cwd=path)
+            subprocess.Popen(["cmd", "/k"], cwd=path)
         elif sys.platform == "linux":
             subprocess.Popen(["xdg-terminal"], cwd=path, start_new_session=True)
         elif sys.platform == "darwin":

@@ -11,19 +11,91 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.api import APP_NAME, app_path, logger, icon_dir, Interpret, tr
+from src.api import APP_NAME, app_path, logger, icon_dir, Interpret, tr, openTerminal
 
 if sys.platform == "win32":
     # 除插件外，只在这个代码块中使用 ctypes 和 winreg
     import winreg
     from ctypes import windll, WINFUNCTYPE, Structure, c_int, c_int32, c_uint, c_uint16, c_uint32, c_byte, c_void_p, c_wchar, c_wchar_p, c_ulong, byref, cast, POINTER, sizeof, HRESULT, memset, string_at
 
-    # 控制运行方式，或者叫终端、控制台。Windows 上的下拉框为无控制台、Windows Terminal、cmd、PowerShell，至于右键的终端打开和 SYSTEM_ACT 的 Terminal 则为默认终端
+    # 运行方式/终端/控制台   不适合 "Windows Terminal": (["wt"], 0), 去除兼容
+    # 写全 .exe，避免 Popen 和 ShellExecuteW 按各自规则解析
     Terminal = {
-        "Windows Terminal": (["wt"], 0),
-        "cmd": (["cmd", "/k"], subprocess.CREATE_NEW_CONSOLE),
-        "PowerShell": (["powershell", "-NoExit", "-Command"], subprocess.CREATE_NEW_CONSOLE),
+        "cmd": (["cmd.exe", "/c"], subprocess.CREATE_NEW_CONSOLE),
+        "PowerShell": (["powershell.exe", "-Command"], subprocess.CREATE_NEW_CONSOLE),
     }
+
+    # CommandLineToArgvW 需要显式声明返回类型，否则 ctypes 默认按 32 位 int 处理，64 位下指针会被截断，后续 LocalFree 会失败
+    windll.shell32.CommandLineToArgvW.restype = POINTER(c_wchar_p)
+
+    def splitArgs(args):
+        """按 Windows 自身的命令行规则把参数字符串拆成独立参数。
+
+        整串 args 不能当作单个列表元素交给 Popen：list2cmdline 会给它整体加引号，
+        目标程序只会收到一个参数，与 ShellExecuteW 的 lpParameters（由目标按空格拆分）语义不一致，
+        换个运行方式就换了参数含义。故复用系统解析器，使两种运行方式拆分结果相同。
+        argv[0] 的引号处理规则与其余参数不同，故加占位前缀后从下标 1 取起。
+
+        已知限制，均为所选 shell 的固有行为，刻意不做处理（要绕开 per-shell 的引号逻辑，
+        一旦写错只会静默传错参数）：
+        1. cmd/PowerShell 仍会解释**无空格 token** 中的元字符，ShellExecuteW 不会。
+           例如把 URL 查询串 ?a=1&b=2 当参数传给 cmd，会在 & 处截断并试着执行后半段；
+           以 ^ 开头的正则参数会被吃掉 ^。含空格的 token 由引号保护，不受影响。
+        2. %VAR%（PowerShell 的 $var）即使加了引号也会被展开，无法避免。
+        3. PowerShell 会把空参数丢掉（实测 '' 传不进目标程序），cmd 不会，属 PS 5.1 自身缺陷。
+        需要与 ShellExecuteW 完全一致时，把该工具的运行方式设为 None。"""
+        if not args or not args.strip():
+            return []
+        count = c_int()
+        argv = windll.shell32.CommandLineToArgvW("o " + args, byref(count))
+        if not argv:
+            # 解析失败（如引号未闭合）时退回单参数，宁可参数错也不要不启动
+            logger.warning(f"参数解析失败，按单个参数处理: {args}")
+            return [args]
+        try:
+            return [argv[i] for i in range(1, count.value)]
+        finally:
+            windll.kernel32.LocalFree(cast(argv, c_void_p))
+
+    def buildTerminal(mode, argv, workdir=None):
+        """把参数列表按运行方式拼成 (启动器, 参数串, 创建标志)，argv 已由 splitArgs 拆好。
+        与 runTerminal 共用，提权分支没法复用它（提权只能走 ShellExecuteW）。
+        两种 shell 都不能直接吃「前缀 + 参数列表」，故各自再包装一层，写法见下方注释。
+        workdir 非空时在命令开头显式切换工作目录，原因见 openFile 的提权分支。
+        cmd 会等待 GUI 程序（终端驻留，日志可见），PowerShell 不等，是 shell 固有差异，非 bug
+        """
+        prefix, flags = Terminal[mode]
+        if mode == "PowerShell":
+            # -Command 收到的是 PowerShell 代码而非命令行，必须用 & 显式调用，否则报 ParserError 或静默不启动。
+            # 参数包单引号（内部翻倍转义），整串不含 " ，list2cmdline 包外层引号时就不会再做 \" 转义
+            line = "& " + " ".join("'" + t.replace("'", "''") + "'" for t in argv)
+            if workdir:
+                # 转义规则与 cmd 完全不同，不能套用下面的写法
+                line = "Set-Location -LiteralPath '" + workdir.replace("'", "''") + "'; " + line
+            params = subprocess.list2cmdline(prefix[1:] + [line])
+        else:
+            # cmd 在引号数达到 4 个时走「剥掉首尾引号」规则，含空格的程序路径会被截断在第一个空格处，
+            # 故给整条命令再包一层引号，cmd 剥掉外层后内层结构保持完整；
+            # 外层引号由手拼，所以 list2cmdline 的结果与 workdir 都必须放在引号内部
+            inner = subprocess.list2cmdline(argv)
+            if workdir:
+                # Windows 路径不含 " ，cd 的路径包引号即可防空格与元字符，不会破坏外层引号配对
+                inner = f'cd /d "{workdir}" && {inner}'
+            params = " ".join(prefix[1:]) + f' "{inner}"'
+        return prefix[0], params, flags
+
+    def runTerminal(mode, cmd, workdir, args=""):
+        """按运行方式启动命令。mode 为 None 表示无控制台，否则为 Terminal 字典键。
+        结束即关窗口的参数已固化在 Terminal 的前缀中，交互式滞留终端由 openTerminal 的 cmd /k 承担。
+        args 经 splitArgs 拆分，但元字符与环境变量仍由所选 shell 解释，限制见 splitArgs。
+        需要提权时不要用这里，见 openFile 的提权分支。
+        """
+        argv = cmd + splitArgs(args)
+        if not mode:
+            return subprocess.Popen(argv, cwd=workdir or None, creationflags=subprocess.CREATE_NO_WINDOW)
+        launcher, params, flags = buildTerminal(mode, argv)
+        # 必须传字符串而非列表，列表会再走一次 list2cmdline 把手拼的引号转义成 \" ，cmd 不认
+        return subprocess.Popen(f"{launcher} {params}", cwd=workdir or None, creationflags=flags)
 
     # 命令提示符特殊处理，CLSID 统一使用 shell::: 的形式，更规范，兼容性好。已确认 ::{...} 格式有小部分不兼容
     SYSTEM_ACT = {
@@ -43,12 +115,30 @@ if sys.platform == "win32":
         "屏幕设置": "ms-settings:display",
         }
 
-    def openFile(path: str, cwd=None, args=None, operation="open"):
+    def openFile(path: str, cwd=None, args=None, mode=None, operation="open"):
         """打开文件或文件夹，不检查文件存在性。
-        ShellExecuteW 失败时弹 Windows 原生错误框提示，不抛异常。
+        mode 为终端时：文件夹在自身目录打开终端（忽略 cwd），文件在所在文件夹执行该文件；
+        operation 为 runas 且指定 mode 时，提权启动终端执行，见下方注释；
+        其余情况用 ShellExecuteW，失败时弹 Windows 原生错误框提示，不抛异常。
         os.startfile(path) 不支持参数，所以使用 windll。"""
         path = os.path.expandvars(path)
-        result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd, 1)
+        if mode:
+            if os.path.isdir(path):
+                openTerminal(path)
+                return
+            # 未配置工作目录时用文件所在目录；再展开一次环境变量，因为直接调用本函数的路径不经过 main.py
+            workdir = os.path.expandvars(cwd or os.path.dirname(path))
+            if operation != "runas":
+                runTerminal(mode, [path], workdir, args)
+                return
+            # 提权只能走 ShellExecuteW（CreateProcess 无提权能力），且提权对象必须是启动器本身，否则只有程序没有终端。
+            # 提权进程由 AppInfo 服务创建，实测 cmd 与 PowerShell 都无视 lpDirectory（一律落在 System32），
+            # 所以 workdir 必须由 buildTerminal 在命令里显式切换，lpDirectory 只作兜底。
+            launcher, params, _ = buildTerminal(mode, [path] + splitArgs(args), workdir)
+            result = windll.shell32.ShellExecuteW(None, "runas", launcher, params, workdir or None, 1)
+        else:
+            # lpDirectory 传 None 时使用调用方当前目录（MSDN 明文定义），空字符串行为未定义，故空值统一转 None
+            result = windll.shell32.ShellExecuteW(None, operation, path, args, cwd or None, 1)
         if result <= 32:
             # UAC 提权被用户取消时返回 5（SE_ERR_ACCESSDENIED），静默处理
             if operation == "runas" and result == 5:
@@ -64,6 +154,10 @@ if sys.platform == "win32":
             # 0x40010 = MB_OK | MB_ICONERROR | MB_TOPMOST，标题用路径，与资源管理器"找不到文件"框一致
             windll.user32.MessageBoxW(None, text + "\n\n" + path, path, 0x40010)
             logger.error(f"打开文件失败: {path}, 错误码 {result}")
+
+    # 需要能够与 Explorer 交互，之后看看怎么做
+    def explorer():
+        pass
 
     def activateWindow(name):
         windll.user32.SetForegroundWindow(int(name))
@@ -386,12 +480,21 @@ if sys.platform == "win32":
 
 elif sys.platform == "linux":
 
+    Terminal = {
+        "": "",
+    }
+
+    def runTerminal(mode, cmd, workdir, args=""):
+        """非 Windows 无终端选择，仅直接运行命令。
+        args 未做拆分，整串作为一个参数传入（与原有行为一致，待支持 Linux/macOS 时再处理）"""
+        return subprocess.Popen(cmd + ([args] if args else []), cwd=workdir or None)
+
     SYSTEM_ACT = {
-        "命令提示符": "Terminal",
+        "终端": "Terminal",
         "回收站": "trash://",
     }
 
-    def openFile(path: str, cwd=None, args=None, operation="open"):
+    def openFile(path: str, cwd=None, args=None, mode=None, operation="open"):
         if args:
             logger.warning("xdg-open 不支持参数，已忽略")
         try:
@@ -518,12 +621,21 @@ elif sys.platform == "linux":
 elif sys.platform == "darwin":
     from ctypes import CDLL, util, c_void_p
 
+    Terminal = {
+        "": "",
+    }
+
+    def runTerminal(mode, cmd, workdir, args=""):
+        """非 Windows 无终端选择，仅直接运行命令。
+        args 未做拆分，整串作为一个参数传入（与原有行为一致，待支持 Linux/macOS 时再处理）"""
+        return subprocess.Popen(cmd + ([args] if args else []), cwd=workdir or None)
+
     SYSTEM_ACT = {
-        "命令提示符": "Terminal",
+        "终端": "Terminal",
         "回收站": os.path.expanduser("~/.Trash"),
     }
 
-    def openFile(path: str, cwd=None, args=None, operation="open"):
+    def openFile(path: str, cwd=None, args=None, mode=None, operation="open"):
         if args:
             logger.warning("macOS open 命令不支持参数，已忽略")
         try:
