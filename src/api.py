@@ -629,27 +629,6 @@ class RuntimeManager:
 env = RuntimeManager()
 
 
-def openTerminal(path):
-    """打开终端"""
-
-    path = os.path.abspath(os.path.expandvars(path))
-    if os.path.isfile(path):
-        path = os.path.dirname(path)
-
-    try:
-        if sys.platform == "win32":
-            subprocess.Popen(["cmd", "/k"], cwd=path)
-        elif sys.platform == "linux":
-            subprocess.Popen(["xdg-terminal"], cwd=path, start_new_session=True)
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-a", "Terminal", path], cwd=path)
-        logger.info(f"已打开终端: {path}")
-        return True
-    except Exception:
-        logger.exception("打开终端失败")
-        return False
-
-
 def fileHash(path: str, algorithm="md5") -> str:
     """计算文件哈希值，建议使用 md5 或 sha256 算法"""
     ha = hashlib.new(algorithm)

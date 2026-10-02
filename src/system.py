@@ -11,18 +11,19 @@ from PySide6.QtWidgets import QFileIconProvider
 from PySide6.QtCore import QFileInfo
 from PySide6.QtGui import QPixmap, QImage, QIcon
 
-from src.api import APP_NAME, app_path, logger, icon_dir, Interpret, tr, openTerminal
+from src.api import APP_NAME, app_path, logger, icon_dir, Interpret, tr
 
 if sys.platform == "win32":
     # 除插件外，只在这个代码块中使用 ctypes 和 winreg
+    import base64
     import winreg
     from ctypes import windll, WINFUNCTYPE, Structure, c_int, c_int32, c_uint, c_uint16, c_uint32, c_byte, c_void_p, c_wchar, c_wchar_p, c_ulong, byref, cast, POINTER, sizeof, HRESULT, memset, string_at
 
-    # 运行方式/终端/控制台   不适合 "Windows Terminal": (["wt"], 0), 去除兼容
-    # 写全 .exe，避免 Popen 和 ShellExecuteW 按各自规则解析
+    # 运行方式/终端/控制台   每项为 (执行命令的启动器, 开终端的启动器, 创建标志)，两者只差窗口是否随命令关闭
+    # 不适合 "Windows Terminal": "wt"，已移除；写全 .exe，避免 Popen 和 ShellExecuteW 按各自规则解析
     Terminal = {
-        "cmd": (["cmd.exe", "/c"], subprocess.CREATE_NEW_CONSOLE),
-        "PowerShell": (["powershell.exe", "-Command"], subprocess.CREATE_NEW_CONSOLE),
+        "cmd": (["cmd.exe", "/c"], ["cmd.exe", "/k"], subprocess.CREATE_NEW_CONSOLE),
+        "PowerShell": (["powershell.exe", "-EncodedCommand"], ["powershell.exe", "-NoExit"], subprocess.CREATE_NEW_CONSOLE),
     }
 
     # CommandLineToArgvW 需要显式声明返回类型，否则 ctypes 默认按 32 位 int 处理，64 位下指针会被截断，后续 LocalFree 会失败
@@ -37,12 +38,12 @@ if sys.platform == "win32":
         argv[0] 的引号处理规则与其余参数不同，故加占位前缀后从下标 1 取起。
 
         已知限制，均为所选 shell 的固有行为，刻意不做处理（要绕开 per-shell 的引号逻辑，
-        一旦写错只会静默传错参数）：
-        1. cmd/PowerShell 仍会解释**无空格 token** 中的元字符，ShellExecuteW 不会。
+        一旦写错只会静默传错参数）。以下两条仅限 cmd：PowerShell 分支的参数拼成子进程命令行后
+        经 -EncodedCommand 交出去（见 buildTerminal），不经过 PowerShell 自己的解析，故不受影响。
+        1. cmd 仍会解释**无空格 token** 中的元字符，ShellExecuteW 不会。
            例如把 URL 查询串 ?a=1&b=2 当参数传给 cmd，会在 & 处截断并试着执行后半段；
            以 ^ 开头的正则参数会被吃掉 ^。含空格的 token 由引号保护，不受影响。
-        2. %VAR%（PowerShell 的 $var）即使加了引号也会被展开，无法避免。
-        3. PowerShell 会把空参数丢掉（实测 '' 传不进目标程序），cmd 不会，属 PS 5.1 自身缺陷。
+        2. cmd 的 %VAR% 即使加了引号也会被展开，无法避免。
         需要与 ShellExecuteW 完全一致时，把该工具的运行方式设为 None。"""
         if not args or not args.strip():
             return []
@@ -57,22 +58,34 @@ if sys.platform == "win32":
         finally:
             windll.kernel32.LocalFree(cast(argv, c_void_p))
 
+    def psLiteral(text):
+        """包成 PowerShell 单引号字面量（内部单引号翻倍转义）。单引号内不展开变量、不解释元字符"""
+        return "'" + text.replace("'", "''") + "'"
+
     def buildTerminal(mode, argv, workdir=None):
         """把参数列表按运行方式拼成 (启动器, 参数串, 创建标志)，argv 已由 splitArgs 拆好。
         与 runTerminal 共用，提权分支没法复用它（提权只能走 ShellExecuteW）。
         两种 shell 都不能直接吃「前缀 + 参数列表」，故各自再包装一层，写法见下方注释。
-        workdir 非空时在命令开头显式切换工作目录，原因见 openFile 的提权分支。
-        cmd 会等待 GUI 程序（终端驻留，日志可见），PowerShell 不等，是 shell 固有差异，非 bug
+        workdir 非空时显式指定工作目录，原因见 openFile 的提权分支。
+        cmd /c 与 PowerShell 的 -Wait 都会等到程序结束（窗口与程序同生共死）
         """
-        prefix, flags = Terminal[mode]
+        # 运行方式失效时（None，或配置里留着已从表里删掉的 shell）回落到 cmd
+        prefix, _, flags = Terminal.get(mode, Terminal["cmd"])
         if mode == "PowerShell":
-            # -Command 收到的是 PowerShell 代码而非命令行，必须用 & 显式调用，否则报 ParserError 或静默不启动。
-            # 参数包单引号（内部翻倍转义），整串不含 " ，list2cmdline 包外层引号时就不会再做 \" 转义
-            line = "& " + " ".join("'" + t.replace("'", "''") + "'" for t in argv)
+            # 不用 & 而用 Start-Process：& 对 GUI 子系统程序不等待（实测 1.3s 就返回），窗口会先于程序消失，
+            # 日志就看不到了；-Wait 才与 cmd /c 一致，-NoNewWindow 让程序留在当前控制台而不是另开窗口
+            parts = ["-FilePath", psLiteral(argv[0])]
+            if argv[1:]:
+                # -ArgumentList 只接字符串数组，元素按空格拼接且不补引号，含空格的参数会被拆开，
+                # 故整条子进程命令行自己拼好（与 cmd、无终端两种方式同源，语义一致）
+                parts += ["-ArgumentList", psLiteral(subprocess.list2cmdline(argv[1:]))]
             if workdir:
-                # 转义规则与 cmd 完全不同，不能套用下面的写法
-                line = "Set-Location -LiteralPath '" + workdir.replace("'", "''") + "'; " + line
-            params = subprocess.list2cmdline(prefix[1:] + [line])
+                parts += ["-WorkingDirectory", psLiteral(workdir)]
+            code = "Start-Process " + " ".join(parts) + " -NoNewWindow -Wait"
+            # 走 -EncodedCommand（UTF-16LE 的 Base64）而不是 -Command：powershell.exe 会先按自己的
+            # 规则解析一次命令行，且不还原 \" ，上面的命令行里一旦出现 " 就会截断整串
+            # （实测报「字符串缺少终止符」）；Base64 不含引号与空格，可以把代码原样送达 PowerShell。
+            params = subprocess.list2cmdline(prefix[1:] + [base64.b64encode(code.encode("utf-16-le")).decode()])
         else:
             # cmd 在引号数达到 4 个时走「剥掉首尾引号」规则，含空格的程序路径会被截断在第一个空格处，
             # 故给整条命令再包一层引号，cmd 剥掉外层后内层结构保持完整；
@@ -86,7 +99,8 @@ if sys.platform == "win32":
 
     def runTerminal(mode, cmd, workdir, args=""):
         """按运行方式启动命令。mode 为 None 表示无控制台，否则为 Terminal 字典键。
-        结束即关窗口的参数已固化在 Terminal 的前缀中，交互式滞留终端由 openTerminal 的 cmd /k 承担。
+        结束即关窗口的行为由 Terminal 前缀（cmd 的 /c）与 buildTerminal 拼出的命令（PowerShell 的 -Wait）共同决定，
+        交互式滞留终端由 openTerminal 承担。
         args 经 splitArgs 拆分，但元字符与环境变量仍由所选 shell 解释，限制见 splitArgs。
         需要提权时不要用这里，见 openFile 的提权分支。
         """
@@ -96,6 +110,17 @@ if sys.platform == "win32":
         launcher, params, flags = buildTerminal(mode, argv)
         # 必须传字符串而非列表，列表会再走一次 list2cmdline 把手拼的引号转义成 \" ，cmd 不认
         return subprocess.Popen(f"{launcher} {params}", cwd=workdir or None, creationflags=flags)
+
+    def openTerminal(path, mode=None):
+        """在目标目录打开所选的交互式终端，窗口不随命令结束而关闭
+        mode 为运行方式，None 或不认识的取值都回落到 cmd。两种 shell 都以进程工作目录为启动目录，
+        故目录交给 cwd，命令里不再切换；不传创建标志：O 自身有控制台时复用，没有时系统会为新控制台程序自动分配
+        启动失败直接抛出，由 exceptionHook 兜底"""
+        path = os.path.abspath(os.path.expandvars(path))
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        _, shell_argv, _ = Terminal.get(mode, Terminal["cmd"])
+        subprocess.Popen(shell_argv, cwd=path)
 
     # 命令提示符特殊处理，CLSID 统一使用 shell::: 的形式，更规范，兼容性好。已确认 ::{...} 格式有小部分不兼容
     SYSTEM_ACT = {
@@ -117,14 +142,14 @@ if sys.platform == "win32":
 
     def openFile(path: str, cwd=None, args=None, mode=None, operation="open"):
         """打开文件或文件夹，不检查文件存在性。
-        mode 为终端时：文件夹在自身目录打开终端（忽略 cwd），文件在所在文件夹执行该文件；
+        mode 为终端时：文件夹在自身目录打开所选的终端（忽略 cwd），文件在所在文件夹执行该文件；
         operation 为 runas 且指定 mode 时，提权启动终端执行，见下方注释；
         其余情况用 ShellExecuteW，失败时弹 Windows 原生错误框提示，不抛异常。
         os.startfile(path) 不支持参数，所以使用 windll。"""
         path = os.path.expandvars(path)
         if mode:
             if os.path.isdir(path):
-                openTerminal(path)
+                openTerminal(path, mode)
                 return
             # 未配置工作目录时用文件所在目录；再展开一次环境变量，因为直接调用本函数的路径不经过 main.py
             workdir = os.path.expandvars(cwd or os.path.dirname(path))
@@ -133,7 +158,8 @@ if sys.platform == "win32":
                 return
             # 提权只能走 ShellExecuteW（CreateProcess 无提权能力），且提权对象必须是启动器本身，否则只有程序没有终端。
             # 提权进程由 AppInfo 服务创建，实测 cmd 与 PowerShell 都无视 lpDirectory（一律落在 System32），
-            # 所以 workdir 必须由 buildTerminal 在命令里显式切换，lpDirectory 只作兜底。
+            # 所以 workdir 必须由 buildTerminal 在命令里显式指定（cmd 的 cd /d、PowerShell 的 -WorkingDirectory），
+            # lpDirectory 只作兜底。
             launcher, params, _ = buildTerminal(mode, [path] + splitArgs(args), workdir)
             result = windll.shell32.ShellExecuteW(None, "runas", launcher, params, workdir or None, 1)
         else:
@@ -489,6 +515,14 @@ elif sys.platform == "linux":
         args 未做拆分，整串作为一个参数传入（与原有行为一致，待支持 Linux/macOS 时再处理）"""
         return subprocess.Popen(cmd + ([args] if args else []), cwd=workdir or None)
 
+    def openTerminal(path, mode=None):
+        """在目标目录打开终端，窗口不随命令结束而关闭
+        非 Windows 无终端选择，mode 忽略；启动失败直接抛出，由 exceptionHook 兜底"""
+        path = os.path.abspath(os.path.expandvars(path))
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        subprocess.Popen(["xdg-terminal"], cwd=path, start_new_session=True)
+
     SYSTEM_ACT = {
         "终端": "Terminal",
         "回收站": "trash://",
@@ -629,6 +663,14 @@ elif sys.platform == "darwin":
         """非 Windows 无终端选择，仅直接运行命令。
         args 未做拆分，整串作为一个参数传入（与原有行为一致，待支持 Linux/macOS 时再处理）"""
         return subprocess.Popen(cmd + ([args] if args else []), cwd=workdir or None)
+
+    def openTerminal(path, mode=None):
+        """在目标目录打开终端，窗口不随命令结束而关闭
+        非 Windows 无终端选择，mode 忽略；启动失败直接抛出，由 exceptionHook 兜底"""
+        path = os.path.abspath(os.path.expandvars(path))
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        subprocess.Popen(["open", "-a", "Terminal", path], cwd=path)
 
     SYSTEM_ACT = {
         "终端": "Terminal",

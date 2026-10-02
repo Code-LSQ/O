@@ -10,9 +10,9 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QDialog, QVBox
 from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut, QCursor, QDragEnterEvent, QDropEvent, QDrag
 from PySide6.QtCore import Qt, QSize, Signal, Slot, QEvent, QTimer, QPoint, QMimeData
 
-from src.api import AUTHOR, APP_NAME, EXTENSION, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, openTerminal, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
+from src.api import AUTHOR, APP_NAME, EXTENSION, logger, theme_dir, user_dir, logo_ico, logo_png, logo_icn, convertPath, getFilePath, filePathWidget, Translator, tr, restartApplication, showFile, dialogBox, messageBox, service, inputDialog, log_file, env, fetchWebTitle, fetchWebIcon, Interpret, OSign, runAsync, app_path
 from src.config import SettingsDialog, getConfig
-from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin, Terminal, runTerminal
+from src.system import openFile, SYSTEM_ACT, getFileIcon, activateWindow, isAdmin, runAdmin, Terminal, runTerminal, openTerminal
 from src.plugin import getPluginManager, pluginActionMenu
 from src.core.input import GlobalHotkeyListener, KeyCaptureFilter, copyWait
 from src.core.timer import TimerManager

@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QWidget, QDialog, QTextEdit, QVBoxLayout, QLabel, 
 from PySide6.QtCore import Qt, QModelIndex, QDir, QAbstractItemModel
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QAction
 
-from src.api import logger, getTimestamp, EXTENSION, ENCODING_MAP, dialogBox, messageBox, tr, openTerminal, showFile, formatFileSize, backup_dir, fileType
+from src.api import logger, getTimestamp, EXTENSION, ENCODING_MAP, dialogBox, messageBox, tr, showFile, formatFileSize, backup_dir, fileType
+from src.system import openTerminal
 from src.gui.view import ViewMode, listArchive, readArchive
 
 
@@ -689,7 +690,7 @@ class FolderPanelManager:
             item_path = self.model.filePath(index)
             if isinstance(item_path, str) and item_path:
                 openTerminal_action = QAction(tr("在终端中打开"), self.parent)
-                openTerminal_action.triggered.connect(partial(self.openTerminal, item_path))
+                openTerminal_action.triggered.connect(partial(openTerminal, item_path))
                 menu.addAction(openTerminal_action)
 
                 show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
@@ -714,7 +715,7 @@ class FolderPanelManager:
                     menu.addAction(move_to_trash_action)
         elif self.folder_path is not False and self.folder_path and isinstance(self.folder_path, str):
             openTerminal_action = QAction(tr("在终端中打开"), self.parent)
-            openTerminal_action.triggered.connect(partial(self.openTerminal, self.folder_path))
+            openTerminal_action.triggered.connect(partial(openTerminal, self.folder_path))
             menu.addAction(openTerminal_action)
 
             show_in_explorer_action = QAction(tr("在文件资源管理器中显示"), self.parent)
@@ -744,18 +745,6 @@ class FolderPanelManager:
                 self.load(self.folder_path)
         else:
             messageBox(self.parent, tr("错误"), tr("移动到回收站失败"), 1)
-
-    def openTerminal(self, path):
-        """在终端中打开"""
-        try:
-            if not isinstance(path, str) or not path:
-                logger.warning(f"无效的路径: type={type(path).__name__}, value={path!r}")
-                return
-            if openTerminal(path):
-                self.parent.statusBar().showMessage(tr("已打开终端") + f": {os.path.normpath(path)}", 2000)
-        except Exception:
-            logger.exception("打开终端失败")
-            self.parent.statusBar().showMessage(tr("打开终端失败"), 2000)
 
     def _onHeaderClicked(self, event):
         """点击父文件夹标签时切换到上级目录"""
