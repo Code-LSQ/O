@@ -1,4 +1,4 @@
-"""API 和工具模块，防止循环依赖，不导入本地模块。定义程序的桌面端、移动端、浏览器扩展之间的通信接口协议，也负责与其他程序交互。"""
+"""API 和工具模块，不导入本地模块，防止循环依赖"""
 import os
 import sys
 import re
@@ -29,6 +29,7 @@ UPDATE = f"https://api.github.com/repos/{AUTHOR}/{APP_NAME}/releases/latest"
 
 Interpret = not (getattr(sys, "frozen", False) or "__compiled__" in globals())
 
+# 源代码 O/o.py    二进制 O/o.exe
 # Nuitka 构建后 sys.executable 指向虚拟的 ./python.exe 而不是实际的 ./o.exe，使用 sys.argv[0] 指向 ./o.exe。源码运行用 sys.executable 指向 Python 解释器，用 sys.argv[0] 指向 o.py
 app_path = os.path.abspath(sys.argv[0])
 root = Path(sys.argv[0]).parent
@@ -591,7 +592,7 @@ class RuntimeManager:
                 os.environ[key] = val
                 self._managed_keys.add(key)
 
-        path_list = []
+        path_list = [] if Interpret else [str(root)]
         if self.Python:
             python_dir = os.path.dirname(self.Python)
             if python_dir and os.path.isdir(python_dir):
@@ -623,8 +624,6 @@ class RuntimeManager:
         else:
             self._injected_paths = []
         os.environ["PATH"] = os.pathsep.join(parts)
-
-        logger.info(f"环境变量注入完成，PATH 长度: {len(os.environ.get('PATH', ''))}")
 
 env = RuntimeManager()
 

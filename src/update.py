@@ -86,13 +86,13 @@ def writeUpdateScript():
 chcp 65001 >nul
 if exist "data\update_error.txt" del /f /q "data\update_error.txt" >nul 2>nul
 :wait
-tasklist /fi "imagename eq O.exe" 2>nul | find /i "O.exe" >nul
+tasklist /fi "imagename eq o.exe" 2>nul | find /i "o.exe" >nul
 if not errorlevel 1 (
     timeout /t 2 /nobreak >nul
     goto wait
 )
 cd /d "%~dp0"
-if not exist "data\update\O.exe" (
+if not exist "data\update\o.exe" (
     echo 更新包不完整，已中止更新 > "data\update_error.txt"
     goto finish
 )
@@ -115,7 +115,7 @@ rmdir /s /q "data\update" >nul 2>nul
 if exist "data\update.zip" del /f /q "data\update.zip" >nul 2>nul
 :finish
 rmdir /s /q "data\update_backup" >nul 2>nul
-start "" "O.exe"
+start "" "o.exe"
 del /f /q "%~f0" >nul 2>nul
 exit
 """
@@ -345,8 +345,8 @@ class UpdateDialog(QDialog):
             self._close_btn.setEnabled(True)
             return
 
-        if not (UPDATE_DIR / "O.exe").is_file():
-            # 校验暂存目录顶层是否有主程序，避免更新包内容错误（缺 O.exe）导致脚本删光旧文件后无法启动
+        if not (UPDATE_DIR / "o.exe").is_file():
+            # 校验暂存目录顶层是否有主程序，避免更新包内容错误（缺 o.exe）导致脚本删光旧文件后无法启动
             messageBox(self, tr("错误"), tr("更新包内容不完整"), 1)
             self._installing = False
             self._close_btn.setEnabled(True)

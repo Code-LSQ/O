@@ -2741,7 +2741,7 @@ class TestGetReleaseInfo(unittest.TestCase):
         mock_resp.json.return_value = {
             "tag_name": "v1.2.3",
             "body": "Release notes",
-            "assets": [{"name": "O.exe"}]
+            "assets": [{"name": "Windows_x64.zip"}]
         }
         mock_get.return_value = mock_resp
         result = self.getReleaseInfo("https://example.com/release")
