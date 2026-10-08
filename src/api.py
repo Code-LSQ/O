@@ -592,7 +592,7 @@ class RuntimeManager:
                 os.environ[key] = val
                 self._managed_keys.add(key)
 
-        path_list = [] if Interpret else [str(root)]
+        path_list = [str(root)]
         if self.Python:
             python_dir = os.path.dirname(self.Python)
             if python_dir and os.path.isdir(python_dir):
@@ -609,6 +609,12 @@ class RuntimeManager:
         for p in self.Temp_Path:
             if p and os.path.isdir(p):
                 path_list.append(p)
+
+        # 源码模式下向 PATHEXT 追加 .PY ，让 cmd、PowerShell 把 o 解析到 o.py
+        if Interpret and sys.platform == "win32":
+            pathext = os.environ.get("PATHEXT") or ".COM;.EXE;.BAT;.CMD;.VBS;.MSC"
+            if ".PY" not in pathext.upper().split(";"):
+                os.environ["PATHEXT"] = pathext + ";.PY"
 
         # 注入 PATH：移除旧注入路径，再追加新路径（去重）
         parts = os.environ.get("PATH", "").split(os.pathsep)
