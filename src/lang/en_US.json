@@ -292,6 +292,7 @@
     "获取图标": "Fetch Icon",
     "请先输入网址": "Please enter a URL first",
     "名称不能为空": "Name cannot be empty",
+    "名称已存在": "Name already exists",
     "路径不能为空": "Path cannot be empty",
     "系统保护": "System Protection",
     "白名单项": "whitelist items",
