@@ -150,7 +150,7 @@ class UpdateDialog(QDialog):
     def _initUI(self):
         self.setWindowTitle(tr("检查更新"))
         self.setMinimumWidth(320)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         layout = QVBoxLayout(self)
 
@@ -173,7 +173,7 @@ class UpdateDialog(QDialog):
         self._progress.hide()
         self._progress_percent = QLabel()
         self._progress_percent.setFixedWidth(40)
-        self._progress_percent.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._progress_percent.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._progress_percent.hide()
         progress_layout = QHBoxLayout()
         progress_layout.addWidget(self._progress, 1)
