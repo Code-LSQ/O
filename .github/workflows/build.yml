@@ -43,7 +43,7 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python test.py --all
+        run: python ex/test.py --all
 
       - name: Create Release
         env:

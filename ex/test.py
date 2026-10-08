@@ -49,7 +49,11 @@ from PySide6.QtCore import QTimer
 from PySide6.QtTest import QTest
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project)
+# api.py 用 sys.argv[0] 推导 root 与 app_path，本文件在 ex/ 下，需要修正路径。这两个值在导入 src.api 时就定下，必须先改。
+# 注意 sys.path 与 sys.argv[0] 无关，两者都得管。
+sys.argv[0] = os.path.join(_project, "o.py")
 
 from src.api import logger
 
@@ -3108,6 +3112,7 @@ def _patchMainWindow():
 
 def main():
     parser = argparse.ArgumentParser(
+        prog="test.py",
         description="O 测试模块",
         formatter_class=argparse.RawTextHelpFormatter,
     )
