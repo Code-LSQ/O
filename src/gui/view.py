@@ -20,9 +20,8 @@ class ViewMode:
     HEX = "十六进制"
     IMAGE = "图像"
     GALLERY = "图库"
-    PDF = "PDF"
 
-    ALL = [TEXT, MARKDOWN, HEX, IMAGE, GALLERY, PDF]
+    ALL = [TEXT, MARKDOWN, HEX, IMAGE, GALLERY]
 
     EXT_KEYS = {
         MARKDOWN: ("Markdown",),
@@ -42,7 +41,7 @@ class ViewMode:
         mode = cls.detectInitial(file_path)
         tab.view_mode = mode
         tab._current_mode = mode
-        tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
+        tab.is_image = mode in (cls.IMAGE, cls.GALLERY)
         tab.is_markdown = (mode == cls.MARKDOWN)
         handler = tab.getHandler(mode)
         if mode in (cls.TEXT, cls.MARKDOWN):
@@ -58,8 +57,9 @@ class ViewMode:
     @classmethod
     def detectInitial(cls, file_path):
         path_lower = file_path.lower()
+        # PDF 原先由 QtPdf 渲染，该查看模式已移除；PDF 属二进制文件，改由十六进制模式打开
         if path_lower.endswith(".pdf"):
-            return cls.PDF
+            return cls.HEX
         for ext in EXTENSION["IMAGE"]:
             if path_lower.endswith(ext):
                 return cls.IMAGE
@@ -85,8 +85,6 @@ class ViewMode:
                 if any(path_lower.endswith(ext) for ext in EXTENSION[k]):
                     modes.append(mode)
                     break
-        if path_lower.endswith(".pdf"):
-            modes.append(cls.PDF)
         return modes
 
     @classmethod
@@ -104,7 +102,7 @@ class ViewMode:
         old_handler.close(tab)
         tab._current_mode = mode
         tab.view_mode = mode
-        tab.is_image = mode in (cls.IMAGE, cls.GALLERY, cls.PDF)
+        tab.is_image = mode in (cls.IMAGE, cls.GALLERY)
         tab.is_markdown = (mode == cls.MARKDOWN)
         if mode in (cls.TEXT, cls.MARKDOWN) and not tab._original_content and tab.file_path:
             archive_type = tab._archive_type
@@ -170,9 +168,6 @@ class ViewMode:
 class TextMode:
     def open(self, tab, file_path=None, content=None):
         tab.image_scroll.hide()
-        pdf_widget = tab.getHandler(ViewMode.PDF).pdf_widget
-        if pdf_widget:
-            pdf_widget.hide()
         tab.text_edit.show()
         if content is not None:
             tab.setContent(content)
@@ -840,84 +835,11 @@ class GalleryMode(QObject):
         pass
 
 
-class PdfMode:
-    def __init__(self):
-        self.pdf_widget = None
-        self.pdf_document = None
-        self.pdf_pixmaps = []
-
-    def open(self, tab, file_path=None, content=None):
-        target = file_path or tab.file_path
-        if not target:
-            return
-
-        from PySide6.QtPdf import QPdfDocument
-        from PySide6.QtPdfWidgets import QPdfView
-
-        class _PdfViewer(QPdfView):
-            def __init__(self, parent=None):
-                super().__init__(parent)
-                self._zoom_factor = 1.0
-                self.setPageMode(QPdfView.PageMode.MultiPage)
-                self.setZoomMode(QPdfView.ZoomMode.FitInView)
-                self.setAutoFillBackground(True)
-                palette = self.palette()
-                palette.setColor(self.backgroundRole(), Qt.GlobalColor.white)
-                self.setPalette(palette)
-                self.setZoomMode(QPdfView.ZoomMode.Custom)
-
-            def wheelEvent(self, event):
-                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                    delta = event.angleDelta().y()
-                    if delta > 0:
-                        self._zoom_factor *= 1.1
-                    else:
-                        self._zoom_factor /= 1.1
-                    self._zoom_factor = max(0.1, min(10.0, self._zoom_factor))
-                    self.setZoomFactor(self._zoom_factor)
-                    event.accept()
-                    return
-                super().wheelEvent(event)
-
-        pdf_document = QPdfDocument()
-        pdf_document.load(target)
-        if pdf_document.error() != QPdfDocument.Error.None_:
-            return
-
-        pdf_view = _PdfViewer()
-        pdf_view.setDocument(pdf_document)
-
-        tab.text_edit.hide()
-        tab.image_scroll.hide()
-
-        self.pdf_widget = pdf_view
-        self.pdf_document = pdf_document
-        tab.layout().addWidget(pdf_view)
-        tab.text_edit.setLineNumbersVisible(False)
-
-    def close(self, tab):
-        if self.pdf_widget:
-            self.pdf_widget.deleteLater()
-            self.pdf_widget = None
-        if self.pdf_document:
-            self.pdf_document.close()
-            self.pdf_document = None
-        self.pdf_pixmaps.clear()
-
-    def activate(self, tab):
-        pass
-
-    def deactivate(self, tab):
-        if self.pdf_widget:
-            self.pdf_widget.hide()
-
-
 ViewMode.register(ViewMode.TEXT, TextMode)
 ViewMode.register(ViewMode.MARKDOWN, MarkdownMode)
 ViewMode.register(ViewMode.HEX, HexMode)
 ViewMode.register(ViewMode.IMAGE, ImageMode)
 ViewMode.register(ViewMode.GALLERY, GalleryMode)
-ViewMode.register(ViewMode.PDF, PdfMode)
 
 
 def _listZipEntries(file_path) -> list:

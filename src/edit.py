@@ -358,7 +358,7 @@ class EditorWindow(WindowControl, QMainWindow):
         """连接编辑器光标信号到状态栏标签"""
         if not editor:
             return
-        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY)
         self.cursor_pos_label.setVisible(not is_special)
 
         def callback(line: int, col: int):
@@ -388,7 +388,7 @@ class EditorWindow(WindowControl, QMainWindow):
                 handler = editor.getHandler(editor._current_mode)
                 handler.activate(editor)
             self._connectCursorPosition(editor)
-            is_special_mode = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+            is_special_mode = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY)
             self.encoding_label.setVisible(not is_special_mode)
             self.cursor_pos_label.setVisible(not is_special_mode)
             if not is_special_mode:
@@ -897,7 +897,7 @@ class EditorWindow(WindowControl, QMainWindow):
             return
 
         if editor.view_mode == mode:
-            if mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+            if mode in (ViewMode.IMAGE, ViewMode.GALLERY):
                 handler = editor.getHandler(mode)
                 handler.deactivate(editor)
                 handler.close(editor)
@@ -908,7 +908,7 @@ class EditorWindow(WindowControl, QMainWindow):
         else:
             ViewMode.switchMode(editor, mode)
 
-        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF)
+        is_special = editor._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY)
         self.cursor_pos_label.setVisible(not is_special)
         self.encoding_label.setVisible(not is_special)
 

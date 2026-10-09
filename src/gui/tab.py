@@ -740,7 +740,7 @@ class EditorText(QPlainTextEdit):
 
 
 class EditorTab(QWidget):
-    """编辑器标签页：管理文件状态、视图模式（文本/图片/PDF/Markdown）、编码、高亮器"""
+    """编辑器标签页：管理文件状态、视图模式（文本/图片/Markdown）、编码、高亮器"""
 
     file_changed = Signal(bool)
     file_opened = Signal(str)
@@ -984,7 +984,7 @@ class EditorTab(QWidget):
             self._cursor_position_callback(line, col)
 
     def saveCursorPosition(self, config):
-        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY):
             return
         try:
             cursor = self.text_edit.textCursor()
@@ -999,7 +999,7 @@ class EditorTab(QWidget):
             logger.exception("保存光标位置失败")
 
     def restoreCursorPosition(self, config):
-        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY, ViewMode.PDF):
+        if not self.file_path or self._current_mode in (ViewMode.IMAGE, ViewMode.GALLERY):
             return
         try:
             positions = config.get("Edit.cursor_positions", {})
