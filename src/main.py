@@ -22,9 +22,9 @@ from src.gui.control import WindowControl, managePlugins
 
 
 def execPython(script_path, extra_args=None):
-    """以 --exec 模式在嵌入式解释器中执行 Python 脚本，返回退出码。"""
+    """以 exec 子命令在嵌入式解释器中执行 Python 脚本，返回退出码。"""
     extra_args = extra_args or []
-    logger.info(f"以 --exec 模式执行脚本: {script_path}")
+    logger.info(f"以 exec 模式执行脚本: {script_path}")
     logger.info(f"额外参数: {extra_args}")
 
     if sys.stdin is None and sys.platform == "win32":
@@ -63,7 +63,7 @@ def runPython(path: str, cwd, args, mode="cmd", *arg, **kwargs):
     run_path = getConfig().get("Launch.Runtime.Python", "")
     if not run_path:
         if not Interpret:
-            runTerminal(mode, [app_path, "--exec", path], cwd, args)
+            runTerminal(mode, [app_path, "exec", path], cwd, args)
             return
         run_path = sys.executable
 
@@ -90,6 +90,85 @@ TYPES = {
     "网址": openUrl,
     "预设": None  # 预设类型由 runPreset 方法处理
 }
+
+def expandTool(tool: dict, path_mode: str) -> dict:
+    """把工具配置展开成实际要执行的内容，返回 {"type", "path", "cwd", "args", "mode"}。
+
+    只做计算、不启动任何东西：点击图标与本机通道送来的 run 都走 runItem，也就都经由这里，
+    展开规则只有一份。mode 决定参数交给谁解释，详见 src/system.py 的 splitArgs；
+    path 刻意不展开环境变量，交给下游的 openFile 与 shell。"""
+    tool_type = tool.get("type", "文件")
+    path = tool.get("path") or tool.get("url") or ""
+
+    # 工具缺失 mode 字段时按类型回退：文件无控制台，Python/Java 用 cmd
+    if "mode" in tool:
+        mode = tool.get("mode")
+    else:
+        mode = "cmd" if tool_type in ("Python", "Java") else None
+
+    cwd = os.path.expandvars(tool.get("cwd", ""))
+    # 未配置工作目录时，默认使用文件所在目录；默认和配置均需展开环境变量
+    # CreateProcessW 文档明确 lpCurrentDirectory 主要供启动器（shell）指定初始工作目录，故不应留空继承 O 自身目录
+    if path and not cwd:
+        cwd = os.path.expandvars(str(Path(path).parent))
+    args = argsPlaceholder(tool.get("args", ""))
+
+    if path_mode == "relative":
+        path = convertPath(path, "absolute")
+        cwd = convertPath(cwd, "absolute")
+
+    return {"type": tool_type, "path": path, "cwd": cwd, "args": args, "mode": mode}
+
+def runTool(info: dict, operation="open") -> dict:
+    """按展开后的信息启动目标，返回 info 供调用方记录实际用了什么。
+
+    只负责 TYPES 分发；需要 GUI 的分支（{Select}、预设、附属服务/进程）由调用方自己处理。"""
+    action = TYPES.get(info["type"])
+    if not action:
+        raise ValueError(f"不支持的类型: {info['type']}")
+    action(info["path"], info["cwd"], info["args"], info["mode"], operation)
+    return info
+
+def findTool(tools: dict, name: str) -> tuple:
+    """按显示名跨分组查找工具，返回 (分组名, 工具)；找不到返回 (None, None)。
+
+    工具名在整个程序内唯一，跨分组也不允许重名，CLI 的 run（只给名称、不指定分组）
+    依赖这一点；新增与改名处的校验见 toolNames()。"""
+    if not name:
+        return None, None
+    for group_name, group_tools in tools.items():
+        for tool in group_tools or []:
+            if tool.get("name", "") == name:
+                return group_name, tool
+    return None, None
+
+
+def toolNames(tools: dict, exclude=None) -> set:
+    """收集所有分组的工具名，供重名校验使用（工具名跨分组全局唯一）。
+
+    exclude 传正在编辑的那个工具对象本身，把它从已占用的名字里排除掉，否则原样保存
+    也会被判成重名。按身份而不是按名字排除：存量配置里可能已有同名，按名字会把同名的
+    另一个一起排除掉，反而漏判。"""
+    return {
+        tool.get("name", "")
+        for group_tools in (tools or {}).values()
+        for tool in (group_tools or [])
+        if tool is not exclude
+    }
+
+
+def copyName(tools: dict, name: str) -> str:
+    """给副本取一个未被占用的名字：原名后加 _序号，从 1 起取第一个空位。
+
+    工具名跨分组全局唯一，沿用原名必然撞名，而复制本来就是要一份新的，弹窗让用户改名
+    太打断，故自动避让。原名已带 _数字 后缀时从该数字继续，免得 X_1 复制出 X_1_1、
+    反复复制同一个副本时名字一路变长。"""
+    used = toolNames(tools)
+    matched = re.match(r"^(.*)_(\d+)$", name)
+    base, index = (matched.group(1), int(matched.group(2)) + 1) if matched else (name, 1)
+    while f"{base}_{index}" in used:
+        index += 1
+    return f"{base}_{index}"
 
 
 def setApp(app: QApplication):
@@ -118,13 +197,13 @@ class SystemTray:
     
     def initTray(self):
         """初始化系统托盘"""
-        tray = getConfig().get("tray", False)
+        tray = getConfig().get("tray", True)
         if tray:
             self._createTrayIcon()
     
     def updateTray(self):
         """更新托盘图标状态（根据当前配置）"""
-        tray = getConfig().get("tray", False)
+        tray = getConfig().get("tray", True)
         if tray and self.tray_icon is None:
             self._createTrayIcon()
         elif not tray and self.tray_icon:
@@ -344,6 +423,30 @@ def validateNameList(text: str, require_extension=False) -> tuple:
             if require_extension and "." not in part:
                 return False, part + " " + tr("缺少扩展名")
     return True, ""
+
+
+def checkNameList(service: str, process: str) -> tuple:
+    """校验服务与进程名单，返回 (出错项, 错误信息, 白名单命中分组)。
+
+    GUI 与 CLI 共用这一份，避免两处校验漂移。命中白名单如何处置由调用方定：
+    GUI 弹窗让用户确认后继续，CLI 没有交互只能拒绝。"""
+    valid, msg = validateNameList(service)
+    if not valid:
+        return "服务", msg, []
+    valid, msg = validateNameList(process, require_extension=True)
+    if not valid:
+        return "进程", msg, []
+
+    blocked = []
+    for text, whitelist, field in (
+        (service, SERVICE_LIST, "服务"),
+        (process, PROCESS_LIST, "进程"),
+    ):
+        items = [s.strip().strip('"') for s in text.split("|") if s.strip()]
+        hit = [item for item in items if item.lower().strip('"') in whitelist]
+        if hit:
+            blocked.append((field, hit))
+    return "", "", blocked
 
 
 class DragToolButton(QToolButton):
@@ -634,8 +737,13 @@ class EditTool(QDialog):
     
     def accept(self):
         """确认"""
-        if not self.name_edit.text().strip():
+        name = self.name_edit.text().strip()
+        if not name:
             messageBox(self, tr("警告"), tr("名称不能为空"), 1)
+            return
+
+        if name in toolNames(getConfig().get("Launch.tools", {}), self.tool_data):
+            messageBox(self, tr("警告"), tr("名称已存在") + ": " + name, 1)
             return
 
         if not self.path_edit.text().strip():
@@ -649,32 +757,20 @@ class EditTool(QDialog):
         self.deleteLater()
 
     def _checkWhitelist(self) -> bool:
-        svc_text = self.service_edit.text()
-        proc_text = self.process_edit.text()
-
-        valid, msg = validateNameList(svc_text)
-        if not valid:
+        """校验服务与进程名单，命中白名单时逐类弹窗让用户确认"""
+        error_field, msg, blocked = checkNameList(self.service_edit.text(), self.process_edit.text())
+        if error_field:
             messageBox(self, tr("格式错误"), msg, 1)
             return False
 
-        valid, msg = validateNameList(proc_text, require_extension=True)
-        if not valid:
-            messageBox(self, tr("格式错误"), msg, 1)
-            return False
-
-        for text, whitelist, kind in [
-            (svc_text, SERVICE_LIST, "服务"),
-            (proc_text, PROCESS_LIST, "进程"),
-        ]:
-            items = [s.strip().strip('"') for s in text.split("|") if s.strip()]
-            blocked = [item for item in items if item.lower().strip('"') in whitelist]
-            if blocked:
-                if not messageBox(self, tr("系统保护"), kind + tr("白名单项") + ": " + ", ".join(blocked) + "\n" + tr("这些是系统关键项目，不建议管理") + "\n" + tr("是否仍要保存") + "?"):
-                    return False
+        for kind, hit in blocked:
+            if not messageBox(self, tr("系统保护"), kind + tr("白名单项") + ": " + ", ".join(hit) + "\n" + tr("这些是系统关键项目，不建议管理") + "\n" + tr("是否仍要保存") + "?"):
+                return False
         return True
 
 
 def _envPlaceholder(args: str) -> tuple[str, dict]:
+    """提取 {env: KEY=value} 占位符，返回去掉占位符后的参数，以及需要注入的环境变量"""
     env_vars = {}
     cleaned = re.sub(r'\{env:([^=]+)=([^}]+)\}', lambda m: env_vars.update({m.group(1).strip(): m.group(2).strip()}) or "", args)
     return cleaned.strip(), env_vars
@@ -1193,13 +1289,14 @@ class MainWindow(WindowControl, QMainWindow):
         """删除分组"""
         if messageBox(self, tr("确认删除"), tr("是否确认删除") + " \"" + group + "\"\n" + tr("该分组下的启动项将被删除")):
             del self._tools[group]
-            
+
             if self._current_group == group:
                 groups = _getGroups(self._tools)
                 self._current_group = groups[0] if groups else ""
-            
+
             self._current_group = _ensureGroup(self._tools, getConfig(), self._current_group)
-            
+            # 配置里不能留已删掉的分组名：CLI 的 add 会照着它把这个分组重建出来
+            getConfig().set("Launch.active_group", self._current_group)
             getConfig().save()
             self.refreshGroup()
             self.refreshTool()
@@ -1217,9 +1314,9 @@ class MainWindow(WindowControl, QMainWindow):
             self.refreshGroup()
     
     def switchGroup(self, group: str):
-        """切换分组"""
+        """切换分组，立即写回磁盘"""
         self._current_group = group
-        getConfig().set("Launch.active_group", group)
+        getConfig().saveKey("Launch.active_group", group)
         self.refreshGroup()
         self.refreshTool()
     
@@ -1572,6 +1669,9 @@ class MainWindow(WindowControl, QMainWindow):
 
     def _addPreset(self, name: str, path: str, note: str):
         """添加预设项"""
+        if name in toolNames(self._tools):
+            messageBox(self, tr("警告"), tr("名称已存在") + ": " + name, 1)
+            return
         tool_data = {
             "name": name,
             "type": "预设",
@@ -1611,9 +1711,9 @@ class MainWindow(WindowControl, QMainWindow):
         dialog.close()
     
     def copyTool(self, tool: dict):
-        """复制启动项"""
+        """复制启动项，副本名自动避开重名"""
         new_tool = copy.deepcopy(tool)
-        new_tool["name"] = f"{new_tool['name']}_" + tr("副本")
+        new_tool["name"] = copyName(self._tools, tool.get("name", ""))
         new_tool = {k: v for k, v in new_tool.items() if v}
         self._tools.setdefault(self._current_group, []).append(new_tool)
         getConfig().save()
@@ -1669,8 +1769,11 @@ class MainWindow(WindowControl, QMainWindow):
                 return
         restartApplication(self)
 
-    def runItem(self, tool: dict):
-        """启动工具"""
+    def runItem(self, tool: dict, notify=True):
+        """启动工具，返回错误信息；已发出启动（或已安排 {Select}）时返回 None。
+
+        notify 为 False 时不弹窗而是把错误返回：本机通道靠它把失败如实回给 CLI，否则模态
+        弹窗会占住事件循环，调用方只能等到超时。预设里带界面的动作仍会弹。"""
         args_raw = tool.get("args", "")
 
         clean_args, env_vars = _envPlaceholder(args_raw)
@@ -1682,73 +1785,119 @@ class MainWindow(WindowControl, QMainWindow):
         if "{Select}" in args_raw:
             self.hide()
             QTimer.singleShot(500, lambda t=tool: self._runSelect(t))
-            return
+            return None
 
         saved_env = {}
         for k, v in env_vars.items():
             saved_env[k] = os.environ.get(k)
             os.environ[k] = v
 
-        tool_type = tool.get("type", "文件")
-        path = tool.get("path") or tool.get("url")
-
-        # 工具缺失 mode 字段时按类型回退（文件无控制台，Python/Java 用 cmd）
-        # mode 决定 args 交给谁解释：shell 会解释元字符与环境变量，None 走 ShellExecuteW 则不会，
-        # 因此同一份参数在不同运行方式下可能行为不同，详见 src/system.py 的 splitArgs
-        if "mode" in tool:
-            mode = tool.get("mode")
-        else:
-            mode = "cmd" if tool_type in ("Python", "Java") else None
-
-        cwd = os.path.expandvars(tool.get("cwd", ""))
-        # 未配置工作目录时，默认使用文件所在目录；默认和配置均需展开环境变量
-        # CreateProcessW 文档明确 lpCurrentDirectory 主要供启动器（shell）指定初始工作目录，故不应留空继承 O 自身目录
-        if path and not cwd:
-            cwd = os.path.expandvars(str(Path(path).parent))
-        args = argsPlaceholder(tool.get("args", ""))
-
-        if not path and tool_type != "预设":
-            for k, v in saved_env.items():
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
-            messageBox(self, tr("警告"), tr("路径为空"), 1)
-            return
-
-        path_mode = self._path_mode
-        if path_mode == "relative":
-            path = convertPath(path, "absolute")
-            cwd = convertPath(cwd, "absolute")
-
         try:
+            info = expandTool(tool, self._path_mode)
+
+            if not info["path"] and info["type"] != "预设":
+                if notify:
+                    messageBox(self, tr("警告"), tr("路径为空"), 1)
+                return tr("路径为空")
+
             # 为避免信号阻塞，先隐藏再运行
-            if getConfig().get("Launch.run_hide", False):
+            if getConfig().get("Launch.run_hide", True):
                 self.hide()
-            operation = "runas" if tool.get("run_as_admin") and tool_type == "文件" else "open"
+            operation = "runas" if tool.get("run_as_admin") and info["type"] == "文件" else "open"
             service_str = tool.get("service", "").strip()
             process_str = tool.get("process", "").strip()
 
-            if tool_type == "预设":
+            if info["type"] == "预设":
                 self.runPreset(tool)
-            elif tool_type == "文件" and path and Path(path).suffix.lower() == '.exe' and (service_str or process_str):
-                self._runService(tool, path, cwd, args, service_str, process_str)
+            elif info["type"] == "文件" and Path(info["path"]).suffix.lower() == '.exe' and (service_str or process_str):
+                self._runService(tool, info, service_str, process_str)
             else:
-                # 统一传 mode，由各函数内部处理（openFile/runPython/runJava 用，openUrl 忽略）
-                action = TYPES.get(tool_type)
-                if action:
-                    action(path, cwd, args, mode, operation)
-            logger.info(f"启动工具: {tool.get('name', '')} ({tool_type})")
+                runTool(info, operation)
+            logger.info(f"启动工具: {tool.get('name', '')} ({info['type']})")
+            return None
 
         except Exception as e:
-            messageBox(self, tr("错误"), tr("启动失败") + f": {str(e)}", 1)
+            message = tr("启动失败") + f": {str(e)}"
             logger.error(f"启动工具失败: {e}")
+            if notify:
+                messageBox(self, tr("错误"), message, 1)
+            return message
         finally:
             for k, v in saved_env.items():
                 if v is None:
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+    def handleChannelAction(self, action: dict) -> dict:
+        """处理本机通道送来的动作并返回回执，由 o.py 起服务端时注册。
+
+        来源有两个：CLI（run 复用本窗口带 GUI 的运行能力，reload 让它跟上磁盘上新加的工具），
+        以及另一个 O 进程（open 与 show 把第二次启动的活接过来）。"""
+        name = action.get("name", "")
+        content = action.get("content")
+        if name == "run":
+            return self._channelRun(content or {})
+        if name == "reload":
+            return self._channelReload()
+        if name == "open":
+            return self._channelOpen(content or [])
+        if name == "show":
+            return self._channelShow()
+        return {"ok": False, "error": "unknown_action", "detail": name}
+
+    def _channelRun(self, content: dict) -> dict:
+        """通道运行工具：按名称查找后交给 runItem，与点击图标是同一条路径。
+
+        content 里的 args / mode 是 CLI 的覆盖值（--args 与 --mode），只在传了才覆盖。"""
+        name = content.get("tool", "")
+        group, found = findTool(getConfig().get("Launch.tools", {}), name)
+        if not found:
+            return {"ok": False, "error": "tool_not_found", "detail": name}
+        tool = dict(found)
+        if "args" in content:
+            tool["args"] = content["args"]
+        if "mode" in content:
+            tool["mode"] = content["mode"]
+        error = self.runItem(tool, notify=False)
+        if error:
+            return {"ok": False, "error": "run_failed", "detail": error}
+        return {"ok": True, "data": {"group": group, "name": tool.get("name", "")}}
+
+    def _channelReload(self) -> dict:
+        """重读磁盘上的工具配置并刷新界面。
+
+        只同步 Launch.tools 而不整体重载：内存里有尚未保存的改动（窗口尺寸、活动分组等），
+        整体重载会把它们丢掉，而 CLI 的 add 只动 tools 这一项。registerHotkeys 让 CLI
+        新加的快捷键当场生效，否则要等下次增删改或重启。"""
+        tools = getConfig().readKey("Launch.tools")
+        if tools is None:
+            return {"ok": False, "error": "reload_failed"}
+        getConfig().set("Launch.tools", tools)
+        self._tools = tools
+        self.refreshTool()
+        self.refreshGroup()
+        self.registerHotkeys()
+        return {"ok": True, "data": {"groups": len(tools)}}
+
+    def _channelOpen(self, paths: list) -> dict:
+        """另一个 O 进程把要打开的目标交给了本进程，走与命令行启动同一条编辑器路径"""
+        for path in paths:
+            self._openEditor(path)
+        return {"ok": True, "data": {"opened": len(paths)}}
+
+    def _channelShow(self) -> dict:
+        """另一个 O 进程请求显示本窗口（用户又启动了一次 O）
+
+        请求来自别的进程，本进程没有前台权限，故取快捷键那条路（_toggleWindow）的写法：
+        先清掉最小化（show() 不还原），再补 raise_() 与系统级的 activateWindow。"""
+        if self.windowState() & Qt.WindowState.WindowMinimized:
+            self.setWindowState(Qt.WindowState.WindowActive)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        activateWindow(self.winId())
+        return {"ok": True}
 
     def _checkUpdate(self):
         """检查更新"""
@@ -1823,8 +1972,10 @@ class MainWindow(WindowControl, QMainWindow):
         
         messageBox(self, tr("警告"), tr("未知的预设功能") + f": {path}", 1)
 
-    def _runService(self, tool: dict, path: str, cwd: str, args: str, service_str: str, process_str: str):
+    def _runService(self, tool: dict, info: dict, service_str: str, process_str: str):
         """启动带有附属服务/进程管理的 exe 程序"""
+        # 运行方式必须在这里透传给 openFile，否则带附属服务的 exe 会一律按无控制台启动，配置的「运行方式」形同虚设
+        path, cwd, args, mode = info["path"], info["cwd"], info["args"], info["mode"]
         services = [s.strip().strip('"') for s in service_str.split("|") if s.strip()]
         process_names = [p.strip().strip('"') for p in process_str.split("|") if p.strip()]
 
@@ -1835,7 +1986,7 @@ class MainWindow(WindowControl, QMainWindow):
             if messageBox(self, tr("需要管理员权限"), tr("附属服务/进程管理需要管理员权限，是否重启程序？")):
                 runAdmin()
             else:
-                openFile(path, cwd, args)
+                openFile(path, cwd, args, mode)
             return
 
         if services:
@@ -1851,7 +2002,7 @@ class MainWindow(WindowControl, QMainWindow):
             except (NoSuchProcess, AccessDenied):
                 pass
 
-        openFile(path, cwd, args)
+        openFile(path, cwd, args, mode)
         logger.info(f"主程序已启动: {tool.get('name', '')} ({path})")
 
         QTimer.singleShot(3000, lambda: self._startMonitor(path, before_pids, services, process_names))
@@ -2021,7 +2172,7 @@ class MainWindow(WindowControl, QMainWindow):
     def closeEvent(self, event):
         """关闭事件"""
         self._saveGeometry()
-        if getConfig().get("tray", False) and self.system_tray.tray_icon:
+        if getConfig().get("tray", True) and self.system_tray.tray_icon:
             event.ignore()
             self.hide()
         else:

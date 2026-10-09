@@ -17,17 +17,19 @@ DEFAULT_CONFIG = {
     "language": "简体中文",
     "font_family": "微软雅黑",
     "font_size": 12,
-    "tray": False,
+    "tray": True,
     "usage": True,
     "auto_start": False,
     "context_menu": False,
+    "port": 10000,
+    "token": "",
     "Launch": {
         "Runtime": {"Python": "", "Java": "", "Temp_Path": []},
         "hotkey": "",
         "mouse_side": False,
         "double_ctrl": False,
         "on_top": False,
-        "run_hide": False,
+        "run_hide": True,
         "hover_switch": False,
         "layout": "horizontal",
         "path_mode": "absolute",
@@ -87,6 +89,8 @@ DEFAULT_CONFIG = {
     "Plugin": {}
 }
 
+# port / token 供本机通道使用（仅绑回环地址）：port 是实例实际监听的端口，token 首次使用时生成
+
 
 class ConfigManager(Singleton):
     _initialized = False
@@ -112,20 +116,19 @@ class ConfigManager(Singleton):
                     loaded_config = json.load(f)
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
                 self.config = self._deepUpdate(self.config, loaded_config)
-                logger.info(f"配置文件加载成功: {config_file}")
             except json.JSONDecodeError:
-                logger.exception("配置文件格式错误")
+                logger.exception("配置格式错误")
                 self._backupReset()
-                logger.info("配置文件已备份，创建默认配置")
+                logger.info("配置已备份，创建默认配置")
             except Exception:
-                logger.exception("配置文件加载失败")
+                logger.exception("配置加载失败")
                 self.config = copy.deepcopy(DEFAULT_CONFIG)
                 self.config["language"] = systemLanguage()
         else:
             self.config = copy.deepcopy(DEFAULT_CONFIG)
             self.config["language"] = systemLanguage()
             self.save()
-            logger.info(f"配置文件不存在，已创建默认配置: {config_file}")
+            logger.info(f"配置不存在，已创建默认配置: {config_file}")
 
     def _backupReset(self):
         """备份损坏的配置文件并重置为默认配置"""
@@ -134,26 +137,64 @@ class ConfigManager(Singleton):
             if config_file.exists():
                 config_file.rename(backup_path)
         except Exception:
-            logger.exception("备份配置文件失败")
+            logger.exception("备份配置失败")
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         self.config["language"] = systemLanguage()
         self.save()
 
     def save(self):
-        """原子写入配置文件"""
+        """整份原子写入配置文件"""
+        if self._writeFile(self.config):
+            logger.info(f"配置已保存 - {config_file}")
+
+    def _writeFile(self, data) -> bool:
+        """把给定内容原子落盘（临时文件 → fsync → 替换），成功返回 True"""
         tmp = None
         try:
             fd, tmp = tempfile.mkstemp(suffix='.tmp', prefix='config_', dir=config_file.parent)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
+                json.dump(data, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(fd)
             os.replace(tmp, str(config_file))
-            logger.info(f"配置文件已保存: {config_file}")
+            return True
         except Exception:
-            logger.exception("配置文件保存失败")
+            logger.exception("配置保存失败")
             if tmp and os.path.exists(tmp):
                 os.unlink(tmp)
+            return False
+
+    def saveKey(self, key: str, value: Any):
+        """只把某一个键写回磁盘，其余键保持磁盘现状。键支持点号访问嵌套字段。
+
+        多进程协作时用。save() 是整份覆盖，可能会有 GUI 和 CLI 冲突"""
+        self.set(key, value)
+        data = None
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            logger.exception(f"读盘失败，改为整份保存: {key}")
+        if not isinstance(data, dict):
+            self.save()
+            return
+
+        parts = key.split(".")
+        target = data
+        for part in parts[:-1]:
+            nxt = target.get(part)
+            if nxt is None:
+                nxt = {}
+                target[part] = nxt
+            elif not isinstance(nxt, dict):
+                logger.warning(f"磁盘上的 {part} 不是对象，改为整份保存: {key}")
+                self.save()
+                return
+            target = nxt
+        target[parts[-1]] = value
+
+        if self._writeFile(data):
+            logger.info(f"配置项已写回 - {key}")
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置项，支持点号访问嵌套字段"""
@@ -167,6 +208,23 @@ class ConfigManager(Singleton):
                     return default
             return value if value is not None else default
         return self.config.get(key, default)
+
+    def readKey(self, key: str, default: Any = None) -> Any:
+        """从磁盘（而不是内存）读取配置项，支持点号访问嵌套字段，读不到或读取失败返回 default。
+
+        多进程协作时用：别的进程改了配置文件，本进程只想同步那一项 —— 整体 _load() 会把内存里
+        尚未保存的改动（窗口尺寸、活动分组之类）一起丢掉。"""
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            logger.exception(f"从磁盘读取配置失败: {key}")
+            return default
+        for part in key.split("."):
+            if not isinstance(data, dict):
+                return default
+            data = data.get(part)
+        return data if data is not None else default
 
     def set(self, key: str, value: Any):
         if '.' in key:
@@ -413,7 +471,7 @@ class SettingsDialog(QDialog):
         self.auto_start.setChecked(self.config.get("auto_start", False))
 
         self.tray = QCheckBox(tr("最小化到托盘"))
-        self.tray.setChecked(self.config.get("tray", False))
+        self.tray.setChecked(self.config.get("tray", True))
 
         self.usage_label = QCheckBox(tr("显示资源占用"))
         self.usage_label.setChecked(self.config.get("usage", True))
@@ -439,7 +497,7 @@ class SettingsDialog(QDialog):
         self.launcher_on_top_check.setChecked(launcher_config.get("on_top", False))
 
         self.launcher_hide = QCheckBox(tr("运行后隐藏"))
-        self.launcher_hide.setChecked(launcher_config.get("run_hide", False))
+        self.launcher_hide.setChecked(launcher_config.get("run_hide", True))
 
         self.launcher_hover_switch_check = QCheckBox(tr("悬停切换分组"))
         self.launcher_hover_switch_check.setChecked(launcher_config.get("hover_switch", False))

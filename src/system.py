@@ -312,9 +312,9 @@ if sys.platform == "win32":
                         )
                         try:
                             if Interpret:
-                                cmd = f'"{sys.executable}" "{app_path}" "%1"'
+                                cmd = f'"{sys.executable}" "{app_path}" open "%1"'
                             else:
-                                cmd = f'"{app_path}" "%1"'
+                                cmd = f'"{app_path}" open "%1"'
                             winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, cmd)
                         finally:
                             winreg.CloseKey(cmd_key)
