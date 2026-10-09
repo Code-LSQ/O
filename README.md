@@ -49,7 +49,7 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 
 如果希望通过搜索而不是点击的方式来找到启动项，右键->添加预设项->工具箱->搜索。
 
-另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定。
+另外在打包为 exe 程序后，如果没有配置 Python 路径，将会尝试通过程序自身的 Python 解释器运行 .py 脚本，当然，这不是很稳定，因为嵌入解释器并未包含所有标准库。
 
 路径支持环境变量如 %UserProfile%。未配置工作目录时，默认使用文件所在目录。
 
@@ -61,6 +61,48 @@ O 当前支持平台为 Windows 8.1+。O 为便携软件，不需要安装，大
 管理员运行仅`文件`类型生效。勾选后子进程无法继承环境变量。
 
 呼出方式在设置中修改，支持全局快捷键、鼠标侧键（前进/后退键）、连按 Ctrl。
+
+
+#### 命令行
+
+除了图形界面，O 也支持命令行调用，主要用于 AI Agent 与脚本（输出为 JSON）。
+
+o.exe 在启动时会将自身所在目录注入环境变量，如果用它启动 cmd 和 PowerShell，可以直接用下方命令，不需要写绝对路径。
+
+```
+o                     正常启动；已有实例则请它显示窗口
+o list                列出所有分组与启动项
+o add                 添加一个启动项，如 o add --name 记事本 --path C:\Windows\notepad.exe
+o run 回收站          运行启动项
+o open C:\a.txt       在内置编辑器中打开
+o exec script.py      用内嵌解释器执行脚本，多余的参数原样传给脚本
+```
+
+子命令的选项：
+
+`o list`
+- `--group <分组>`  只列出该分组，不传则列出全部分组
+
+`o add`（`--name` 必填）
+- `--name <名称>`  启动项名称，跨分组唯一
+- `--type <类型>`  文件 / Python / Java / 网址，也可写 file / url，默认 文件
+- `--path <路径>`  目标路径
+- `--url <网址>`  网址，仅在 `--type` 为 网址 时使用
+- `--args <参数…>`  默认参数，不传则为空
+- `--cwd <目录>`  工作目录，默认取目标所在目录
+- `--group <分组>`  所属分组，默认取当前活动分组
+- `--hotkey <快捷键>`  快捷键
+- `--note <备注>`  备注
+- `--icon <图标>`  图标路径
+- `--mode <方式>`  运行方式：none / cmd / PowerShell
+- `--admin`  以管理员身份运行
+- `--service <服务…>`  附属服务，多个用 | 分隔
+- `--process <进程…>`  附属进程，多个用 | 分隔
+
+`o run <名称>`
+- `--args <参数…>`  自定义参数，覆盖启动项的默认参数；不传则用默认参数，只写 `--args` 表示这次不带参数
+- `--mode <方式>`  运行方式：none / cmd / PowerShell
+
 
 
 #### 环境变量
@@ -407,7 +449,7 @@ If you want to run the source code and have a portable, no-installation-required
 
 ![](ex/image/config.png)
 
-The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable. Paths support environment variables like `%UserProfile%`. For the icon, you can fill in the path of an exe file and it will extract that icon.
+The program's main function is to collect shortcuts. It supports launching exe files, opening folders, running .py and .jar after configuring the Python and Java paths, opening URLs, etc. Also, once packaged as an exe, if no Python path is configured, it will try to run .py scripts through the program's own Python interpreter — though that's not very stable, since the embedded interpreter doesn't include the whole standard library. Paths support environment variables like `%UserProfile%`. When no working directory is configured, the file's own folder is used. For the icon, you can point to an image file or an exe file, and it will try to extract the icon.
 
 To add launcher items, drag them onto the window, or add them via the right-click menu.
 Double-click the title bar to toggle fullscreen; click and drag at the window edges to resize. The simple editor is resized by dragging its bottom-right corner.
@@ -415,9 +457,49 @@ If you prefer finding launcher items by searching rather than clicking, go to Ri
 
 Launch arguments (args) support two special placeholders: `{Select}`: simulates Ctrl+C at runtime to capture the currently selected text and substitute it in, this feature requires enabling "Hide after running" in the settings; otherwise, the selected content cannot be retrieved. The other is `{env: KEY=value}`, covered in the environment variables section below.
 
-Running as administrator only works for the `File` type.
+Running as administrator only works for the `File` type. Once checked, child processes can't inherit environment variables.
 
 How you summon it is configured in Settings — global hotkey, mouse side buttons (forward/back), or double-pressing Ctrl.
+
+#### Command Line
+
+Besides the GUI, O also supports command-line calls, mainly for AI agents and scripts (the output is JSON).
+
+o.exe injects its own directory into the environment variables at startup. If you use it to launch cmd or PowerShell, you can use the commands below directly without writing the absolute path.
+
+```
+o                     Start normally; if an instance is already running, ask it to show its window
+o list                List all groups and launcher items
+o add                 Add a launcher item, e.g. o add --name Notepad --path C:\Windows\notepad.exe
+o run Notepad         Run a launcher item by name
+o open C:\a.txt       Open in the built-in editor
+o exec script.py      Run a script with the embedded interpreter, extra arguments are passed through
+```
+
+Options of each subcommand:
+
+`o list`
+- `--group <group>`  Only list that group, all groups when omitted
+
+`o add` (`--name` is required)
+- `--name <name>`  Item name, unique across all groups
+- `--type <type>`  `file` / `url` / `Python` / `Java` — `file` and `url` stand for the config's `文件` and `网址`, which are accepted as well; defaults to `file`
+- `--path <path>`  Target path
+- `--url <url>`  URL, only used when `--type` is `url`
+- `--args <args…>`  Default arguments, empty when omitted
+- `--cwd <dir>`  Working directory, defaults to the target's folder
+- `--group <group>`  Group name, defaults to the active group
+- `--hotkey <hotkey>`  Hotkey
+- `--note <note>`  Note
+- `--icon <icon>`  Icon path
+- `--mode <mode>`  Run mode: none / cmd / PowerShell
+- `--admin`  Run as administrator
+- `--service <services…>`  Attached services, separated by |
+- `--process <processes…>`  Attached processes, separated by |
+
+`o run <name>`
+- `--args <args…>`  Custom arguments, overriding the item's default arguments; the default ones are used when omitted, and a bare `--args` means no arguments this time
+- `--mode <mode>`  Run mode: none / cmd / PowerShell
 
 #### Environment Variables
 
