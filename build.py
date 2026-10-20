@@ -184,6 +184,7 @@ def main():
             "--include-data-dir=src/theme=src/theme",
             "--include-data-file=README.md=README.md",
             "--enable-plugin=pyside6",
+            "--noinclude-qt-plugins=qpdf",
             "--show-modules",
             # "--show-progress",
             # "--show-memory",

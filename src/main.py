@@ -1595,7 +1595,8 @@ class MainWindow(WindowControl, QMainWindow):
         sys_menu = menu.addMenu(tr("系统"))
 
         for name, path in SYSTEM_ACT.items():
-            action = QAction(name, self)
+            # 显示名走翻译，但存进配置的仍是原始中文名
+            action = QAction(tr(name), self)
             action.triggered.connect(lambda checked, n=name, p=path: self._addPreset(n, p, ""))
             sys_menu.addAction(action)
 
@@ -2090,10 +2091,16 @@ class MainWindow(WindowControl, QMainWindow):
             self.resize(width, height)
     
     def _saveGeometry(self):
-        """保存窗口位置和大小"""
+        """保存窗口位置和大小
+
+        开启鼠标跟随（见 showEvent）后坐标每次弹出都会被鼠标位置覆盖，写回 x/y 只会
+        让配置里的坐标跟着鼠标漂移，所以此时只存宽高。
+        """
         geometry = self.geometry()
         getConfig().set("Launch.width", geometry.width())
         getConfig().set("Launch.height", geometry.height())
+        if getConfig().get("Launch.mouse_follow", False):
+            return
         getConfig().set("Launch.x", geometry.x())
         getConfig().set("Launch.y", geometry.y())
     
@@ -2218,6 +2225,12 @@ class MainWindow(WindowControl, QMainWindow):
     def showEvent(self, event):
         """窗口显示事件"""
         super().showEvent(event)
+
+        # 鼠标跟随，严格居中，贴边时不做屏幕边界收回，不考虑窗口被推出屏幕的情况
+        if getConfig().get("Launch.mouse_follow", False):
+            cursor = QCursor.pos()
+            self.move(cursor.x() - self.width() // 2, cursor.y() - self.height() // 2)
+
         if hasattr(self, '_usage_monitor'):
             self._usage_monitor.resume(getattr(self, '_usage_timer_was_active', False))
     

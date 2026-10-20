@@ -7,6 +7,7 @@
     --sync                    仅 sync 测试
     --perf                    性能测试
     --exception               异常测试
+    --locale                  翻译键检查（对比 src/lang 下全部语言文件，只报告不失败）
     --all                     运行全部测试
     -m                 启动程序本体并启用 tracemalloc 内存追踪 + Qt 对象计数
     -h, --help                帮助
@@ -29,6 +30,7 @@
 
 import os
 import gc
+import ast
 import sys
 import argparse
 import json
@@ -267,6 +269,108 @@ def applyMock(
         patchers.append(p)
 
     return patchers
+
+
+# 翻译键检查基础设施
+#
+# 用 AST 而不是正则：正则会把注释、日志文本和普通字符串里的 "tr(...)" 也当成调用，
+# 也会漏掉参数跨行、以及字符串里带引号的情况。只认 tr("字面量")，
+# 变量、f-string、拼接一律算作非字面量，单独统计出来便于人工排查。
+
+_LOCALE_SKIP_DIRS = {"venv", ".venv", "env", "build", "dist", "__pycache__", ".git", "data"}
+
+# 扫描结果缓存：TestTranslationKeys 的用例各自独立，重复遍历全项目代价高。
+# 以前用空字典当哨兵（if not _TR_CACHE），缓存一旦填上就再也不会失效，同一进程里
+# 反复调用（如 --all 跑完再单跑 locale）拿到的仍是首轮结果，与磁盘上的实际状态脱节。
+# 改用具名标志位，语义明确，也让后续要加失效逻辑时有地方可挂。
+_TR_CACHE = None
+
+
+def _scanOnce():
+    """首次调用时扫描一次并缓存 (字面量键字典, 非字面量调用列表, 语言文件列表)"""
+    global _TR_CACHE
+    if _TR_CACHE is None:
+        keys, dynamic = _collectTrKeys()
+        _TR_CACHE = (keys, dynamic, _loadLangDicts())
+    return _TR_CACHE
+
+
+def _iterSourceFiles():
+    """产出项目内所有 .py 的相对路径（正斜杠），顺序稳定，跳过虚拟环境与构建产物"""
+    files = []
+    for path in Path(_project).rglob("*.py"):
+        rel = path.relative_to(_project)
+        if any(part in _LOCALE_SKIP_DIRS for part in rel.parts):
+            continue
+        files.append(rel)
+    return sorted(files, key=lambda p: p.as_posix())
+
+
+def _collectTrKeys():
+    """AST 扫描全部源码，返回 (字面量键字典, 非字面量调用列表)
+
+    字面量键字典形如 {键: ["相对路径:行号", ...]}，位置按出现顺序排列。
+    解析失败的文件记日志后跳过，不影响其余文件。
+    """
+    keys = {}
+    dynamic = []
+
+    for rel in _iterSourceFiles():
+        full = Path(_project) / rel
+        try:
+            tree = ast.parse(full.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            logger.exception(f"解析源码失败，已跳过 {rel.as_posix()}")
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Name) or node.func.id != "tr":
+                continue
+
+            location = f"{rel.as_posix()}:{node.lineno}"
+            arg = node.args[0] if node.args else None
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                keys.setdefault(arg.value, []).append(location)
+            else:
+                dynamic.append(location)
+
+    return keys, dynamic
+
+
+def _loadLangDicts():
+    """读取 src/lang 下全部语言文件，返回 [{"code": 文件名, "name": 语言名, "keys": 键集合}]
+
+    简体中文是程序原生语言、没有语言文件，不参与对比。
+    「翻译」是语言文件的首个键，缺了它就无法确认读的是哪个语言，故按读取失败处理并跳过。
+    原先写成 data.get("翻译", file.stem) 的兜底值永远不会生效（testLangFilesLoadable 又断言该键必须存在），
+    属于自相矛盾的死分支，这里改成显式判断。
+    """
+    langs = []
+    for file in sorted((Path(_project) / "src" / "lang").glob("*.json")):
+        try:
+            data = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.exception(f"读取语言文件失败，已跳过 {file.name}")
+            continue
+        if "翻译" not in data:
+            logger.warning(f"语言文件缺少「翻译」字段，已跳过 {file.name}")
+            continue
+        langs.append({"code": file.stem, "name": data["翻译"], "keys": set(data)})
+    return langs
+
+
+def _reportKeys(title, items, detail=None):
+    """统一输出报告，items 为空时不打印标题"""
+    if not items:
+        return
+    logger.warning(f"=== {title}（{len(items)} 个）===")
+    for key in items:
+        if detail:
+            logger.warning(f"  {key}  <- {detail(key)}")
+        else:
+            logger.warning(f"  {key}")
 
 
 # Group: api (12 tests)
@@ -2834,6 +2938,59 @@ class TestExtractUpdate(unittest.TestCase):
         self.assertTrue(result)
 
 
+# Group: locale (翻译键检查)
+
+
+class TestTranslationKeys(unittest.TestCase):
+    """静态检查 tr() 的键与 src/lang 语言文件是否对得上
+
+    纯 AST 静态分析，不需要 mock，也不实例化任何 Qt 对象。
+    按约定只报告不失败：缺键与冗余键都走 warning，测试始终通过，
+    避免语言文件尚未补齐时把整个测试套件拖红。
+    """
+
+    def testMissingKeysReport(self):
+        """报告语言文件中缺失的 tr() 键"""
+        keys, _, langs = _scanOnce()
+        self.assertTrue(langs, "未找到任何语言文件")
+        self.assertTrue(keys, "未扫描到任何 tr() 字面量键")
+
+        total = 0
+        for lang in langs:
+            missing = sorted(key for key in keys if key not in lang["keys"])
+            total += len(missing)
+            _reportKeys(
+                f'{lang["code"]} ({lang["name"]}) 缺失键',
+                missing,
+                detail=lambda key: keys[key][0],
+            )
+        logger.warning(f"缺失键合计 {total} 个（{len(keys)} 个字面量键 × {len(langs)} 个语言文件）")
+
+    def testUnusedKeysReport(self):
+        """报告语言文件中存在、但代码里未使用的冗余键"""
+        keys, _, langs = _scanOnce()
+        for lang in langs:
+            unused = sorted(lang["keys"] - set(keys) - {"翻译"})
+            _reportKeys(f'{lang["code"]} ({lang["name"]}) 冗余键', unused)
+
+    def testLangFilesLoadable(self):
+        """每个语言文件都应能解析出「翻译」字段与若干键，这是硬性结构要求"""
+        _, _, langs = _scanOnce()
+        self.assertTrue(langs, "未找到任何语言文件")
+        for lang in langs:
+            self.assertTrue(lang["keys"], f'{lang["code"]} 未解析出任何键')
+            self.assertIn("翻译", lang["keys"], f'{lang["code"]} 缺少「翻译」字段')
+
+    def testDynamicTrCallStats(self):
+        """统计非字面量的 tr() 调用，这类写法静态扫不到键，需要人工确认"""
+        keys, dynamic, langs = _scanOnce()
+        logger.warning(
+            f"字面量键 {len(keys)} 个，非字面量 tr() 调用 {len(dynamic)} 处，语言文件 {len(langs)} 个"
+        )
+        for location in dynamic:
+            logger.warning(f"  非字面量 tr(): {location}")
+
+
 # CLI + 测试编排
 
 
@@ -2994,6 +3151,14 @@ _register(
         TestExtractUpdate,
     ],
     "更新 (getReleaseInfo, extractUpdate)",
+)
+
+_register(
+    "locale",
+    [
+        TestTranslationKeys,
+    ],
+    "翻译键检查 (tr 键 vs src/lang)",
 )
 
 

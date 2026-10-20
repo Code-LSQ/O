@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
         "hotkey": "",
         "mouse_side": False,
         "double_ctrl": False,
+        "mouse_follow": False,
         "on_top": False,
         "run_hide": True,
         "hover_switch": False,
@@ -505,6 +506,10 @@ class SettingsDialog(QDialog):
         self.launcher_double_ctrl_check = QCheckBox(tr("连按 Ctrl 响应"))
         self.launcher_double_ctrl_check.setChecked(launcher_config.get("double_ctrl", False))
 
+        self.launcher_mouse_follow_check = QCheckBox(tr("鼠标跟随"))
+        self.launcher_mouse_follow_check.setChecked(launcher_config.get("mouse_follow", False))
+        self.launcher_mouse_follow_check.setToolTip(tr("窗口弹出时以鼠标为中心"))
+
         launch_grid_widget = QWidget()
         launch_grid = QGridLayout(launch_grid_widget)
         launch_grid.setContentsMargins(20, 0, 0, 0)
@@ -513,7 +518,8 @@ class SettingsDialog(QDialog):
         launch_grid.addWidget(self.launcher_on_top_check, 1, 0)
         launch_grid.addWidget(self.launcher_hide, 1, 1)
 
-        launch_grid.addWidget(self.launcher_double_ctrl_check, 2, 0, 1, 2)
+        launch_grid.addWidget(self.launcher_double_ctrl_check, 2, 0)
+        launch_grid.addWidget(self.launcher_mouse_follow_check, 2, 1)
         launch_grid.setColumnStretch(0, 1)
         launch_grid.setColumnStretch(1, 1)
         layout.addRow(launch_grid_widget)
@@ -885,6 +891,7 @@ class SettingsDialog(QDialog):
 
             launch["mouse_side"] = self.launcher_mouse_side_check.isChecked()
             launch["double_ctrl"] = self.launcher_double_ctrl_check.isChecked()
+            launch["mouse_follow"] = self.launcher_mouse_follow_check.isChecked()
             launch["on_top"] = self.launcher_on_top_check.isChecked()
             launch["run_hide"] = self.launcher_hide.isChecked()
 
