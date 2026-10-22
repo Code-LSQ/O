@@ -273,7 +273,7 @@
     "无法读取图片文件": "Cannot read image file",
     "右键进入图库模式": "right-click to enter gallery mode",
     "点击输入快捷键": "Click to input shortcut key",
-    "KEY=VALUE 或文件夹路径，每行一个": "KEY=VALUE or folder path, one per line",
+    "KEY=VALUE 或文件夹路径，每行一个；路径中含 * 表示单层通配，只匹配一层子目录": "KEY=VALUE or folder path, one per line; * in a path matches subfolders one level deep",
     "类型": "Type",
     "网址": "URL",
     "选择文件": "Select File",
