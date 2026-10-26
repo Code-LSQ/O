@@ -129,7 +129,7 @@ FileGee，个人用户免费使用，其选项中有压缩为zip和添加密码�
 
 制作：在官网下载 Python Embeddable，即嵌入式 Python，例如 python-3.6.0-embed-amd64.zip。解压，找到 ._pth 文件，用文本编辑器打开，去掉 import site 前面的 # ，这是为了在安装 pip 以后，python 能够连接到 pip。
 
-安装 pip：下载 get-pip.py 文件，或者 Visual Studio Code 的文件里就有，可以搜到。使用绝对路径调用 python.exe 运行脚本。
+安装 pip：下载 [get-pip.py](https://bootstrap.pypa.io/get-pip.py) 文件，或者 Visual Studio Code 安装了 Python 扩展的话，它的文件里就有，可以搜到。使用绝对路径调用 python.exe 运行脚本。
 
 如果不加入环境变量，每次使用 python 和 pip 都要通过绝对路径调用，如 C:\SDK\Python\python.exe，注意调用 pip 要加上 -m ，C:\SDK\Python\python.exe -m pip。
 
